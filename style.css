@@ -135,8 +135,10 @@ html, body {
 .turn-banner.my-turn { border-color: var(--accent); color: var(--accent); }
 .my-hp-bar { height: 10px; background: var(--panel-2); border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
 .my-hp-fill { height: 100%; width: 100%; background: var(--hp-full); transition: width .2s; }
+.turn-timer-bar { height: 5px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
+.turn-timer-fill { height: 100%; width: 100%; background: var(--accent); transition: width .1s linear; }
 
-.board-wrap { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 6px 0; }
+.board-wrap { flex: 1; display: flex; align-items: center; justify-content: center; overflow: auto; padding: 6px 0; touch-action: none; }
 .board {
   display: grid;
   gap: 2px;
@@ -172,6 +174,7 @@ html, body {
   display: flex; align-items: center; justify-content: center;
   box-shadow: 0 0 0 1px rgba(0,0,0,.4) inset;
   transition: left .18s ease, top .18s ease, opacity .25s ease;
+  z-index: 3;
 }
 .player-token.no-glide { transition: none; }
 .player-token .pseudo-label {
@@ -191,6 +194,13 @@ html, body {
 }
 .dmg-popup.heal { color: var(--hp-full); }
 .dmg-popup.block { color: var(--accent); font-size: 11px; }
+
+.telegraph-warn {
+  position: absolute; border-radius: 3px; pointer-events: none; z-index: 1;
+  border: 2px solid var(--danger);
+  background: rgba(239,68,68,.22);
+  animation: telegraph-blink .35s steps(1) infinite;
+}
 
 .impact-ring {
   position: absolute; border-radius: 3px;
@@ -236,6 +246,10 @@ html, body {
 @keyframes turn-glow {
   0%, 100% { box-shadow: 0 0 0 0 rgba(255,138,61,.35); }
   50% { box-shadow: 0 0 0 5px rgba(255,138,61,0); }
+}
+@keyframes telegraph-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: .3; }
 }
 
 .target-hint {

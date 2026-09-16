@@ -1,7 +1,7 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
 // (ex: "https://capnaval.onrender.com")
-const BACKEND_URL = "https://capnaval-backend.onrender.com";
+const BACKEND_URL = "https://capnaval.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
 const ATTACKS_META = {
@@ -144,6 +144,8 @@ function onMessage(msg) {
   } else if (msg.type === "attackResolved") {
     if (msg.attackId === "teleport" || msg.attackId === "mine") noGlideFor.add(msg.by);
     flashCells(msg.cells);
+  } else if (msg.type === "telegraph") {
+    showTelegraph(msg.cells, msg.resolveAt);
   } else if (msg.type === "error") {
     setHomeError(msg.message);
   }
@@ -366,9 +368,11 @@ function updatePlayerTokens() {
         setTimeout(() => el.classList.remove("ko-shake"), 450);
       } else if (p.hp > prev.hp && prev.alive === true) {
         spawnDamagePopup(el, `+${p.hp - prev.hp}`, "heal");
+      } else if (prev.shield === true && p.shield === false && p.hp === prev.hp) {
+        spawnDamagePopup(el, "Bloqué !", "block");
       }
     }
-    prevPlayerStats.set(p.id, { hp: p.hp, alive: p.alive });
+    prevPlayerStats.set(p.id, { hp: p.hp, alive: p.alive, shield: p.shield });
   });
 
   for (const [id, el] of playerTokenEls.entries()) {
@@ -411,6 +415,26 @@ function startChronoTicker() {
   }, 1000);
 }
 
+let turnTickHandle = null;
+function updateTurnTimerBar() {
+  const bar = document.getElementById("turn-timer-bar");
+  const fill = document.getElementById("turn-timer-fill");
+  const turn = lastState && lastState.turn;
+  if (!turn) { bar.style.display = "none"; if (turnTickHandle) { clearInterval(turnTickHandle); turnTickHandle = null; } return; }
+  bar.style.display = "block";
+  const total = 8000; // fenêtre d'action côté serveur (ATTACK_WINDOW_MS)
+  const remaining = Math.max(0, turn.deadline - Date.now());
+  const pct = Math.min(100, (remaining / total) * 100);
+  fill.style.width = pct + "%";
+  fill.style.background = pct > 40 ? "var(--accent)" : "var(--hp-low)";
+  if (!turnTickHandle) {
+    turnTickHandle = setInterval(() => {
+      if (!lastState || !lastState.turn) { clearInterval(turnTickHandle); turnTickHandle = null; return; }
+      updateTurnTimerBar();
+    }, 100);
+  }
+}
+
 function renderHud() {
   const modeStatusEl = document.getElementById("mode-status");
   if (lastState.mode) {
@@ -436,6 +460,7 @@ function renderHud() {
     banner.classList.remove("my-turn");
     stopTargeting();
   }
+  updateTurnTimerBar();
 
   const me = lastState.players.find(p => p.id === myId);
   if (me) {
@@ -493,16 +518,64 @@ function flashCells(cells) {
   });
 }
 
-// ---------- Déplacement ----------
+// Clignotement d'avertissement affiché dès qu'une attaque est déclarée : les cases
+// listées ici sont EXACTEMENT celles qui seront touchées à resolveAt — le joueur a
+// jusque-là pour s'écarter et esquiver.
+function showTelegraph(cells, resolveAt) {
+  const layer = document.getElementById("player-layer");
+  if (!layer || !cellGeometry.track) return;
+  const els = (cells || []).map(({x,y}) => {
+    const el = document.createElement("div");
+    el.className = "telegraph-warn";
+    el.style.left = (x * (cellGeometry.track + cellGeometry.gap)) + "px";
+    el.style.top = (y * (cellGeometry.track + cellGeometry.gap)) + "px";
+    el.style.width = cellGeometry.track + "px";
+    el.style.height = cellGeometry.track + "px";
+    layer.appendChild(el);
+    return el;
+  });
+  const delay = Math.max(0, (resolveAt || Date.now()) - Date.now());
+  setTimeout(() => els.forEach(el => el.remove()), delay + 80);
+}
+
+// ---------- Déplacement (glissement de doigt) ----------
 function onCellClick(x, y) {
-  if (targetingAttackId) { onTargetClick(x, y); return; }
+  if (targetingAttackId) onTargetClick(x, y);
+  // en dehors du ciblage, le clic sur une case ne fait plus rien : on se déplace au glissement.
+}
+
+const SWIPE_THRESHOLD_PX = 22;
+let swipeStart = null;
+
+function initSwipeControls() {
+  const el = document.getElementById("board-wrap");
+  if (!el) return;
+  el.addEventListener("pointerdown", (e) => {
+    if (targetingAttackId) return; // en visée, le tap sert à choisir la cible
+    swipeStart = { x: e.clientX, y: e.clientY };
+  });
+  el.addEventListener("pointerup", (e) => {
+    if (targetingAttackId || !swipeStart) { swipeStart = null; return; }
+    const dx = e.clientX - swipeStart.x;
+    const dy = e.clientY - swipeStart.y;
+    swipeStart = null;
+    if (Math.hypot(dx, dy) < SWIPE_THRESHOLD_PX) return;
+    handleSwipeMove(dx, dy);
+  });
+  el.addEventListener("pointercancel", () => { swipeStart = null; });
+}
+
+function handleSwipeMove(dx, dy) {
+  if (!lastState) return;
   const me = lastState.players.find(p => p.id === myId);
   if (!me || !me.alive) return;
-  const dx = Math.abs(x - me.x), dy = Math.abs(y - me.y);
-  if ((dx===1 && dy===0) || (dx===0 && dy===1)) {
-    ws.send(JSON.stringify({ type: "move", x, y }));
-  }
+  let x = me.x, y = me.y;
+  if (Math.abs(dx) > Math.abs(dy)) x += dx > 0 ? 1 : -1;
+  else y += dy > 0 ? 1 : -1;
+  ws.send(JSON.stringify({ type: "move", x, y }));
 }
+
+initSwipeControls();
 
 // ---------- Ciblage d'attaque ----------
 function startTargeting(attackId) {
