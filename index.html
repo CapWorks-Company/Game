@@ -11,6 +11,8 @@
 </head>
 <body>
 
+<div id="connection-banner" class="connection-banner" style="display:none"></div>
+
 <!-- ===== ECRAN ACCUEIL ===== -->
 <section id="screen-home" class="screen active">
   <div class="card">
@@ -23,6 +25,10 @@
     </label>
 
     <button id="btn-create" class="btn btn-primary">Créer une partie</button>
+    <label class="checkbox-field" style="margin-top:6px">
+      <input type="checkbox" id="create-public-toggle">
+      <span>Partie publique (visible dans la liste ci-dessous)</span>
+    </label>
 
     <div class="divider"><span>ou</span></div>
 
@@ -33,6 +39,11 @@
     <button id="btn-join" class="btn btn-secondary">Rejoindre</button>
 
     <p id="home-error" class="error"></p>
+
+    <div class="divider"><span>parties publiques</span></div>
+    <ul id="public-rooms-list" class="player-list"></ul>
+    <p id="public-rooms-empty" class="hint" style="display:none">Aucune partie publique en ce moment.</p>
+    <button id="btn-refresh-public" class="btn btn-secondary" style="font-size:13px;padding:10px">🔄 Actualiser la liste</button>
   </div>
 </section>
 
@@ -46,6 +57,13 @@
 
     <ul id="lobby-players" class="player-list"></ul>
 
+    <div id="host-public-toggle-wrap" style="display:none">
+      <label class="checkbox-field">
+        <input type="checkbox" id="lobby-public-toggle">
+        <span>Partie publique (visible par tous dans le menu)</span>
+      </label>
+    </div>
+
     <div id="mode-select-wrap" style="display:none">
       <label class="field">
         <span>Mode de jeu</span>
@@ -53,15 +71,44 @@
       </label>
       <p id="mode-desc" class="hint" style="margin-top:-8px"></p>
       <div id="mode-config"></div>
+
+      <label class="field">
+        <span>Carte</span>
+        <select id="map-select"></select>
+      </label>
+      <p id="map-desc" class="hint" style="margin-top:-8px"></p>
+      <div id="map-preview"></div>
+      <p class="hint" style="font-size:11px;margin-top:2px">Aperçu indicatif — la disposition réelle sera générée au lancement.</p>
+
+      <label class="checkbox-field">
+        <input type="checkbox" id="powerups-toggle" checked>
+        <span>Bonus sur la carte (vie / résistance / vitesse)</span>
+      </label>
+      <label class="field" id="powerup-interval-wrap">
+        <span>Fréquence des bonus (secondes)</span>
+        <input type="number" id="powerup-interval" min="5" max="120" value="14">
+      </label>
+
+      <label class="checkbox-field">
+        <input type="checkbox" id="teams-toggle">
+        <span>Mode équipes (2 équipes, assignation automatique)</span>
+      </label>
+
+      <label class="checkbox-field">
+        <input type="checkbox" id="shrink-toggle">
+        <span>Zone qui rétrécit (façon battle royale)</span>
+      </label>
     </div>
 
     <button id="btn-start" class="btn btn-primary" style="display:none">Démarrer la partie</button>
     <p id="lobby-wait" class="hint">En attente que l'hôte démarre la partie…</p>
+    <button id="btn-leave-lobby" class="btn btn-secondary" style="margin-top:14px">Quitter</button>
   </div>
 </section>
 
 <!-- ===== ECRAN FIN DE PARTIE ===== -->
 <section id="screen-end" class="screen">
+  <div id="confetti-layer" class="confetti-layer"></div>
   <div class="card">
     <h2 class="lobby-title">Partie terminée</h2>
     <p id="end-winner" class="hint" style="font-size:16px;color:var(--accent)"></p>
@@ -76,14 +123,46 @@
       </label>
       <p id="end-mode-desc" class="hint" style="margin-top:-8px"></p>
       <div id="end-mode-config"></div>
+
+      <label class="field">
+        <span>Carte</span>
+        <select id="end-map-select"></select>
+      </label>
+      <p id="end-map-desc" class="hint" style="margin-top:-8px"></p>
+      <div id="end-map-preview"></div>
+
+      <label class="checkbox-field">
+        <input type="checkbox" id="end-powerups-toggle" checked>
+        <span>Bonus sur la carte (vie / résistance / vitesse)</span>
+      </label>
+      <label class="field" id="end-powerup-interval-wrap">
+        <span>Fréquence des bonus (secondes)</span>
+        <input type="number" id="end-powerup-interval" min="5" max="120" value="14">
+      </label>
+
+      <label class="checkbox-field">
+        <input type="checkbox" id="end-teams-toggle">
+        <span>Mode équipes (2 équipes, assignation automatique)</span>
+      </label>
+
+      <label class="checkbox-field">
+        <input type="checkbox" id="end-shrink-toggle">
+        <span>Zone qui rétrécit (façon battle royale)</span>
+      </label>
+
       <button id="btn-restart" class="btn btn-primary">Rejouer</button>
     </div>
     <p id="end-wait" class="hint" style="display:none">En attente que l'hôte relance une partie…</p>
+    <button id="btn-leave-end" class="btn btn-secondary" style="margin-top:14px">Quitter</button>
   </div>
 </section>
 
 <!-- ===== ECRAN JEU ===== -->
 <section id="screen-game" class="screen">
+  <div id="countdown-overlay" class="countdown-overlay" style="display:none">
+    <div id="countdown-number" class="countdown-number"></div>
+  </div>
+
   <header class="hud">
     <div id="mode-status" class="mode-status"></div>
     <div id="turn-banner" class="turn-banner">En attente du prochain tour…</div>
@@ -113,6 +192,11 @@
   <footer class="players-panel">
     <ul id="game-players" class="player-list compact"></ul>
   </footer>
+
+  <div class="match-controls">
+    <button id="btn-end-match" class="btn btn-secondary" style="display:none">Terminer la partie</button>
+    <button id="btn-leave-game" class="btn btn-secondary" style="display:none">Quitter</button>
+  </div>
 
   <div id="log-feed" class="log-feed"></div>
 </section>
