@@ -1,15 +1,15 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
 // (ex: "https://capnaval.onrender.com")
-const BACKEND_URL = "https://capnaval.onrender.com";
+const BACKEND_URL = "https://capnaval-backend.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
 const ATTACKS_META = {
   meteor:       { name: "Météorite",         desc: "Choisis le centre d'une zone 3x3",                  target: "zone", size: 3 },
-  airstrike:    { name: "Frappe aérienne",   desc: "Choisis le centre d'une zone 5x5 (3 impacts aléatoires)", target: "zone", size: 5 },
-  meteorShower: { name: "Pluie de météores", desc: "Choisis le centre d'une zone 6x6 (5 impacts aléatoires)", target: "zone", size: 6 },
-  snipe:        { name: "Tir de précision",  desc: "Choisis une case à frapper (instantané)",           target: "cell" },
-  laser:        { name: "Rayon laser",       desc: "Choisis une case puis une ligne ou colonne (instantané)", target: "line" },
+  airstrike:    { name: "Frappe aérienne",   desc: "Choisis le centre d'une zone 5x5", target: "zone", size: 5 },
+  meteorShower: { name: "Pluie de météores", desc: "Choisis le centre d'une zone 6x6", target: "zone", size: 6 },
+  snipe:        { name: "Tir de précision",  desc: "Choisis une case à frapper",           target: "cell" },
+  laser:        { name: "Rayon laser",       desc: "Choisis une case puis une ligne ou colonne", target: "line" },
   shockwave:    { name: "Onde de choc",      desc: "Frappe toutes les cases autour de toi",             target: "self" },
   gunline:      { name: "Rafale",            desc: "Choisis une case puis une ligne ou colonne",         target: "line" },
   grenade:      { name: "Grenade",           desc: "Choisis le centre d'une zone 2x2",                   target: "zone", size: 2 },
