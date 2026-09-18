@@ -4,6 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
 <title>CapNaval</title>
+<link rel="manifest" href="manifest.json" />
+<meta name="theme-color" content="#10131a" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="apple-touch-icon" href="icons/icon-180.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="CapNaval" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -25,10 +32,12 @@
     </label>
 
     <button id="btn-create" class="btn btn-primary">Créer une partie</button>
-    <label class="checkbox-field" style="margin-top:6px">
-      <input type="checkbox" id="create-public-toggle">
-      <span>Partie publique (visible dans la liste ci-dessous)</span>
+    <label class="toggle-field" style="margin-top:6px">
+      <span class="toggle-text">Partie publique</span>
+      <span class="toggle-switch"><input type="checkbox" id="create-public-toggle"><span class="toggle-slider"></span></span>
     </label>
+
+    <button id="btn-install" class="fab-install" style="display:none" aria-label="Installer l'app" title="Installer l'app">📲</button>
 
     <div class="divider"><span>ou</span></div>
 
@@ -58,9 +67,9 @@
     <ul id="lobby-players" class="player-list"></ul>
 
     <div id="host-public-toggle-wrap" style="display:none">
-      <label class="checkbox-field">
-        <input type="checkbox" id="lobby-public-toggle">
-        <span>Partie publique (visible par tous dans le menu)</span>
+      <label class="toggle-field">
+        <span class="toggle-text">Partie publique</span>
+        <span class="toggle-switch"><input type="checkbox" id="lobby-public-toggle"><span class="toggle-slider"></span></span>
       </label>
     </div>
 
@@ -72,32 +81,54 @@
       <p id="mode-desc" class="hint" style="margin-top:-8px"></p>
       <div id="mode-config"></div>
 
-      <label class="field">
-        <span>Carte</span>
-        <select id="map-select"></select>
-      </label>
-      <p id="map-desc" class="hint" style="margin-top:-8px"></p>
-      <div id="map-preview"></div>
-      <p class="hint" style="font-size:11px;margin-top:2px">Aperçu indicatif — la disposition réelle sera générée au lancement.</p>
+      <button type="button" id="map-field-trigger" class="map-field-trigger">
+        <span class="field-label">Carte</span>
+        <span class="map-field-value">
+          <span id="map-field-label">—</span>
+          <span class="map-field-chevron">›</span>
+        </span>
+      </button>
+      <p id="map-desc" class="hint" style="margin-top:-6px"></p>
 
-      <label class="checkbox-field">
-        <input type="checkbox" id="powerups-toggle" checked>
-        <span>Bonus sur la carte (vie / résistance / vitesse)</span>
+      <label class="toggle-field">
+        <span class="toggle-text">Bonus sur la carte</span>
+        <span class="toggle-switch"><input type="checkbox" id="powerups-toggle" checked><span class="toggle-slider"></span></span>
       </label>
       <label class="field" id="powerup-interval-wrap">
-        <span>Fréquence des bonus (secondes)</span>
+        <span>Fréquence des bonus en secondes</span>
         <input type="number" id="powerup-interval" min="5" max="120" value="14">
       </label>
 
-      <label class="checkbox-field">
-        <input type="checkbox" id="teams-toggle">
-        <span>Mode équipes (2 équipes, assignation automatique)</span>
+      <label class="toggle-field">
+        <span class="toggle-text">Mode équipes</span>
+        <span class="toggle-switch"><input type="checkbox" id="teams-toggle"><span class="toggle-slider"></span></span>
       </label>
 
-      <label class="checkbox-field">
-        <input type="checkbox" id="shrink-toggle">
-        <span>Zone qui rétrécit (façon battle royale)</span>
+      <label class="toggle-field">
+        <span class="toggle-text">Poussée autorisée</span>
+        <span class="toggle-switch"><input type="checkbox" id="push-toggle" checked><span class="toggle-slider"></span></span>
       </label>
+
+      <label class="toggle-field">
+        <span class="toggle-text">Zone qui rétrécit</span>
+        <span class="toggle-switch"><input type="checkbox" id="shrink-toggle"><span class="toggle-slider"></span></span>
+      </label>
+      <div id="shrink-options-wrap" style="display:none">
+        <label class="field">
+          <span>Vitesse de rétrécissement</span>
+          <select id="shrink-mode-select">
+            <option value="slow">Lent</option>
+            <option value="medium" selected>Moyen</option>
+            <option value="fast">Rapide</option>
+            <option value="onKO">À chaque K.O.</option>
+            <option value="custom">Personnalisé</option>
+          </select>
+        </label>
+        <label class="field" id="shrink-custom-wrap" style="display:none">
+          <span>Intervalle personnalisé en secondes</span>
+          <input type="number" id="shrink-interval" min="3" max="300" value="18">
+        </label>
+      </div>
     </div>
 
     <button id="btn-start" class="btn btn-primary" style="display:none">Démarrer la partie</button>
@@ -124,31 +155,54 @@
       <p id="end-mode-desc" class="hint" style="margin-top:-8px"></p>
       <div id="end-mode-config"></div>
 
-      <label class="field">
-        <span>Carte</span>
-        <select id="end-map-select"></select>
-      </label>
-      <p id="end-map-desc" class="hint" style="margin-top:-8px"></p>
-      <div id="end-map-preview"></div>
+      <button type="button" id="end-map-field-trigger" class="map-field-trigger">
+        <span class="field-label">Carte</span>
+        <span class="map-field-value">
+          <span id="end-map-field-label">—</span>
+          <span class="map-field-chevron">›</span>
+        </span>
+      </button>
+      <p id="end-map-desc" class="hint" style="margin-top:-6px"></p>
 
-      <label class="checkbox-field">
-        <input type="checkbox" id="end-powerups-toggle" checked>
-        <span>Bonus sur la carte (vie / résistance / vitesse)</span>
+      <label class="toggle-field">
+        <span class="toggle-text">Bonus sur la carte</span>
+        <span class="toggle-switch"><input type="checkbox" id="end-powerups-toggle" checked><span class="toggle-slider"></span></span>
       </label>
       <label class="field" id="end-powerup-interval-wrap">
-        <span>Fréquence des bonus (secondes)</span>
+        <span>Fréquence des bonus en secondes</span>
         <input type="number" id="end-powerup-interval" min="5" max="120" value="14">
       </label>
 
-      <label class="checkbox-field">
-        <input type="checkbox" id="end-teams-toggle">
-        <span>Mode équipes (2 équipes, assignation automatique)</span>
+      <label class="toggle-field">
+        <span class="toggle-text">Mode équipes</span>
+        <span class="toggle-switch"><input type="checkbox" id="end-teams-toggle"><span class="toggle-slider"></span></span>
       </label>
 
-      <label class="checkbox-field">
-        <input type="checkbox" id="end-shrink-toggle">
-        <span>Zone qui rétrécit (façon battle royale)</span>
+      <label class="toggle-field">
+        <span class="toggle-text">Poussée autorisée</span>
+        <span class="toggle-switch"><input type="checkbox" id="end-push-toggle" checked><span class="toggle-slider"></span></span>
       </label>
+
+      <label class="toggle-field">
+        <span class="toggle-text">Zone qui rétrécit</span>
+        <span class="toggle-switch"><input type="checkbox" id="end-shrink-toggle"><span class="toggle-slider"></span></span>
+      </label>
+      <div id="end-shrink-options-wrap" style="display:none">
+        <label class="field">
+          <span>Vitesse de rétrécissement</span>
+          <select id="end-shrink-mode-select">
+            <option value="slow">Lent</option>
+            <option value="medium" selected>Moyen</option>
+            <option value="fast">Rapide</option>
+            <option value="onKO">À chaque K.O.</option>
+            <option value="custom">Personnalisé</option>
+          </select>
+        </label>
+        <label class="field" id="end-shrink-custom-wrap" style="display:none">
+          <span>Intervalle personnalisé en secondes</span>
+          <input type="number" id="end-shrink-interval" min="3" max="300" value="18">
+        </label>
+      </div>
 
       <button id="btn-restart" class="btn btn-primary">Rejouer</button>
     </div>
@@ -198,8 +252,38 @@
     <button id="btn-leave-game" class="btn btn-secondary" style="display:none">Quitter</button>
   </div>
 
+  <div class="energy-bar-wrap">
+    <div id="energy-bar" class="energy-bar"><div id="energy-fill" class="energy-fill"></div></div>
+  </div>
+
   <div id="log-feed" class="log-feed"></div>
 </section>
+
+<div id="map-wheel-modal" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:380px">
+    <h2 class="lobby-title" style="font-size:20px">Choisis une carte</h2>
+    <div class="wheel-wrap wheel-wrap-large">
+      <div id="modal-map-wheel" class="map-wheel map-wheel-large"></div>
+      <div class="wheel-hub wheel-hub-large">🗺️</div>
+      <div class="wheel-pointer wheel-pointer-large">▲</div>
+    </div>
+    <p id="modal-map-desc" class="hint"></p>
+    <button id="btn-confirm-map" class="btn btn-primary">Valider</button>
+  </div>
+</div>
+
+<div id="ios-install-modal" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:340px">
+    <h2 class="lobby-title" style="font-size:20px">Installer CapNaval</h2>
+    <p class="hint">Safari ne permet pas d'installer l'app en un clic — voici comment faire à la main :</p>
+    <ol class="ios-steps">
+      <li>Appuie sur l'icône <strong>Partager</strong> <span class="ios-share-icon">⬆️</span> en bas de Safari</li>
+      <li>Fais défiler et choisis <strong>« Sur l'écran d'accueil »</strong></li>
+      <li>Appuie sur <strong>Ajouter</strong> en haut à droite</li>
+    </ol>
+    <button id="btn-close-ios-modal" class="btn btn-primary">Compris</button>
+  </div>
+</div>
 
 <script src="app.js"></script>
 </body>

@@ -62,6 +62,55 @@ html, body {
 
 .field { display: block; margin-bottom: 14px; }
 .field span { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+.field-label { display: block; font-size: 13px; color: var(--text-dim); margin-bottom: 6px; }
+
+/* ---- Roue de la fortune (choix de carte) ---- */
+.wheel-wrap {
+  position: relative; width: 220px; margin: 4px auto 10px;
+  touch-action: none; user-select: none;
+}
+.map-wheel {
+  width: 220px; height: 220px; border-radius: 50%;
+  position: relative;
+  filter: drop-shadow(0 4px 14px rgba(0,0,0,.45));
+  cursor: grab;
+}
+.map-wheel:active { cursor: grabbing; }
+.map-wheel svg { width: 100%; height: 100%; display: block; pointer-events: none; }
+.wheel-hub {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--panel); border: 3px solid var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px; pointer-events: none;
+}
+.wheel-pointer {
+  position: absolute; left: 50%; bottom: -14px; transform: translateX(-50%);
+  font-size: 22px; line-height: 1; color: var(--accent);
+  text-shadow: 0 2px 4px rgba(0,0,0,.5);
+  pointer-events: none;
+}
+
+/* ---- Champ compact "Carte" qui ouvre le modal ---- */
+.map-field-trigger {
+  display: block; width: 100%; margin-bottom: 14px; padding: 0;
+  background: none; border: none; text-align: left; font-family: var(--font-body);
+  cursor: pointer;
+}
+.map-field-value {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; padding: 12px 14px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); font-size: 15px;
+}
+.map-field-chevron { color: var(--text-dim); font-size: 18px; }
+.map-field-trigger:active .map-field-value { background: var(--line); }
+
+/* ---- Roue agrandie dans le modal ---- */
+.wheel-wrap-large { width: 280px; margin: 10px auto 14px; }
+.map-wheel-large { width: 280px; height: 280px; }
+.wheel-hub-large { width: 42px; height: 42px; font-size: 19px; }
+.wheel-pointer-large { font-size: 28px; bottom: -18px; }
 .field input {
   width: 100%; padding: 12px 14px;
   background: var(--panel-2); border: 1px solid var(--line);
@@ -70,27 +119,44 @@ html, body {
 }
 .field input:focus { outline: none; border-color: var(--accent); }
 
-.checkbox-field {
-  display: flex; align-items: center; gap: 8px; margin: 14px 0;
-  font-size: 14px; color: var(--text);
+.toggle-field {
+  display: flex; align-items: center; justify-content: space-between; gap: 14px;
+  margin: 14px 0; padding: 12px 14px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+  cursor: pointer;
 }
-.checkbox-field input { width: 18px; height: 18px; accent-color: var(--accent); }
+.toggle-text { font-size: 13.5px; color: var(--text); line-height: 1.35; }
+.toggle-switch { position: relative; width: 46px; height: 27px; flex-shrink: 0; }
+.toggle-switch input {
+  position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer;
+}
+.toggle-slider {
+  position: absolute; inset: 0; border-radius: 999px;
+  background: var(--line); border: 1px solid var(--line);
+  transition: background .2s ease, border-color .2s ease;
+}
+.toggle-slider::before {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 21px; height: 21px; border-radius: 50%;
+  background: var(--text-dim);
+  box-shadow: 0 1px 3px rgba(0,0,0,.4);
+  transition: transform .2s ease, background .2s ease;
+}
+.toggle-switch input:checked + .toggle-slider {
+  background: var(--accent-dim); border-color: var(--accent);
+}
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(19px); background: var(--accent);
+}
+.toggle-switch input:focus-visible + .toggle-slider {
+  box-shadow: 0 0 0 2px var(--accent);
+}
 
 .connection-banner {
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   background: var(--danger); color: #fff; text-align: center;
   padding: 8px 12px; font-size: 13px; font-weight: 600;
 }
-
-.map-preview-grid {
-  display: grid; grid-template-columns: repeat(12, 1fr); gap: 1px;
-  width: 132px; margin: 8px auto 2px; background: var(--line);
-  border: 1px solid var(--line); border-radius: 4px; overflow: hidden;
-}
-.mp-cell { aspect-ratio: 1/1; background: var(--panel); }
-.mp-cell.mp-w { background: #4a5062; }
-.mp-cell.mp-b { background: #8a5a2a; }
-.mp-cell.mp-m { background: #5a4a2a; }
 
 .team-badge {
   display: inline-flex; align-items: center; justify-content: center;
@@ -380,6 +446,15 @@ html, body {
 
 .players-panel { max-height: 140px; overflow-y: auto; }
 
+.energy-bar-wrap { display: flex; justify-content: center; margin: 2px 0 6px; }
+.energy-bar {
+  width: 84px; height: 5px; border-radius: 3px; overflow: hidden;
+  background: var(--panel-2); border: 1px solid var(--line);
+}
+.energy-fill {
+  height: 100%; width: 0%; background: #3b82f6;
+}
+
 .log-feed {
   font-size: 12px; color: var(--text-dim); max-height: 60px; overflow-y: auto;
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
@@ -434,3 +509,25 @@ html, body {
 #public-rooms-list li { cursor: pointer; }
 #public-rooms-list li:active { background: var(--line); }
 #public-rooms-list .room-meta { color: var(--text-dim); font-size: 12px; }
+
+/* ---- Modale d'installation iOS ---- */
+.ios-install-modal {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(10,12,16,.85);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.ios-steps { text-align: left; color: var(--text); font-size: 14px; line-height: 1.7; padding-left: 20px; margin: 14px 0; }
+.ios-steps li { margin-bottom: 6px; }
+.ios-share-icon { display: inline-block; }
+
+.fab-install {
+  position: fixed; left: 16px; bottom: 16px; z-index: 30;
+  width: 52px; height: 52px; border-radius: 50%;
+  background: var(--panel-2); border: 1px solid var(--line);
+  font-size: 24px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 4px 14px rgba(0,0,0,.4);
+  cursor: pointer;
+}
+.fab-install:active { background: var(--line); }

@@ -1,20 +1,20 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
 // (ex: "https://capnaval.onrender.com")
-const BACKEND_URL = "https://capnaval-backend.onrender.com";
+const BACKEND_URL = "https://capnaval.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
 const ATTACKS_META = {
   meteor:       { name: "Météorite",         desc: "Choisis le centre d'une zone 3x3",                  target: "zone", size: 3 },
-  airstrike:    { name: "Frappe aérienne",   desc: "Choisis le centre d'une zone 5x5", target: "zone", size: 5 },
-  meteorShower: { name: "Pluie de météores", desc: "Choisis le centre d'une zone 6x6", target: "zone", size: 6 },
-  snipe:        { name: "Tir de précision",  desc: "Choisis une case à frapper",           target: "cell" },
-  laser:        { name: "Rayon laser",       desc: "Choisis une case puis une ligne ou colonne", target: "line" },
+  airstrike:    { name: "Frappe aérienne",   desc: "Choisis le centre d'une zone 5x5, 3 impacts aléatoires", target: "zone", size: 5 },
+  meteorShower: { name: "Pluie de météores", desc: "Choisis le centre d'une zone 6x6, 5 impacts aléatoires", target: "zone", size: 6 },
+  snipe:        { name: "Tir de précision",  desc: "Choisis une case à frapper, instantané",           target: "cell" },
+  laser:        { name: "Rayon laser",       desc: "Choisis une case puis une ligne ou colonne, instantané", target: "line" },
   shockwave:    { name: "Onde de choc",      desc: "Frappe toutes les cases autour de toi",             target: "self" },
   gunline:      { name: "Rafale",            desc: "Choisis une case puis une ligne ou colonne",         target: "line" },
   grenade:      { name: "Grenade",           desc: "Choisis le centre d'une zone 2x2",                   target: "zone", size: 2 },
   arrow:        { name: "Flèche perforante", desc: "Choisis une direction : transperce jusqu'à un mur",  target: "direction" },
-  charge:       { name: "Charge",            desc: "Choisis une direction pour foncer",                  target: "direction" },
+  charge:       { name: "Charge",            desc: "Choisis une direction pour foncer, instantané",     target: "direction" },
   tornado:      { name: "Tornade",           desc: "Choisis le centre d'une zone 3x3 à aspirer",         target: "zone", size: 3 },
   net:          { name: "Filet",             desc: "Choisis une case à immobiliser",                     target: "cell" },
   frost:        { name: "Vague de givre",    desc: "Choisis le centre d'une zone 3x3 à ralentir",        target: "zone", size: 3 },
@@ -51,6 +51,7 @@ let targetingAttackId = null;
 let selectedCell = null;
 let MODES_META = {};
 let MAPS_META = {};
+const mapWheelStates = new Map(); // containerId -> état de la roue (rotation, sélection...)
 let lastMyHp = null;
 let chronoTickHandle = null;
 let lastTurnKey = null;
@@ -75,11 +76,176 @@ function populateModeSelect(selectEl) {
     .join("");
 }
 
-function populateMapSelect(selectEl) {
-  selectEl.innerHTML = Object.entries(MAPS_META)
-    .map(([id, m]) => `<option value="${id}">${escapeHtml(m.label)}</option>`)
-    .join("");
+// ---------- Roue de la fortune (choix de carte) ----------
+const WHEEL_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#f97316"];
+const WHEEL_FRICTION = 0.965;
+const WHEEL_MIN_VELOCITY = 0.15;
+
+function wheelPolarToXY(deg, r) {
+  const rad = (deg * Math.PI) / 180;
+  return [100 + r * Math.sin(rad), 100 - r * Math.cos(rad)];
 }
+
+function buildWheelSVG(order) {
+  const n = order.length;
+  const seg = 360 / n;
+  let svg = `<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">`;
+  order.forEach((id, i) => {
+    const a0 = i * seg, a1 = (i + 1) * seg;
+    const [x1, y1] = wheelPolarToXY(a0, 95);
+    const [x2, y2] = wheelPolarToXY(a1, 95);
+    const large = seg > 180 ? 1 : 0;
+    const color = WHEEL_COLORS[i % WHEEL_COLORS.length];
+    svg += `<path d="M100,100 L${x1.toFixed(2)},${y1.toFixed(2)} A95,95 0 ${large} 1 ${x2.toFixed(2)},${y2.toFixed(2)} Z" fill="${color}" stroke="#10131a" stroke-width="2"/>`;
+    const mid = a0 + seg / 2;
+    const [lx, ly] = wheelPolarToXY(mid, 58);
+    const label = (MAPS_META[id] && MAPS_META[id].label) || id;
+    const uprightAtRest = (mid - 180).toFixed(2);
+    svg += `<text x="${lx.toFixed(2)}" y="${ly.toFixed(2)}" transform="rotate(${uprightAtRest} ${lx.toFixed(2)} ${ly.toFixed(2)})" text-anchor="middle" dominant-baseline="middle" font-size="13" font-weight="700" fill="#10131a">${escapeHtml(label)}</text>`;
+  });
+  svg += `</svg>`;
+  return svg;
+}
+
+function applyWheelRotation(el, deg) { el.style.transform = `rotate(${deg}deg)`; }
+
+// Case actuellement sous la flèche (en bas de la roue), selon la rotation courante.
+function wheelSegmentAt(state) {
+  const seg = 360 / state.order.length;
+  const effectiveLocal = (((180 - state.rotation) % 360) + 360) % 360;
+  return Math.floor(effectiveLocal / seg) % state.order.length;
+}
+
+function syncMapFieldDisplays(mapId) {
+  const label = (MAPS_META[mapId] && MAPS_META[mapId].label) || mapId || "—";
+  const desc = (MAPS_META[mapId] && MAPS_META[mapId].desc) || "";
+  const labelEl1 = document.getElementById("map-field-label");
+  const labelEl2 = document.getElementById("end-map-field-label");
+  if (labelEl1) labelEl1.textContent = label;
+  if (labelEl2) labelEl2.textContent = label;
+  const descEl1 = document.getElementById("map-desc");
+  const descEl2 = document.getElementById("end-map-desc");
+  if (descEl1) descEl1.textContent = desc;
+  if (descEl2) descEl2.textContent = desc;
+}
+
+function selectWheelMap(state, wheelEl, descEl, mapId, playSound) {
+  const changed = state.selected !== mapId;
+  state.selected = mapId;
+  if (descEl) descEl.textContent = (MAPS_META[mapId] && MAPS_META[mapId].desc) || "";
+  syncMapFieldDisplays(mapId);
+  if (playSound && changed) sfxWheelSettle();
+}
+
+// Place la roue directement sur une carte donnée, sans animation ni son (état initial).
+function setWheelToMap(state, wheelEl, mapId, descEl) {
+  const idx = state.order.indexOf(mapId);
+  if (idx < 0) return;
+  const seg = 360 / state.order.length;
+  const targetMid = idx * seg + seg / 2;
+  state.rotation = 180 - targetMid;
+  applyWheelRotation(wheelEl, state.rotation);
+  state.lastSegmentIndex = idx;
+  selectWheelMap(state, wheelEl, descEl, mapId, false);
+}
+
+function settleWheel(state, wheelEl, descEl) {
+  const seg = 360 / state.order.length;
+  const idx = wheelSegmentAt(state);
+  const effectiveLocal = (((180 - state.rotation) % 360) + 360) % 360;
+  const targetMid = idx * seg + seg / 2;
+  const diff = targetMid - effectiveLocal;
+  state.rotation -= diff;
+  wheelEl.style.transition = "transform .35s cubic-bezier(.2,.8,.3,1)";
+  applyWheelRotation(wheelEl, state.rotation);
+  setTimeout(() => { wheelEl.style.transition = ""; }, 380);
+  selectWheelMap(state, wheelEl, descEl, state.order[idx], true);
+}
+
+function attachWheelDrag(wheelEl, state, descEl) {
+  let dragging = false, lastAngle = 0, lastTime = 0, velocity = 0;
+
+  const angleAt = (clientX, clientY) => {
+    const rect = wheelEl.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    return Math.atan2(clientY - cy, clientX - cx) * (180 / Math.PI);
+  };
+
+  const stopMomentum = () => { if (state.momentumRAF) cancelAnimationFrame(state.momentumRAF); state.momentumRAF = null; };
+
+  const tickIfSegmentChanged = () => {
+    const idx = wheelSegmentAt(state);
+    if (idx !== state.lastSegmentIndex) { state.lastSegmentIndex = idx; sfxWheelTick(); }
+  };
+
+  const runMomentum = () => {
+    velocity *= WHEEL_FRICTION;
+    state.rotation += velocity;
+    applyWheelRotation(wheelEl, state.rotation);
+    tickIfSegmentChanged();
+    if (Math.abs(velocity) > WHEEL_MIN_VELOCITY) {
+      state.momentumRAF = requestAnimationFrame(runMomentum);
+    } else {
+      settleWheel(state, wheelEl, descEl);
+    }
+  };
+
+  wheelEl.addEventListener("pointerdown", (e) => {
+    stopMomentum();
+    wheelEl.style.transition = "";
+    dragging = true;
+    try { wheelEl.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    lastAngle = angleAt(e.clientX, e.clientY);
+    lastTime = performance.now();
+    velocity = 0;
+  });
+  wheelEl.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const now = performance.now();
+    const ang = angleAt(e.clientX, e.clientY);
+    let delta = ang - lastAngle;
+    if (delta > 180) delta -= 360;
+    if (delta < -180) delta += 360;
+    state.rotation += delta;
+    applyWheelRotation(wheelEl, state.rotation);
+    tickIfSegmentChanged();
+    const dt = Math.max(1, now - lastTime);
+    velocity = (delta / dt) * 16;
+    lastAngle = ang; lastTime = now;
+  });
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    if (Math.abs(velocity) > WHEEL_MIN_VELOCITY) state.momentumRAF = requestAnimationFrame(runMomentum);
+    else settleWheel(state, wheelEl, descEl);
+  };
+  wheelEl.addEventListener("pointerup", endDrag);
+  wheelEl.addEventListener("pointercancel", endDrag);
+}
+
+function createMapWheel(containerId, descId) {
+  const container = document.getElementById(containerId);
+  const descEl = document.getElementById(descId);
+  const order = Object.keys(MAPS_META);
+  if (!container || !order.length) return null;
+  container.innerHTML = buildWheelSVG(order);
+  const state = { order, rotation: 0, selected: null, lastSegmentIndex: 0, momentumRAF: null };
+  setWheelToMap(state, container, order[0], descEl);
+  attachWheelDrag(container, state, descEl);
+  mapWheelStates.set(containerId, state);
+  return state;
+}
+
+function getWheelSelection() {
+  const state = mapWheelStates.get("modal-map-wheel");
+  return state ? state.selected : null;
+}
+
+function openMapModal() { document.getElementById("map-wheel-modal").style.display = "flex"; }
+function closeMapModal() { document.getElementById("map-wheel-modal").style.display = "none"; }
+document.getElementById("map-field-trigger").addEventListener("click", openMapModal);
+document.getElementById("end-map-field-trigger").addEventListener("click", openMapModal);
+document.getElementById("btn-confirm-map").addEventListener("click", closeMapModal);
 
 function renderModeConfigFields(mode, configEl, descEl) {
   descEl.textContent = (MODES_META[mode] && MODES_META[mode].desc) || "";
@@ -99,34 +265,6 @@ function readModeConfig(configEl) {
 
 function wireModeSelector(selectEl, configEl, descEl) {
   selectEl.addEventListener("change", () => renderModeConfigFields(selectEl.value, configEl, descEl));
-}
-
-function wireMapSelector(selectEl, descEl, previewEl) {
-  const update = () => {
-    descEl.textContent = (MAPS_META[selectEl.value] && MAPS_META[selectEl.value].desc) || "";
-    if (previewEl) renderMapPreview(selectEl.value, previewEl);
-  };
-  selectEl.addEventListener("change", update);
-  update();
-}
-
-function renderMapPreview(mapId, containerEl) {
-  const def = MAPS_META[mapId];
-  if (!def) { containerEl.innerHTML = ""; return; }
-  const n = 12;
-  const cells = new Array(n * n).fill("");
-  const place = (count, cls) => {
-    let placed = 0, guard = 0;
-    while (placed < count && guard < 800) {
-      guard++;
-      const idx = Math.floor(Math.random() * n * n);
-      if (!cells[idx]) { cells[idx] = cls; placed++; }
-    }
-  };
-  place(def.walls || 0, "mp-w");
-  place(def.barrels || 0, "mp-b");
-  place(def.mud || 0, "mp-m");
-  containerEl.innerHTML = `<div class="map-preview-grid">${cells.map(c => `<div class="mp-cell ${c}"></div>`).join("")}</div>`;
 }
 
 // ---------- Réglages sauvegardés (localStorage) ----------
@@ -155,11 +293,6 @@ function applySavedSettings(prefix) {
       });
     }
   }
-  const mapSelect = document.getElementById(prefix + "map-select");
-  if (mapSelect && saved.config && saved.config.mapId && MAPS_META[saved.config.mapId]) {
-    mapSelect.value = saved.config.mapId;
-    mapSelect.dispatchEvent(new Event("change"));
-  }
   const powerToggle = document.getElementById(prefix + "powerups-toggle");
   if (powerToggle && saved.config && typeof saved.config.powerupsEnabled !== "undefined") {
     powerToggle.checked = !!saved.config.powerupsEnabled;
@@ -172,10 +305,24 @@ function applySavedSettings(prefix) {
   if (teamsToggle && saved.config && typeof saved.config.teamsEnabled !== "undefined") {
     teamsToggle.checked = !!saved.config.teamsEnabled;
   }
+  const pushToggle = document.getElementById(prefix + "push-toggle");
+  if (pushToggle && saved.config && typeof saved.config.pushEnabled !== "undefined") {
+    pushToggle.checked = !!saved.config.pushEnabled;
+  }
   const shrinkToggle = document.getElementById(prefix + "shrink-toggle");
   if (shrinkToggle && saved.config && typeof saved.config.shrinkEnabled !== "undefined") {
     shrinkToggle.checked = !!saved.config.shrinkEnabled;
   }
+  const shrinkModeSelect = document.getElementById(prefix + "shrink-mode-select");
+  if (shrinkModeSelect && saved.config && saved.config.shrinkMode) {
+    shrinkModeSelect.value = saved.config.shrinkMode;
+  }
+  const shrinkIntervalInput = document.getElementById(prefix + "shrink-interval");
+  if (shrinkIntervalInput && saved.config && saved.config.shrinkIntervalSec) {
+    shrinkIntervalInput.value = saved.config.shrinkIntervalSec;
+  }
+  if (shrinkToggle) shrinkToggle.dispatchEvent(new Event("change"));
+  if (shrinkModeSelect) shrinkModeSelect.dispatchEvent(new Event("change"));
 }
 
 // ---------- Ecrans ----------
@@ -261,6 +408,50 @@ function stopPublicRoomsPolling() {
 }
 startPublicRoomsPolling();
 
+// ---------- Installation PWA (icône sur l'appareil) ----------
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").catch(() => { /* tant pis, l'app marche quand même */ });
+  });
+}
+
+const isStandaloneAlready = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+let deferredInstallPrompt = null;
+const btnInstall = document.getElementById("btn-install");
+
+if (!isStandaloneAlready) {
+  if (isIOS) {
+    // Safari n'expose pas d'API pour déclencher l'installation : on montre le bouton,
+    // qui ouvre des instructions manuelles au clic.
+    btnInstall.style.display = "block";
+  } else {
+    // Chrome/Edge (Android ou bureau) : on intercepte l'invite native et on la
+    // déclenche nous-même au clic, avec notre propre bouton dans le style du jeu.
+    window.addEventListener("beforeinstallprompt", (e) => {
+      e.preventDefault();
+      deferredInstallPrompt = e;
+      btnInstall.style.display = "block";
+    });
+    window.addEventListener("appinstalled", () => { btnInstall.style.display = "none"; });
+  }
+}
+
+btnInstall.addEventListener("click", async () => {
+  if (isIOS) {
+    document.getElementById("ios-install-modal").style.display = "flex";
+    return;
+  }
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt = null;
+  btnInstall.style.display = "none";
+});
+document.getElementById("btn-close-ios-modal").addEventListener("click", () => {
+  document.getElementById("ios-install-modal").style.display = "none";
+});
+
 // ---------- Identité persistante (pour la reconnexion) ----------
 const CLIENT_ID_KEY = "capnaval_client_id";
 function getClientId() {
@@ -321,6 +512,7 @@ function doLeave() {
   setTimeout(() => { try { if (ws) ws.close(); } catch (e) { /* ignore */ } }, 80);
   myId = null; myCode = null; lastState = null;
   boardBuilt = false;
+  lastMyPosKey = null;
   playerTokenEls.clear();
   prevPlayerStats.clear();
   hideConnectionBanner();
@@ -351,12 +543,6 @@ function onMessage(msg) {
     renderModeConfigFields(modeSelect.value, modeConfig, modeDesc);
     wireModeSelector(modeSelect, modeConfig, modeDesc);
 
-    const mapSelect = document.getElementById("map-select");
-    const mapDesc = document.getElementById("map-desc");
-    const mapPreview = document.getElementById("map-preview");
-    populateMapSelect(mapSelect);
-    wireMapSelector(mapSelect, mapDesc, mapPreview);
-
     const endModeSelect = document.getElementById("end-mode-select");
     const endModeConfig = document.getElementById("end-mode-config");
     const endModeDesc = document.getElementById("end-mode-desc");
@@ -364,13 +550,13 @@ function onMessage(msg) {
     renderModeConfigFields(endModeSelect.value, endModeConfig, endModeDesc);
     wireModeSelector(endModeSelect, endModeConfig, endModeDesc);
 
-    const endMapSelect = document.getElementById("end-map-select");
-    const endMapDesc = document.getElementById("end-map-desc");
-    const endMapPreview = document.getElementById("end-map-preview");
-    populateMapSelect(endMapSelect);
-    wireMapSelector(endMapSelect, endMapDesc, endMapPreview);
-
     if (!appliedSavedSettingsOnce) {
+      createMapWheel("modal-map-wheel", "modal-map-desc");
+      const savedForMap = loadLastSettings();
+      if (savedForMap && savedForMap.config && savedForMap.config.mapId && MAPS_META[savedForMap.config.mapId]) {
+        const wheelState = mapWheelStates.get("modal-map-wheel");
+        setWheelToMap(wheelState, document.getElementById("modal-map-wheel"), savedForMap.config.mapId, document.getElementById("modal-map-desc"));
+      }
       applySavedSettings("");
       applySavedSettings("end-");
       appliedSavedSettingsOnce = true;
@@ -400,7 +586,7 @@ function renderLobby() {
   list.innerHTML = "";
   lastState.players.forEach(p => {
     const li = document.createElement("li");
-    li.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="pname">${escapeHtml(p.pseudo)}${p.id === lastState.hostId ? " (hôte)" : ""}</span>`;
+    li.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="pname">${escapeHtml(p.pseudo)}${p.id === lastState.hostId ? " · hôte" : ""}</span>`;
     list.appendChild(li);
   });
   const isHost = myId === lastState.hostId;
@@ -416,25 +602,47 @@ document.getElementById("lobby-public-toggle").addEventListener("change", (e) =>
 document.getElementById("btn-start").addEventListener("click", () => {
   const mode = document.getElementById("mode-select").value;
   const config = readModeConfig(document.getElementById("mode-config"));
-  config.mapId = document.getElementById("map-select").value;
+  config.mapId = getWheelSelection();
   config.powerupsEnabled = document.getElementById("powerups-toggle").checked;
   config.powerupIntervalSec = document.getElementById("powerup-interval").value;
   config.teamsEnabled = document.getElementById("teams-toggle").checked;
+  config.pushEnabled = document.getElementById("push-toggle").checked;
   config.shrinkEnabled = document.getElementById("shrink-toggle").checked;
+  config.shrinkMode = document.getElementById("shrink-mode-select").value;
+  config.shrinkIntervalSec = document.getElementById("shrink-interval").value;
   saveLastSettings({ mode, config });
   ws.send(JSON.stringify({ type: "start", mode, config }));
 });
 document.getElementById("btn-restart").addEventListener("click", () => {
   const mode = document.getElementById("end-mode-select").value;
   const config = readModeConfig(document.getElementById("end-mode-config"));
-  config.mapId = document.getElementById("end-map-select").value;
+  config.mapId = getWheelSelection();
   config.powerupsEnabled = document.getElementById("end-powerups-toggle").checked;
   config.powerupIntervalSec = document.getElementById("end-powerup-interval").value;
   config.teamsEnabled = document.getElementById("end-teams-toggle").checked;
+  config.pushEnabled = document.getElementById("end-push-toggle").checked;
   config.shrinkEnabled = document.getElementById("end-shrink-toggle").checked;
+  config.shrinkMode = document.getElementById("end-shrink-mode-select").value;
+  config.shrinkIntervalSec = document.getElementById("end-shrink-interval").value;
   saveLastSettings({ mode, config });
   ws.send(JSON.stringify({ type: "start", mode, config }));
 });
+
+// ---------- Options de la zone qui rétrécit (afficher/masquer) ----------
+function wireShrinkOptions(prefix) {
+  const toggle = document.getElementById(prefix + "shrink-toggle");
+  const optsWrap = document.getElementById(prefix + "shrink-options-wrap");
+  const modeSelect = document.getElementById(prefix + "shrink-mode-select");
+  const customWrap = document.getElementById(prefix + "shrink-custom-wrap");
+  const updateOpts = () => { optsWrap.style.display = toggle.checked ? "block" : "none"; };
+  const updateCustom = () => { customWrap.style.display = modeSelect.value === "custom" ? "block" : "none"; };
+  toggle.addEventListener("change", updateOpts);
+  modeSelect.addEventListener("change", updateCustom);
+  updateOpts();
+  updateCustom();
+}
+wireShrinkOptions("");
+wireShrinkOptions("end-");
 
 // ---------- Rendu principal ----------
 let lastKnownStatus = null;
@@ -507,9 +715,8 @@ function renderEndScreen() {
   const winnerEl = document.getElementById("end-winner");
   if (w && w.ids && w.ids.length) {
     const names = w.ids.map(id => (lastState.players.find(p => p.id === id) || {}).pseudo).filter(Boolean);
-    const reasonTxt = w.reason === "suddenDeath" ? " (mort subite)" : "";
     winnerEl.textContent = names.length
-      ? `🏆 ${names.join(" et ")} remporte la partie !${reasonTxt} (${lastState.modeLabel || ""})`
+      ? `🏆 ${names.join(" et ")} remporte la partie !`
       : "Partie terminée.";
     if (!wasAlreadyEnded && names.length) celebrateVictory();
   } else {
@@ -583,8 +790,8 @@ function renderBoard() {
 
   const me = lastState.players.find(p => p.id === myId);
 
-  // cases marchables (adjacentes à moi)
-  if (me && me.alive && !targetingAttackId) {
+  // cases marchables (adjacentes à moi) — visibles même en train de viser une attaque
+  if (me && me.alive) {
     [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy]) => {
       const x = me.x+dx, y = me.y+dy;
       const c = board.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
@@ -681,7 +888,7 @@ function updatePlayerTokens() {
     if (p.slowedUntil && p.slowedUntil > now) statusIcons += "❄️";
     if (p.resistUntil && p.resistUntil > now) statusIcons += "🛡";
     if (p.speedUntil && p.speedUntil > now) statusIcons += "⚡";
-    el.querySelector(".pseudo-label").textContent = p.pseudo + (statusIcons ? " " + statusIcons : "") + (p.connected === false ? " (déco)" : "");
+    el.querySelector(".pseudo-label").textContent = p.pseudo + (statusIcons ? " " + statusIcons : "") + (p.connected === false ? " · déco" : "");
     el.classList.toggle("me", p.id === myId);
     el.classList.toggle("dead", !p.alive);
     el.classList.toggle("disconnected", p.connected === false);
@@ -739,14 +946,14 @@ function formatModeStatus() {
   const mode = lastState.mode, config = lastState.config || {};
   const shrinkTxt = (lastState.shrink && lastState.shrink.enabled) ? ` · 🌀 zone : rayon ${lastState.shrink.radius}` : "";
   if (lastState.suddenDeath) return `<strong>⚔ MORT SUBITE</strong> — le prochain K.O. gagne !${shrinkTxt}`;
-  if (mode === "koHunt") return `<strong>Chasse au K.O.</strong> — objectif ${config.targetKO} K.O.${lastState.teamsEnabled ? " (cumul d'équipe)" : ""}${shrinkTxt}`;
-  if (mode === "kingHill") return `<strong>Roi de la case</strong> — objectif ${config.targetScore} pts (tiens le centre)${shrinkTxt}`;
+  if (mode === "koHunt") return `<strong>Chasse au K.O.</strong> — objectif ${config.targetKO} K.O.${lastState.teamsEnabled ? " — cumul d'équipe" : ""}${shrinkTxt}`;
+  if (mode === "kingHill") return `<strong>Roi de la case</strong> — objectif ${config.targetScore} pts, tiens le centre${shrinkTxt}`;
   if (mode === "survivor") return `<strong>Dernier survivant</strong> — pas de respawn${shrinkTxt}`;
   if (mode === "chrono") {
     const remaining = Math.max(0, (lastState.chronoEndAt || 0) - Date.now());
     const mm = Math.floor(remaining / 60000);
     const ss = Math.floor((remaining % 60000) / 1000).toString().padStart(2, "0");
-    return `<strong>Chrono</strong> — ${mm}:${ss} restantes (plus de K.O. gagne)${shrinkTxt}`;
+    return `<strong>Chrono</strong> — ${mm}:${ss} restantes, plus de K.O. gagne${shrinkTxt}`;
   }
   return shrinkTxt ? shrinkTxt.replace(/^ · /, "") : "";
 }
@@ -782,7 +989,27 @@ function updateTurnTimerBar() {
   }
 }
 
+let lastMyPosKey = null;
+function updateEnergyBar() {
+  const me = lastState.players.find(p => p.id === myId);
+  const fill = document.getElementById("energy-fill");
+  if (!me || !fill) return;
+  const posKey = me.x + "," + me.y;
+  if (lastMyPosKey !== null && posKey !== lastMyPosKey && me.alive) {
+    const hasSpeed = !!(me.speedUntil && me.speedUntil > Date.now());
+    const cooldownMs = hasSpeed ? 400 : 800;
+    fill.style.background = hasSpeed ? "#facc15" : "#3b82f6";
+    fill.style.transition = "none";
+    fill.style.width = "100%";
+    void fill.offsetWidth; // force le navigateur à appliquer avant de relancer la transition
+    fill.style.transition = `width ${cooldownMs}ms linear`;
+    fill.style.width = "0%";
+  }
+  lastMyPosKey = posKey;
+}
+
 function renderHud() {
+  updateEnergyBar();
   const modeStatusEl = document.getElementById("mode-status");
   if (lastState.mode) {
     modeStatusEl.style.display = "block";
@@ -863,7 +1090,7 @@ function renderPlayersPanel() {
     const discoTxt = p.connected === false ? " · déconnecté" : "";
     li.innerHTML = `<span class="dot" style="background:${p.color}"></span>
       ${teamBadge(p)}
-      <span class="pname">${escapeHtml(p.pseudo)}${p.id===myId?" (toi)":""}${!p.alive?" · K.O.":""}${stat?` · ${stat}`:""}${discoTxt}</span>
+      <span class="pname">${escapeHtml(p.pseudo)}${p.id===myId?" · toi":""}${!p.alive?" · K.O.":""}${stat?` · ${stat}`:""}${discoTxt}</span>
       <span class="hpbar"><span class="hpbar-fill" style="width:${pct}%;background:${barColor}"></span></span>`;
     if (p.connected === false) li.style.opacity = "0.5";
     list.appendChild(li);
@@ -904,6 +1131,8 @@ function sfxImpact() { playNoise(0.15, 0.22); }
 function sfxExplosion() { playNoise(0.35, 0.32); playTone(80, 0.3, "sawtooth", 0.18); }
 function sfxKO() { playTone(220, 0.15, "square", 0.18); setTimeout(() => playTone(140, 0.25, "square", 0.18), 120); }
 function sfxPickup() { playTone(660, 0.08, "sine", 0.14); setTimeout(() => playTone(880, 0.12, "sine", 0.14), 80); }
+function sfxWheelTick() { playTone(1400, 0.025, "square", 0.09); }
+function sfxWheelSettle() { playTone(700, 0.05, "sine", 0.12); setTimeout(() => playTone(1000, 0.09, "sine", 0.12), 60); }
 
 function sfxFanfare() {
   const notes = [523, 659, 784, 1047]; // do-mi-sol-do, petit air de victoire
@@ -1009,28 +1238,36 @@ function castingGlow(playerId, attackId, resolveAt) {
 }
 
 // ---------- Déplacement (glissement de doigt) ----------
+// Le déplacement reste possible même quand on doit viser une attaque : un tap
+// bref sert à choisir la cible, un glissement plus large déplace le joueur.
 function onCellClick(x, y) {
+  if (dragMoved) { dragMoved = false; return; } // c'était un glissement, pas un tap de ciblage
   if (targetingAttackId) onTargetClick(x, y);
-  // en dehors du ciblage, le clic sur une case ne fait plus rien : on se déplace au glissement.
 }
 
 const SWIPE_THRESHOLD_PX = 22;
 let swipeStart = null;
+let dragMoved = false;
 
 function initSwipeControls() {
   const el = document.getElementById("board-wrap");
   if (!el) return;
   el.addEventListener("pointerdown", (e) => {
-    if (targetingAttackId) return; // en visée, le tap sert à choisir la cible
     swipeStart = { x: e.clientX, y: e.clientY };
+    dragMoved = false;
+  });
+  el.addEventListener("pointermove", (e) => {
+    if (!swipeStart) return;
+    const dx = e.clientX - swipeStart.x;
+    const dy = e.clientY - swipeStart.y;
+    if (Math.hypot(dx, dy) >= SWIPE_THRESHOLD_PX) dragMoved = true;
   });
   el.addEventListener("pointerup", (e) => {
-    if (targetingAttackId || !swipeStart) { swipeStart = null; return; }
+    if (!swipeStart) return;
     const dx = e.clientX - swipeStart.x;
     const dy = e.clientY - swipeStart.y;
     swipeStart = null;
-    if (Math.hypot(dx, dy) < SWIPE_THRESHOLD_PX) return;
-    handleSwipeMove(dx, dy);
+    if (Math.hypot(dx, dy) >= SWIPE_THRESHOLD_PX) handleSwipeMove(dx, dy);
   });
   el.addEventListener("pointercancel", () => { swipeStart = null; });
 }
