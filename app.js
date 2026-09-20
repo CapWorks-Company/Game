@@ -1,23 +1,25 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
 // (ex: "https://capnaval.onrender.com")
-const BACKEND_URL = "https://capnaval-backend.onrender.com";
+const BACKEND_URL = "https://capnaval.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
 const ATTACKS_META = {
   meteor:       { name: "Météorite",         desc: "Choisis le centre d'une zone 3x3",                  target: "zone", size: 3 },
-  airstrike:    { name: "Frappe aérienne",   desc: "Choisis le centre d'une zone 5x5, 3 impacts aléatoires", target: "zone", size: 5 },
-  meteorShower: { name: "Pluie de météores", desc: "Choisis le centre d'une zone 6x6, 5 impacts aléatoires", target: "zone", size: 6 },
+  airstrike:    { name: "Frappe aérienne",   desc: "Choisis le centre d'une zone 5x5 : 3 impacts en rafale, instantané", target: "zone", size: 5 },
+  meteorShower: { name: "Pluie de météores", desc: "Choisis le centre d'une zone 6x6 : 5 impacts en rafale, instantané", target: "zone", size: 6 },
+  napalm:       { name: "Chute de napalme",  desc: "Choisis le centre d'une grande zone : 4 explosions 3x3 en rafale, instantané", target: "zone", size: 7 },
+  acidRain:     { name: "Pluie acide",       desc: "Choisis une zone 7x7 : des cases deviennent toxiques au hasard", target: "zone", size: 7 },
   snipe:        { name: "Tir de précision",  desc: "Choisis une case à frapper, instantané",           target: "cell" },
   laser:        { name: "Rayon laser",       desc: "Choisis une case puis une ligne ou colonne, instantané", target: "line" },
-  shockwave:    { name: "Onde de choc",      desc: "Frappe toutes les cases autour de toi",             target: "self" },
+  shockwave:    { name: "Onde de choc",      desc: "Frappe toutes les cases autour de toi, instantané", target: "self" },
   gunline:      { name: "Rafale",            desc: "Choisis une case puis une ligne ou colonne",         target: "line" },
   grenade:      { name: "Grenade",           desc: "Choisis le centre d'une zone 2x2",                   target: "zone", size: 2 },
   arrow:        { name: "Flèche perforante", desc: "Choisis une direction : transperce jusqu'à un mur",  target: "direction" },
   charge:       { name: "Charge",            desc: "Choisis une direction pour foncer, instantané",     target: "direction" },
   tornado:      { name: "Tornade",           desc: "Choisis le centre d'une zone 3x3 à aspirer",         target: "zone", size: 3 },
   net:          { name: "Filet",             desc: "Choisis une case à immobiliser",                     target: "cell" },
-  frost:        { name: "Vague de givre",    desc: "Choisis le centre d'une zone 3x3 à ralentir",        target: "zone", size: 3 },
+  frost:        { name: "Vague de givre",    desc: "Choisis le centre d'une zone 3x3 : laisse une trace glacée", target: "zone", size: 3 },
   mine:         { name: "Piège explosif",    desc: "Choisis une case où poser le piège",                 target: "cell" },
   heal:         { name: "Soin d'urgence",    desc: "Touche-toi ou un allié proche pour soigner",         target: "ally" },
   shield:       { name: "Bouclier",          desc: "Absorbe la prochaine attaque reçue",                 target: "self" },
@@ -28,19 +30,23 @@ const ATTACKS_META = {
 // Thème visuel + icône par attaque (regroupe les animations par famille plutôt
 // que d'en écrire une par attaque : plus lisible, tout aussi distinctif à l'écran)
 const ATTACK_THEME = {
-  meteor: "fire", airstrike: "fire", meteorShower: "fire", grenade: "fire",
+  meteor: "fire", airstrike: "fire", meteorShower: "fire", napalm: "fire", grenade: "fire",
   snipe: "physical", gunline: "physical", laser: "physical", charge: "physical", arrow: "physical",
-  poison: "poison",
+  poison: "poison", acidRain: "poison",
   frost: "ice",
   tornado: "control", net: "control",
   heal: "heal", shield: "shield", teleport: "teleport", mine: "trap",
 };
 const ATTACK_ICON = {
-  meteor: "☄️", airstrike: "✈️", meteorShower: "🌠", grenade: "💣",
+  meteor: "☄️", airstrike: "✈️", meteorShower: "🌠", napalm: "🔥", grenade: "💣",
   snipe: "🎯", gunline: "🔫", laser: "⚡", charge: "🐗", arrow: "🏹",
-  poison: "☠️", frost: "❄️", tornado: "🌪️", net: "🕸️",
+  poison: "☠️", acidRain: "🧪", frost: "❄️", tornado: "🌪️", net: "🕸️",
   heal: "💚", shield: "🛡️", teleport: "🌀", mine: "💥",
 };
+// Attaques dont les impacts s'affichent un par un (son + explosion à chaque case
+// / groupe) plutôt que tous en même temps.
+const STAGGERED_ATTACKS = new Set(["airstrike", "meteorShower", "napalm", "acidRain"]);
+const STAGGER_DELAY_MS = 320;
 
 let ws = null;
 let myId = null;
@@ -134,6 +140,8 @@ function selectWheelMap(state, wheelEl, descEl, mapId, playSound) {
   state.selected = mapId;
   if (descEl) descEl.textContent = (MAPS_META[mapId] && MAPS_META[mapId].desc) || "";
   syncMapFieldDisplays(mapId);
+  const editBtn = document.getElementById("btn-edit-custom-map");
+  if (editBtn) editBtn.style.display = mapId === "custom" ? "block" : "none";
   if (playSound && changed) sfxWheelSettle();
 }
 
@@ -247,6 +255,96 @@ document.getElementById("map-field-trigger").addEventListener("click", openMapMo
 document.getElementById("end-map-field-trigger").addEventListener("click", openMapModal);
 document.getElementById("btn-confirm-map").addEventListener("click", closeMapModal);
 
+// ---------- Éditeur de carte personnalisée (enregistré en local sur l'appareil) ----------
+const CUSTOM_MAP_KEY = "capnaval_custom_map";
+const CUSTOM_MAP_CYCLE = ["empty", "wall", "barrel", "mud"];
+
+function loadCustomMap() {
+  try {
+    const raw = localStorage.getItem(CUSTOM_MAP_KEY);
+    if (!raw) return { walls: [], barrels: [], mud: [] };
+    const parsed = JSON.parse(raw);
+    return {
+      walls: Array.isArray(parsed.walls) ? parsed.walls : [],
+      barrels: Array.isArray(parsed.barrels) ? parsed.barrels : [],
+      mud: Array.isArray(parsed.mud) ? parsed.mud : [],
+    };
+  } catch (e) { return { walls: [], barrels: [], mud: [] }; }
+}
+function saveCustomMapToStorage(data) {
+  try { localStorage.setItem(CUSTOM_MAP_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
+}
+
+let editingMap = { walls: [], barrels: [], mud: [] };
+
+function cellTypeInEditor(x, y) {
+  if (editingMap.walls.some(c => c.x === x && c.y === y)) return "wall";
+  if (editingMap.barrels.some(c => c.x === x && c.y === y)) return "barrel";
+  if (editingMap.mud.some(c => c.x === x && c.y === y)) return "mud";
+  return "empty";
+}
+
+function buildEditorGrid() {
+  const container = document.getElementById("map-editor-grid");
+  container.innerHTML = "";
+  for (let y = 0; y < 12; y++) {
+    for (let x = 0; x < 12; x++) {
+      const cell = document.createElement("div");
+      cell.className = "me-cell";
+      cell.dataset.x = x; cell.dataset.y = y;
+      const t = cellTypeInEditor(x, y);
+      if (t !== "empty") cell.classList.add("me-" + t);
+      cell.addEventListener("click", () => cycleEditorCell(x, y));
+      container.appendChild(cell);
+    }
+  }
+}
+
+function cycleEditorCell(x, y) {
+  const current = cellTypeInEditor(x, y);
+  const next = CUSTOM_MAP_CYCLE[(CUSTOM_MAP_CYCLE.indexOf(current) + 1) % CUSTOM_MAP_CYCLE.length];
+  editingMap.walls = editingMap.walls.filter(c => !(c.x === x && c.y === y));
+  editingMap.barrels = editingMap.barrels.filter(c => !(c.x === x && c.y === y));
+  editingMap.mud = editingMap.mud.filter(c => !(c.x === x && c.y === y));
+  if (next === "wall") editingMap.walls.push({ x, y });
+  else if (next === "barrel") editingMap.barrels.push({ x, y });
+  else if (next === "mud") editingMap.mud.push({ x, y });
+  const cell = document.querySelector(`.me-cell[data-x="${x}"][data-y="${y}"]`);
+  if (cell) cell.className = "me-cell" + (next !== "empty" ? " me-" + next : "");
+  updateEditorCounts();
+}
+
+function updateEditorCounts() {
+  const free = 144 - editingMap.walls.length - editingMap.barrels.length;
+  const countsEl = document.getElementById("map-editor-counts");
+  countsEl.textContent = `Murs : ${editingMap.walls.length} · Tonneaux : ${editingMap.barrels.length} · Boue : ${editingMap.mud.length} · Cases libres : ${free}/144`;
+  countsEl.style.color = free < 12 ? "var(--danger)" : "var(--text-dim)";
+  document.getElementById("map-editor-error").textContent = free < 12 ? "Il faut au moins 12 cases libres pour 6 joueurs." : "";
+}
+
+function openMapEditor() {
+  const saved = loadCustomMap();
+  editingMap = { walls: saved.walls.slice(), barrels: saved.barrels.slice(), mud: saved.mud.slice() };
+  buildEditorGrid();
+  updateEditorCounts();
+  document.getElementById("map-editor-modal").style.display = "flex";
+}
+document.getElementById("btn-edit-custom-map").addEventListener("click", openMapEditor);
+document.getElementById("btn-editor-close").addEventListener("click", () => {
+  document.getElementById("map-editor-modal").style.display = "none";
+});
+document.getElementById("btn-editor-reset").addEventListener("click", () => {
+  editingMap = { walls: [], barrels: [], mud: [] };
+  buildEditorGrid();
+  updateEditorCounts();
+});
+document.getElementById("btn-editor-save").addEventListener("click", () => {
+  const free = 144 - editingMap.walls.length - editingMap.barrels.length;
+  if (free < 12) return;
+  saveCustomMapToStorage(editingMap);
+  document.getElementById("map-editor-modal").style.display = "none";
+});
+
 function renderModeConfigFields(mode, configEl, descEl) {
   descEl.textContent = (MODES_META[mode] && MODES_META[mode].desc) || "";
   const fields = MODE_FIELD_DEFS[mode] || [];
@@ -323,6 +421,21 @@ function applySavedSettings(prefix) {
   }
   if (shrinkToggle) shrinkToggle.dispatchEvent(new Event("change"));
   if (shrinkModeSelect) shrinkModeSelect.dispatchEvent(new Event("change"));
+
+  const advIds = ["adv-starting-hp", "adv-respawn-delay", "adv-respawn-hp-percent", "adv-attack-window",
+    "adv-turn-gap", "adv-move-cooldown", "adv-damage-mult", "adv-barrel-damage", "adv-powerup-max"];
+  const advKeys = { "adv-starting-hp": "startingHP", "adv-respawn-delay": "respawnDelaySec", "adv-respawn-hp-percent": "respawnHpPercent",
+    "adv-attack-window": "attackWindowSec", "adv-turn-gap": "turnGapSec", "adv-move-cooldown": "moveCooldownMs",
+    "adv-damage-mult": "damageMultiplier", "adv-barrel-damage": "barrelDamage", "adv-powerup-max": "powerupMaxOnMap" };
+  advIds.forEach(id => {
+    const el = document.getElementById(prefix + id);
+    const key = advKeys[id];
+    if (el && saved.config && saved.config[key] !== undefined) el.value = saved.config[key];
+  });
+  const noRepeatEl = document.getElementById(prefix + "adv-weapon-no-repeat");
+  if (noRepeatEl && saved.config && typeof saved.config.weaponNoRepeat !== "undefined") noRepeatEl.checked = !!saved.config.weaponNoRepeat;
+  const mineVisibleEl = document.getElementById(prefix + "adv-mine-visible");
+  if (mineVisibleEl && saved.config && typeof saved.config.mineVisibleToAll !== "undefined") mineVisibleEl.checked = !!saved.config.mineVisibleToAll;
 }
 
 // ---------- Ecrans ----------
@@ -570,10 +683,24 @@ function onMessage(msg) {
     pushLog(msg.message);
   } else if (msg.type === "attackResolved") {
     if (msg.attackId === "teleport" || msg.attackId === "mine") noGlideFor.add(msg.by);
-    flashCells(msg.cells, msg.attackId);
+    if (STAGGERED_ATTACKS.has(msg.attackId) && msg.groups && msg.groups.length) {
+      msg.groups.forEach((group, i) => {
+        setTimeout(() => flashCells(group, msg.attackId), i * STAGGER_DELAY_MS);
+      });
+    } else {
+      flashCells(msg.cells, msg.attackId);
+    }
   } else if (msg.type === "telegraph") {
     showTelegraph(msg.cells, msg.resolveAt, msg.attackId);
     castingGlow(msg.by, msg.attackId, msg.resolveAt);
+  } else if (msg.type === "kicked") {
+    intentionalDisconnect = true;
+    myId = null; myCode = null; lastState = null;
+    boardBuilt = false; lastMyPosKey = null;
+    playerTokenEls.clear(); prevPlayerStats.clear();
+    showScreen("screen-home");
+    startPublicRoomsPolling();
+    setHomeError("Tu as été exclu de la partie par l'hôte.");
   } else if (msg.type === "error") {
     setHomeError(msg.message);
   }
@@ -584,25 +711,51 @@ function renderLobby() {
   showScreen("screen-lobby");
   const list = document.getElementById("lobby-players");
   list.innerHTML = "";
+  const isHost = myId === lastState.hostId;
   lastState.players.forEach(p => {
     const li = document.createElement("li");
+    const isMe = p.id === myId;
     li.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="pname">${escapeHtml(p.pseudo)}${p.id === lastState.hostId ? " · hôte" : ""}</span>`;
+    if (isHost && !isMe) {
+      const actions = document.createElement("span");
+      actions.style.display = "flex"; actions.style.gap = "6px"; actions.style.marginLeft = "auto";
+      const transferBtn = document.createElement("button");
+      transferBtn.className = "player-manage-btn"; transferBtn.title = "Rendre hôte"; transferBtn.textContent = "👑";
+      transferBtn.addEventListener("click", () => {
+        if (confirm(`Faire de ${p.pseudo} le nouvel hôte ?`)) ws.send(JSON.stringify({ type: "transferHost", targetId: p.id }));
+      });
+      const kickBtn = document.createElement("button");
+      kickBtn.className = "player-manage-btn"; kickBtn.title = "Exclure"; kickBtn.textContent = "✕";
+      kickBtn.addEventListener("click", () => {
+        if (confirm(`Exclure ${p.pseudo} de la partie ?`)) ws.send(JSON.stringify({ type: "kickPlayer", targetId: p.id }));
+      });
+      actions.appendChild(transferBtn); actions.appendChild(kickBtn);
+      li.appendChild(actions);
+    }
     list.appendChild(li);
   });
-  const isHost = myId === lastState.hostId;
   document.getElementById("btn-start").style.display = isHost ? "block" : "none";
   document.getElementById("mode-select-wrap").style.display = isHost ? "block" : "none";
   document.getElementById("lobby-wait").style.display = isHost ? "none" : "block";
   document.getElementById("host-public-toggle-wrap").style.display = isHost ? "block" : "none";
-  if (isHost) document.getElementById("lobby-public-toggle").checked = !!lastState.isPublic;
+  document.getElementById("host-maxplayers-wrap").style.display = isHost ? "block" : "none";
+  if (isHost) {
+    document.getElementById("lobby-public-toggle").checked = !!lastState.isPublic;
+    const mpInput = document.getElementById("lobby-maxplayers");
+    if (document.activeElement !== mpInput) mpInput.value = lastState.maxPlayers || 6;
+  }
 }
 document.getElementById("lobby-public-toggle").addEventListener("change", (e) => {
   ws.send(JSON.stringify({ type: "setPublic", value: e.target.checked }));
+});
+document.getElementById("lobby-maxplayers").addEventListener("change", (e) => {
+  ws.send(JSON.stringify({ type: "setMaxPlayers", value: e.target.value }));
 });
 document.getElementById("btn-start").addEventListener("click", () => {
   const mode = document.getElementById("mode-select").value;
   const config = readModeConfig(document.getElementById("mode-config"));
   config.mapId = getWheelSelection();
+  config.customMap = loadCustomMap();
   config.powerupsEnabled = document.getElementById("powerups-toggle").checked;
   config.powerupIntervalSec = document.getElementById("powerup-interval").value;
   config.teamsEnabled = document.getElementById("teams-toggle").checked;
@@ -610,6 +763,7 @@ document.getElementById("btn-start").addEventListener("click", () => {
   config.shrinkEnabled = document.getElementById("shrink-toggle").checked;
   config.shrinkMode = document.getElementById("shrink-mode-select").value;
   config.shrinkIntervalSec = document.getElementById("shrink-interval").value;
+  Object.assign(config, readAdvancedConfig(""));
   saveLastSettings({ mode, config });
   ws.send(JSON.stringify({ type: "start", mode, config }));
 });
@@ -617,6 +771,7 @@ document.getElementById("btn-restart").addEventListener("click", () => {
   const mode = document.getElementById("end-mode-select").value;
   const config = readModeConfig(document.getElementById("end-mode-config"));
   config.mapId = getWheelSelection();
+  config.customMap = loadCustomMap();
   config.powerupsEnabled = document.getElementById("end-powerups-toggle").checked;
   config.powerupIntervalSec = document.getElementById("end-powerup-interval").value;
   config.teamsEnabled = document.getElementById("end-teams-toggle").checked;
@@ -624,9 +779,29 @@ document.getElementById("btn-restart").addEventListener("click", () => {
   config.shrinkEnabled = document.getElementById("end-shrink-toggle").checked;
   config.shrinkMode = document.getElementById("end-shrink-mode-select").value;
   config.shrinkIntervalSec = document.getElementById("end-shrink-interval").value;
+  Object.assign(config, readAdvancedConfig("end-"));
   saveLastSettings({ mode, config });
   ws.send(JSON.stringify({ type: "start", mode, config }));
 });
+
+// ---------- Paramètres avancés (lecture générique par préfixe) ----------
+function readAdvancedConfig(prefix) {
+  const val = (id, def) => { const el = document.getElementById(prefix + id); return el && el.value !== "" ? el.value : def; };
+  const checked = (id, def) => { const el = document.getElementById(prefix + id); return el ? el.checked : def; };
+  return {
+    startingHP: val("adv-starting-hp"),
+    respawnDelaySec: val("adv-respawn-delay"),
+    respawnHpPercent: val("adv-respawn-hp-percent"),
+    attackWindowSec: val("adv-attack-window"),
+    turnGapSec: val("adv-turn-gap"),
+    moveCooldownMs: val("adv-move-cooldown"),
+    damageMultiplier: val("adv-damage-mult"),
+    barrelDamage: val("adv-barrel-damage"),
+    powerupMaxOnMap: val("adv-powerup-max"),
+    weaponNoRepeat: checked("adv-weapon-no-repeat", true),
+    mineVisibleToAll: checked("adv-mine-visible", false),
+  };
+}
 
 // ---------- Options de la zone qui rétrécit (afficher/masquer) ----------
 function wireShrinkOptions(prefix) {
@@ -851,12 +1026,13 @@ function renderBoard() {
   (lastState.hazards || []).forEach(h => {
     const c = board.querySelector(`.cell[data-x="${h.x}"][data-y="${h.y}"]`);
     if (!c) return;
-    if (h.type === "mine" && h.ownerId === myId) c.classList.add("hazard-mine");
-    if (h.type === "poison") {
+    if (h.type === "mine" && (lastState.mineVisibleToAll || h.ownerId === myId)) c.classList.add("hazard-mine");
+    if (h.type === "poison" || h.type === "frost") {
+      const cls = h.type === "poison" ? "hazard-poison" : "hazard-frost";
       const half = Math.floor(h.size/2);
       for (let dx=-half; dx<=h.size-1-half; dx++) for (let dy=-half; dy<=h.size-1-half; dy++) {
         const cc = board.querySelector(`.cell[data-x="${h.x+dx}"][data-y="${h.y+dy}"]`);
-        if (cc) cc.classList.add("hazard-poison");
+        if (cc) cc.classList.add(cls);
       }
     }
   });
@@ -1193,14 +1369,33 @@ function flashCells(cells, attackId) {
   if (!layer || !cellGeometry.track) return;
   const theme = ATTACK_THEME[attackId] || "physical";
   (cells || []).forEach(({x,y}) => {
+    const left = x * (cellGeometry.track + cellGeometry.gap);
+    const top = y * (cellGeometry.track + cellGeometry.gap);
     const ring = document.createElement("div");
     ring.className = "impact-ring theme-" + theme;
-    ring.style.left = (x * (cellGeometry.track + cellGeometry.gap)) + "px";
-    ring.style.top = (y * (cellGeometry.track + cellGeometry.gap)) + "px";
+    ring.style.left = left + "px";
+    ring.style.top = top + "px";
     ring.style.width = cellGeometry.track + "px";
     ring.style.height = cellGeometry.track + "px";
     layer.appendChild(ring);
     setTimeout(() => ring.remove(), 500);
+
+    if (theme === "fire") {
+      const cx = left + cellGeometry.track / 2, cy = top + cellGeometry.track / 2;
+      for (let i = 0; i < 3; i++) {
+        const puff = document.createElement("div");
+        puff.className = "smoke-puff";
+        const size = cellGeometry.track * (0.35 + Math.random() * 0.25);
+        puff.style.width = size + "px";
+        puff.style.height = size + "px";
+        puff.style.left = (cx - size / 2 + (Math.random() * 10 - 5)) + "px";
+        puff.style.top = (cy - size / 2) + "px";
+        puff.style.setProperty("--sx", (Math.random() * 16 - 8) + "px");
+        puff.style.animationDelay = (i * 60) + "ms";
+        layer.appendChild(puff);
+        setTimeout(() => puff.remove(), 800 + i * 60);
+      }
+    }
   });
 }
 

@@ -66,6 +66,13 @@
 
     <ul id="lobby-players" class="player-list"></ul>
 
+    <div id="host-maxplayers-wrap" style="display:none">
+      <label class="field">
+        <span>Joueurs max dans la partie</span>
+        <input type="number" id="lobby-maxplayers" min="2" max="6" value="6">
+      </label>
+    </div>
+
     <div id="host-public-toggle-wrap" style="display:none">
       <label class="toggle-field">
         <span class="toggle-text">Partie publique</span>
@@ -129,6 +136,27 @@
           <input type="number" id="shrink-interval" min="3" max="300" value="18">
         </label>
       </div>
+
+      <details class="advanced-params">
+        <summary>⚙️ Paramètres avancés</summary>
+        <label class="field"><span>PV de départ</span><input type="number" id="adv-starting-hp" min="30" max="300" value="100"></label>
+        <label class="field"><span>Délai de respawn en secondes</span><input type="number" id="adv-respawn-delay" min="1" max="20" step="0.5" value="4"></label>
+        <label class="field"><span>% PV au respawn</span><input type="number" id="adv-respawn-hp-percent" min="5" max="100" value="50"></label>
+        <label class="field"><span>Temps pour utiliser une arme en secondes</span><input type="number" id="adv-attack-window" min="4" max="60" value="12"></label>
+        <label class="field"><span>Pause entre les tours en secondes</span><input type="number" id="adv-turn-gap" min="0.5" max="15" step="0.5" value="2.5"></label>
+        <label class="field"><span>Cooldown de déplacement en ms</span><input type="number" id="adv-move-cooldown" min="150" max="3000" step="50" value="800"></label>
+        <label class="field"><span>Multiplicateur de dégâts</span><input type="number" id="adv-damage-mult" min="0.25" max="3" step="0.05" value="1"></label>
+        <label class="field"><span>Dégâts des tonneaux</span><input type="number" id="adv-barrel-damage" min="0" max="100" value="22"></label>
+        <label class="field"><span>Bonus max simultanés sur la carte</span><input type="number" id="adv-powerup-max" min="0" max="8" value="3"></label>
+        <label class="toggle-field">
+          <span class="toggle-text">Interdire la répétition d'arme</span>
+          <span class="toggle-switch"><input type="checkbox" id="adv-weapon-no-repeat" checked><span class="toggle-slider"></span></span>
+        </label>
+        <label class="toggle-field">
+          <span class="toggle-text">Mines visibles de tous</span>
+          <span class="toggle-switch"><input type="checkbox" id="adv-mine-visible"><span class="toggle-slider"></span></span>
+        </label>
+      </details>
     </div>
 
     <button id="btn-start" class="btn btn-primary" style="display:none">Démarrer la partie</button>
@@ -204,6 +232,27 @@
         </label>
       </div>
 
+      <details class="advanced-params">
+        <summary>⚙️ Paramètres avancés</summary>
+        <label class="field"><span>PV de départ</span><input type="number" id="end-adv-starting-hp" min="30" max="300" value="100"></label>
+        <label class="field"><span>Délai de respawn en secondes</span><input type="number" id="end-adv-respawn-delay" min="1" max="20" step="0.5" value="4"></label>
+        <label class="field"><span>% PV au respawn</span><input type="number" id="end-adv-respawn-hp-percent" min="5" max="100" value="50"></label>
+        <label class="field"><span>Temps pour utiliser une arme en secondes</span><input type="number" id="end-adv-attack-window" min="4" max="60" value="12"></label>
+        <label class="field"><span>Pause entre les tours en secondes</span><input type="number" id="end-adv-turn-gap" min="0.5" max="15" step="0.5" value="2.5"></label>
+        <label class="field"><span>Cooldown de déplacement en ms</span><input type="number" id="end-adv-move-cooldown" min="150" max="3000" step="50" value="800"></label>
+        <label class="field"><span>Multiplicateur de dégâts</span><input type="number" id="end-adv-damage-mult" min="0.25" max="3" step="0.05" value="1"></label>
+        <label class="field"><span>Dégâts des tonneaux</span><input type="number" id="end-adv-barrel-damage" min="0" max="100" value="22"></label>
+        <label class="field"><span>Bonus max simultanés sur la carte</span><input type="number" id="end-adv-powerup-max" min="0" max="8" value="3"></label>
+        <label class="toggle-field">
+          <span class="toggle-text">Interdire la répétition d'arme</span>
+          <span class="toggle-switch"><input type="checkbox" id="end-adv-weapon-no-repeat" checked><span class="toggle-slider"></span></span>
+        </label>
+        <label class="toggle-field">
+          <span class="toggle-text">Mines visibles de tous</span>
+          <span class="toggle-switch"><input type="checkbox" id="end-adv-mine-visible"><span class="toggle-slider"></span></span>
+        </label>
+      </details>
+
       <button id="btn-restart" class="btn btn-primary">Rejouer</button>
     </div>
     <p id="end-wait" class="hint" style="display:none">En attente que l'hôte relance une partie…</p>
@@ -268,7 +317,23 @@
       <div class="wheel-pointer wheel-pointer-large">▲</div>
     </div>
     <p id="modal-map-desc" class="hint"></p>
+    <button id="btn-edit-custom-map" class="btn btn-secondary" style="display:none;margin-bottom:8px">🖌️ Éditer ma carte personnalisée</button>
     <button id="btn-confirm-map" class="btn btn-primary">Valider</button>
+  </div>
+</div>
+
+<div id="map-editor-modal" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:380px">
+    <h2 class="lobby-title" style="font-size:18px">Éditeur de carte</h2>
+    <p class="hint" style="font-size:12px">Tape une case pour faire défiler : vide → mur → tonneau → boue → vide.</p>
+    <div id="map-editor-grid" class="map-editor-grid"></div>
+    <p id="map-editor-counts" class="hint" style="font-size:12px"></p>
+    <p id="map-editor-error" class="error" style="font-size:12px"></p>
+    <div style="display:flex; gap:8px; margin-top:6px">
+      <button id="btn-editor-reset" class="btn btn-secondary" style="font-size:13px">Réinitialiser</button>
+      <button id="btn-editor-save" class="btn btn-primary" style="font-size:13px">Enregistrer</button>
+    </div>
+    <button id="btn-editor-close" class="btn btn-secondary" style="margin-top:8px">Fermer sans enregistrer</button>
   </div>
 </div>
 
