@@ -156,10 +156,23 @@
           <span class="toggle-text">Mines visibles de tous</span>
           <span class="toggle-switch"><input type="checkbox" id="adv-mine-visible"><span class="toggle-slider"></span></span>
         </label>
+        <label class="field"><span>Multiplicateur du temps d'esquive</span><input type="number" id="adv-telegraph-mult" min="0.4" max="3" step="0.1" value="1"></label>
+        <label class="field"><span>Durée des bonus en secondes</span><input type="number" id="adv-buff-duration" min="3" max="30" step="1" value="10"></label>
+        <label class="field"><span>Force du ralentissement (boue/givre)</span><input type="number" id="adv-mud-mult" min="1" max="5" step="0.5" value="2"></label>
+        <label class="field"><span>Protection au (re)spawn en secondes</span><input type="number" id="adv-spawn-protection" min="0" max="8" step="0.5" value="0"></label>
+        <label class="field"><span>Taille de la grille</span><input type="number" id="adv-grid-size" min="8" max="16" step="1" value="12"></label>
+        <label class="field"><span>Régénération passive en PV/seconde</span><input type="number" id="adv-passive-regen" min="0" max="10" step="0.5" value="0"></label>
+      </details>
+
+      <details class="advanced-params">
+        <summary>🎲 Paramètres des attaques</summary>
+        <p class="hint" style="font-size:12px;margin-top:0">Ajuste le taux de tirage de chaque arme (100% = normal, 0% = désactivée). La probabilité affichée se recalcule en direct.</p>
+        <div id="attack-weights-list"></div>
       </details>
     </div>
 
     <button id="btn-start" class="btn btn-primary" style="display:none">Démarrer la partie</button>
+    <p id="lobby-status" class="error"></p>
     <p id="lobby-wait" class="hint">En attente que l'hôte démarre la partie…</p>
     <button id="btn-leave-lobby" class="btn btn-secondary" style="margin-top:14px">Quitter</button>
   </div>
@@ -251,6 +264,18 @@
           <span class="toggle-text">Mines visibles de tous</span>
           <span class="toggle-switch"><input type="checkbox" id="end-adv-mine-visible"><span class="toggle-slider"></span></span>
         </label>
+        <label class="field"><span>Multiplicateur du temps d'esquive</span><input type="number" id="end-adv-telegraph-mult" min="0.4" max="3" step="0.1" value="1"></label>
+        <label class="field"><span>Durée des bonus en secondes</span><input type="number" id="end-adv-buff-duration" min="3" max="30" step="1" value="10"></label>
+        <label class="field"><span>Force du ralentissement (boue/givre)</span><input type="number" id="end-adv-mud-mult" min="1" max="5" step="0.5" value="2"></label>
+        <label class="field"><span>Protection au (re)spawn en secondes</span><input type="number" id="end-adv-spawn-protection" min="0" max="8" step="0.5" value="0"></label>
+        <label class="field"><span>Taille de la grille</span><input type="number" id="end-adv-grid-size" min="8" max="16" step="1" value="12"></label>
+        <label class="field"><span>Régénération passive en PV/seconde</span><input type="number" id="end-adv-passive-regen" min="0" max="10" step="0.5" value="0"></label>
+      </details>
+
+      <details class="advanced-params">
+        <summary>🎲 Paramètres des attaques</summary>
+        <p class="hint" style="font-size:12px;margin-top:0">Ajuste le taux de tirage de chaque arme (100% = normal, 0% = désactivée). La probabilité affichée se recalcule en direct.</p>
+        <div id="end-attack-weights-list"></div>
       </details>
 
       <button id="btn-restart" class="btn btn-primary">Rejouer</button>
@@ -307,6 +332,10 @@
 
   <div id="log-feed" class="log-feed"></div>
 </section>
+
+<div id="nuke-overlay" class="nuke-overlay" style="display:none">
+  <div class="nuke-warning-icon">⚠️</div>
+</div>
 
 <div id="map-wheel-modal" class="ios-install-modal" style="display:none">
   <div class="card" style="max-width:380px">

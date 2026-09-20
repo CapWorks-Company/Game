@@ -269,6 +269,8 @@ html, body {
 }
 .cell.hazard-poison { background: #1c2a1a; animation: poison-glow 1.8s ease-in-out infinite; }
 .cell.hazard-frost { background: #16232e; animation: frost-glow 1.8s ease-in-out infinite; }
+.cell.hazard-fire { background: #2e1710; animation: fire-glow 0.9s ease-in-out infinite; }
+.cell.hazard-heal { background: #103324; animation: heal-glow 1.6s ease-in-out infinite; }
 .cell.hill { animation: hill-glow 2.2s ease-in-out infinite; }
 
 .player-layer {
@@ -400,6 +402,29 @@ html, body {
   0%, 100% { background: #16232e; }
   50% { background: #1f3548; }
 }
+@keyframes fire-glow {
+  0%, 100% { background: #2e1710; }
+  50% { background: #4a2410; }
+}
+@keyframes heal-glow {
+  0%, 100% { background: #103324; }
+  50% { background: #174a33; }
+}
+
+/* ---- Tremblement d'écran du Séisme ---- */
+.earthquake-shake { animation: earthquake-shake 0.55s ease-in-out; }
+@keyframes earthquake-shake {
+  0%, 100% { transform: translate(0, 0); }
+  10% { transform: translate(-7px, 4px); }
+  20% { transform: translate(6px, -5px); }
+  30% { transform: translate(-5px, 6px); }
+  40% { transform: translate(7px, 3px); }
+  50% { transform: translate(-6px, -4px); }
+  60% { transform: translate(5px, 5px); }
+  70% { transform: translate(-4px, -6px); }
+  80% { transform: translate(6px, 4px); }
+  90% { transform: translate(-3px, -2px); }
+}
 @keyframes hill-glow {
   0%, 100% { box-shadow: inset 0 0 0 1px var(--accent-dim); }
   50% { box-shadow: inset 0 0 8px 1px var(--accent); }
@@ -505,6 +530,28 @@ html, body {
   100% { transform: scale(1); opacity: 1; }
 }
 
+/* ---- Cinématique de la bombe nucléaire ---- */
+.nuke-overlay {
+  position: fixed; inset: 0; z-index: 400;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(234,179,8,.55);
+  transition: background-color .4s ease;
+}
+.nuke-overlay.nuke-orange { background: rgba(249,115,22,.72); }
+.nuke-overlay.nuke-red { background: rgba(220,38,38,.88); }
+.nuke-overlay.nuke-white { background: #f8f8f8; transition: background-color .9s ease-in; }
+.nuke-warning-icon {
+  font-size: 100px; line-height: 1;
+  animation: nuke-pulse .5s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 22px rgba(0,0,0,.55));
+  transition: opacity .35s ease;
+}
+.nuke-overlay.nuke-white .nuke-warning-icon { opacity: 0; }
+@keyframes nuke-pulse {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.18); }
+}
+
 /* ---- Confettis (écran de fin) ---- */
 .confetti-layer {
   position: fixed; inset: 0; pointer-events: none; z-index: 40; overflow: hidden;
@@ -532,6 +579,8 @@ html, body {
 #public-rooms-list li { cursor: pointer; }
 #public-rooms-list li:active { background: var(--line); }
 #public-rooms-list .room-meta { color: var(--text-dim); font-size: 12px; }
+.spin-icon { display: inline-block; animation: spin-icon-rotate 0.7s linear infinite; }
+@keyframes spin-icon-rotate { to { transform: rotate(360deg); } }
 
 /* ---- Modale d'installation iOS ---- */
 .ios-install-modal {
@@ -566,6 +615,40 @@ html, body {
 .advanced-params summary::-webkit-details-marker { display: none; }
 .advanced-params[open] summary { margin-bottom: 4px; }
 .advanced-params .field { margin-bottom: 10px; }
+
+.attack-row { border-bottom: 1px solid var(--line); }
+.attack-row:last-child { border-bottom: none; }
+.attack-row-main { display: flex; align-items: center; gap: 6px; padding: 7px 0; }
+.attack-row.aw-disabled .attack-row-name { color: var(--text-dim); }
+.attack-row-name { flex: 1; font-size: 12.5px; color: var(--text); }
+.toggle-switch-sm { width: 34px; height: 20px; flex-shrink: 0; }
+.toggle-switch-sm .toggle-slider::before { width: 15px; height: 15px; }
+.toggle-switch-sm input:checked + .toggle-slider::before { transform: translateX(14px); }
+.aw-input {
+  width: 52px; padding: 6px 4px; text-align: center; font-size: 13px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--text);
+}
+.aw-input:disabled { opacity: .4; }
+.aw-prob { width: 48px; text-align: right; font-size: 11px; color: var(--accent); font-weight: 600; flex-shrink: 0; }
+.attack-row-expand {
+  background: none; border: none; color: var(--text-dim); font-size: 13px;
+  width: 20px; height: 20px; flex-shrink: 0; cursor: pointer;
+  transition: transform .25s ease;
+}
+.attack-row.expanded .attack-row-expand { transform: rotate(90deg); color: var(--accent); }
+.attack-row-expand-spacer { width: 20px; flex-shrink: 0; }
+.attack-row-tunables {
+  max-height: 0; overflow: hidden;
+  transition: max-height .28s ease, opacity .28s ease;
+  opacity: 0;
+}
+.attack-row.expanded .attack-row-tunables { max-height: 600px; opacity: 1; padding-bottom: 10px; }
+.aw-tunable-field { margin-bottom: 8px; padding-left: 8px; border-left: 2px solid var(--line); }
+.aw-tunable-field span { font-size: 11.5px; }
+.aw-tunable {
+  width: 100%; padding: 7px 8px; font-size: 13px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--text);
+}
 
 .player-manage-btn {
   border: none; background: var(--line); color: var(--text); border-radius: 6px;

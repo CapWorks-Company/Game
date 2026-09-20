@@ -1,15 +1,16 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
 // (ex: "https://capnaval.onrender.com")
-const BACKEND_URL = "https://capnaval-backend.onrender.com";
+const BACKEND_URL = "https://capnaval.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
 const ATTACKS_META = {
   meteor:       { name: "Météorite",         desc: "Choisis le centre d'une zone 3x3",                  target: "zone", size: 3 },
   airstrike:    { name: "Frappe aérienne",   desc: "Choisis le centre d'une zone 5x5 : 3 impacts en rafale, instantané", target: "zone", size: 5 },
   meteorShower: { name: "Pluie de météores", desc: "Choisis le centre d'une zone 6x6 : 5 impacts en rafale, instantané", target: "zone", size: 6 },
-  napalm:       { name: "Chute de napalme",  desc: "Choisis le centre d'une grande zone : 4 explosions 3x3 en rafale, instantané", target: "zone", size: 7 },
+  napalm:       { name: "Chute de napalme",  desc: "Choisis une case : un brasier tourne dans une zone 5x5 et laisse des flammes, instantané", target: "cell" },
   acidRain:     { name: "Pluie acide",       desc: "Choisis une zone 7x7 : des cases deviennent toxiques au hasard", target: "zone", size: 7 },
+  nuke:         { name: "Bombe nucléaire",   desc: "Rase toute la carte, instantané — quasi mythique", target: "self" },
   snipe:        { name: "Tir de précision",  desc: "Choisis une case à frapper, instantané",           target: "cell" },
   laser:        { name: "Rayon laser",       desc: "Choisis une case puis une ligne ou colonne, instantané", target: "line" },
   shockwave:    { name: "Onde de choc",      desc: "Frappe toutes les cases autour de toi, instantané", target: "self" },
@@ -22,6 +23,8 @@ const ATTACKS_META = {
   frost:        { name: "Vague de givre",    desc: "Choisis le centre d'une zone 3x3 : laisse une trace glacée", target: "zone", size: 3 },
   mine:         { name: "Piège explosif",    desc: "Choisis une case où poser le piège",                 target: "cell" },
   heal:         { name: "Soin d'urgence",    desc: "Touche-toi ou un allié proche pour soigner",         target: "ally" },
+  healZone:     { name: "Zone de soin",      desc: "Choisis une zone 3x3 qui soigne au fil du temps",     target: "zone", size: 3 },
+  earthquake:   { name: "Séisme",            desc: "Secoue toute la carte, instantané",                  target: "self" },
   shield:       { name: "Bouclier",          desc: "Absorbe la prochaine attaque reçue",                 target: "self" },
   poison:       { name: "Zone toxique",      desc: "Choisis le centre d'une zone 3x3 empoisonnée",       target: "zone", size: 3 },
   teleport:     { name: "Téléportation",     desc: "Choisis n'importe quelle case sur la carte",         target: "cell" },
@@ -31,17 +34,18 @@ const ATTACKS_META = {
 // que d'en écrire une par attaque : plus lisible, tout aussi distinctif à l'écran)
 const ATTACK_THEME = {
   meteor: "fire", airstrike: "fire", meteorShower: "fire", napalm: "fire", grenade: "fire",
-  snipe: "physical", gunline: "physical", laser: "physical", charge: "physical", arrow: "physical",
+  snipe: "physical", gunline: "physical", laser: "physical", charge: "physical", arrow: "physical", earthquake: "physical",
   poison: "poison", acidRain: "poison",
   frost: "ice",
   tornado: "control", net: "control",
-  heal: "heal", shield: "shield", teleport: "teleport", mine: "trap",
+  heal: "heal", healZone: "heal", shield: "shield", teleport: "teleport", mine: "trap",
+  nuke: "nuke",
 };
 const ATTACK_ICON = {
   meteor: "☄️", airstrike: "✈️", meteorShower: "🌠", napalm: "🔥", grenade: "💣",
-  snipe: "🎯", gunline: "🔫", laser: "⚡", charge: "🐗", arrow: "🏹",
+  snipe: "🎯", gunline: "🔫", laser: "⚡", charge: "🐗", arrow: "🏹", earthquake: "🌍",
   poison: "☠️", acidRain: "🧪", frost: "❄️", tornado: "🌪️", net: "🕸️",
-  heal: "💚", shield: "🛡️", teleport: "🌀", mine: "💥",
+  heal: "💚", healZone: "💧", shield: "🛡️", teleport: "🌀", mine: "💥", nuke: "☢️",
 };
 // Attaques dont les impacts s'affichent un par un (son + explosion à chaque case
 // / groupe) plutôt que tous en même temps.
@@ -57,6 +61,7 @@ let targetingAttackId = null;
 let selectedCell = null;
 let MODES_META = {};
 let MAPS_META = {};
+let ATTACKS_LIST = [];
 const mapWheelStates = new Map(); // containerId -> état de la roue (rotation, sélection...)
 let lastMyHp = null;
 let chronoTickHandle = null;
@@ -74,6 +79,15 @@ const MODE_FIELD_DEFS = {
   kingHill: [{ name: "targetScore",      label: "Points pour gagner",              def: 20, min: 1, max: 200 }],
   chrono:   [{ name: "minutes",          label: "Durée (minutes)",                 def: 5,  min: 1, max: 60 }],
   survivor: [],
+  ctf:      [{ name: "targetCaptures",   label: "Captures pour gagner",            def: 3,  min: 1, max: 20 }],
+  boss: [
+    { name: "bossHpMultiplier", label: "Multiplicateur de PV du Boss", def: 3, min: 1.5, max: 6, step: 0.5 },
+    { type: "select", name: "bossIsBot", label: "Le Boss est…", def: "false",
+      options: [{ value: "false", label: "Un joueur" }, { value: "true", label: "Un bot" }] },
+    { type: "player-select", name: "bossPlayerId", label: "Quel joueur devient le Boss ?" },
+    { type: "select", name: "bossBotDifficulty", label: "Difficulté du bot Boss", def: "medium",
+      options: [{ value: "easy", label: "Facile" }, { value: "medium", label: "Moyen" }, { value: "hard", label: "Difficile" }] },
+  ],
 };
 
 function populateModeSelect(selectEl) {
@@ -348,16 +362,40 @@ document.getElementById("btn-editor-save").addEventListener("click", () => {
 function renderModeConfigFields(mode, configEl, descEl) {
   descEl.textContent = (MODES_META[mode] && MODES_META[mode].desc) || "";
   const fields = MODE_FIELD_DEFS[mode] || [];
-  configEl.innerHTML = fields.map(f => `
-    <label class="field">
+  configEl.innerHTML = fields.map(f => {
+    if (f.type === "select") {
+      const opts = f.options.map(o => `<option value="${escapeHtml(o.value)}"${o.value === f.def ? " selected" : ""}>${escapeHtml(o.label)}</option>`).join("");
+      return `<label class="field"><span>${f.label}</span><select name="${f.name}">${opts}</select></label>`;
+    }
+    if (f.type === "player-select") {
+      const players = (lastState && lastState.players) || [];
+      const opts = players.map(p => `<option value="${p.id}">${escapeHtml(p.pseudo)}</option>`).join("");
+      return `<label class="field" data-role="player-select"><span>${f.label}</span><select name="${f.name}">${opts}</select></label>`;
+    }
+    return `<label class="field">
       <span>${f.label}</span>
-      <input type="number" name="${f.name}" min="${f.min}" max="${f.max}" value="${f.def}">
-    </label>`).join("");
+      <input type="number" name="${f.name}" min="${f.min}" max="${f.max}" step="${f.step || 1}" value="${f.def}">
+    </label>`;
+  }).join("");
+
+  if (mode === "boss") {
+    const botSelect = configEl.querySelector('select[name="bossIsBot"]');
+    const playerWrap = configEl.querySelector('[data-role="player-select"]');
+    const botDiffWrap = configEl.querySelector('select[name="bossBotDifficulty"]')?.closest(".field");
+    const updateVisibility = () => {
+      const isBot = botSelect.value === "true";
+      if (playerWrap) playerWrap.style.display = isBot ? "none" : "block";
+      if (botDiffWrap) botDiffWrap.style.display = isBot ? "block" : "none";
+    };
+    if (botSelect) { botSelect.addEventListener("change", updateVisibility); updateVisibility(); }
+  }
 }
 
 function readModeConfig(configEl) {
   const config = {};
-  configEl.querySelectorAll("input[name]").forEach(input => { config[input.name] = input.value; });
+  configEl.querySelectorAll("input[name], select[name]").forEach(input => {
+    config[input.name] = input.type === "checkbox" ? input.checked : input.value;
+  });
   return config;
 }
 
@@ -436,6 +474,25 @@ function applySavedSettings(prefix) {
   if (noRepeatEl && saved.config && typeof saved.config.weaponNoRepeat !== "undefined") noRepeatEl.checked = !!saved.config.weaponNoRepeat;
   const mineVisibleEl = document.getElementById(prefix + "adv-mine-visible");
   if (mineVisibleEl && saved.config && typeof saved.config.mineVisibleToAll !== "undefined") mineVisibleEl.checked = !!saved.config.mineVisibleToAll;
+
+  const extraIds = { "adv-telegraph-mult": "telegraphMultiplier", "adv-buff-duration": "buffDurationSec",
+    "adv-mud-mult": "mudSlowMultiplier", "adv-spawn-protection": "spawnProtectionSec",
+    "adv-grid-size": "gridSize", "adv-passive-regen": "passiveRegenPerSec" };
+  Object.entries(extraIds).forEach(([id, key]) => {
+    const el = document.getElementById(prefix + id);
+    if (el && saved.config && saved.config[key] !== undefined) el.value = saved.config[key];
+  });
+
+  if (saved.config && saved.config.attackWeights) {
+    const listEl = document.getElementById(prefix + "attack-weights-list");
+    if (listEl) {
+      listEl.querySelectorAll(".aw-input").forEach(inp => {
+        const w = saved.config.attackWeights[inp.dataset.id];
+        if (w !== undefined) inp.value = w;
+      });
+      updateAttackProbabilities(prefix + "attack-weights-list");
+    }
+  }
 }
 
 // ---------- Ecrans ----------
@@ -454,12 +511,27 @@ function saveLastPseudo(pseudo) {
   try { localStorage.setItem(PSEUDO_KEY, pseudo); } catch (e) { /* ignore */ }
 }
 
+// ---------- Petit utilitaire de log progressif (retours de chargement "en vrai") ----------
+function runLoadingLog(el, messages, stepMs) {
+  if (!el || !messages.length) return () => {};
+  let i = 0;
+  el.textContent = messages[0];
+  const handle = setInterval(() => {
+    i++;
+    if (i >= messages.length) { clearInterval(handle); return; }
+    el.textContent = messages[i];
+  }, stepMs);
+  return () => clearInterval(handle);
+}
+
 // ---------- Accueil ----------
 document.getElementById("btn-create").addEventListener("click", async () => {
   const pseudo = document.getElementById("input-pseudo").value.trim();
   if (!pseudo) return setHomeError("Entre un pseudo.");
   saveLastPseudo(pseudo);
   const isPublic = document.getElementById("create-public-toggle").checked;
+  const homeError = document.getElementById("home-error");
+  const stopLog = runLoadingLog(homeError, ["Connexion avec le serveur...", "Création de la partie...", "En attente de la réponse du serveur..."], 650);
   try {
     const res = await fetch(`${BACKEND_URL}/api/create`, {
       method: "POST",
@@ -467,8 +539,11 @@ document.getElementById("btn-create").addEventListener("click", async () => {
       body: JSON.stringify({ isPublic }),
     });
     const data = await res.json();
+    stopLog();
+    homeError.textContent = "Connexion à la partie...";
     connect(data.code, pseudo);
   } catch (e) {
+    stopLog();
     setHomeError("Impossible de joindre le serveur. Vérifie BACKEND_URL dans app.js.");
   }
 });
@@ -479,6 +554,8 @@ document.getElementById("btn-join").addEventListener("click", () => {
   if (!pseudo) return setHomeError("Entre un pseudo.");
   if (!code) return setHomeError("Entre un code de partie.");
   saveLastPseudo(pseudo);
+  const homeError = document.getElementById("home-error");
+  runLoadingLog(homeError, ["Connexion avec le serveur...", "Connexion à la partie..."], 650);
   connect(code, pseudo);
 });
 
@@ -486,9 +563,11 @@ function setHomeError(msg) { document.getElementById("home-error").textContent =
 
 // ---------- Liste des parties publiques ----------
 let publicRoomsTimer = null;
-async function refreshPublicRooms() {
+async function refreshPublicRooms(manual) {
   const list = document.getElementById("public-rooms-list");
   const empty = document.getElementById("public-rooms-empty");
+  const btn = document.getElementById("btn-refresh-public");
+  if (manual) { btn.disabled = true; btn.innerHTML = '<span class="spin-icon">🔄</span> Actualisation…'; }
   try {
     const res = await fetch(`${BACKEND_URL}/api/public-rooms`);
     const rooms = await res.json();
@@ -508,12 +587,15 @@ async function refreshPublicRooms() {
       list.appendChild(li);
     });
   } catch (e) { /* silencieux : liste juste non rafraîchie */ }
+  finally {
+    if (manual) { btn.disabled = false; btn.innerHTML = "🔄 Actualiser la liste"; }
+  }
 }
-document.getElementById("btn-refresh-public").addEventListener("click", refreshPublicRooms);
+document.getElementById("btn-refresh-public").addEventListener("click", () => refreshPublicRooms(true));
 function startPublicRoomsPolling() {
-  refreshPublicRooms();
+  refreshPublicRooms(false);
   if (publicRoomsTimer) clearInterval(publicRoomsTimer);
-  publicRoomsTimer = setInterval(refreshPublicRooms, 7000);
+  publicRoomsTimer = setInterval(() => refreshPublicRooms(false), 7000);
 }
 function stopPublicRoomsPolling() {
   if (publicRoomsTimer) clearInterval(publicRoomsTimer);
@@ -521,36 +603,78 @@ function stopPublicRoomsPolling() {
 }
 startPublicRoomsPolling();
 
-// ---------- Installation PWA (icône sur l'appareil) ----------
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => { /* tant pis, l'app marche quand même */ });
-  });
-}
-
+// ---------- Installation PWA + mise à jour (icône sur l'appareil) ----------
 const isStandaloneAlready = window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
 let deferredInstallPrompt = null;
+let swRegistration = null;
+let fabMode = null; // "install" | "update" | null
 const btnInstall = document.getElementById("btn-install");
+
+function setFab(mode) {
+  fabMode = mode;
+  if (mode === "install") {
+    btnInstall.textContent = "📲"; btnInstall.title = "Installer l'app"; btnInstall.setAttribute("aria-label", "Installer l'app");
+    btnInstall.style.display = "flex";
+  } else if (mode === "update") {
+    btnInstall.textContent = "🔄"; btnInstall.title = "Mettre à jour"; btnInstall.setAttribute("aria-label", "Mettre à jour l'app");
+    btnInstall.style.display = "flex";
+  } else {
+    btnInstall.style.display = "none";
+  }
+}
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("sw.js").then((reg) => {
+      swRegistration = reg;
+      // Une version est déjà en attente (ex: onglet resté ouvert depuis un précédent déploiement).
+      if (reg.waiting && navigator.serviceWorker.controller) setFab("update");
+      reg.addEventListener("updatefound", () => {
+        const newWorker = reg.installing;
+        if (!newWorker) return;
+        newWorker.addEventListener("statechange", () => {
+          // "installed" + un controller déjà actif = ce n'est pas la toute première
+          // installation, mais bien une nouvelle version qui vient d'être détectée.
+          if (newWorker.state === "installed" && navigator.serviceWorker.controller) {
+            if (isStandaloneAlready) setFab("update");
+          }
+        });
+      });
+    }).catch(() => { /* tant pis, l'app marche quand même */ });
+
+    let reloadingForUpdate = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloadingForUpdate) return;
+      reloadingForUpdate = true;
+      window.location.reload();
+    });
+  });
+}
 
 if (!isStandaloneAlready) {
   if (isIOS) {
     // Safari n'expose pas d'API pour déclencher l'installation : on montre le bouton,
     // qui ouvre des instructions manuelles au clic.
-    btnInstall.style.display = "block";
+    setFab("install");
   } else {
     // Chrome/Edge (Android ou bureau) : on intercepte l'invite native et on la
     // déclenche nous-même au clic, avec notre propre bouton dans le style du jeu.
     window.addEventListener("beforeinstallprompt", (e) => {
       e.preventDefault();
       deferredInstallPrompt = e;
-      btnInstall.style.display = "block";
+      setFab("install");
     });
-    window.addEventListener("appinstalled", () => { btnInstall.style.display = "none"; });
+    window.addEventListener("appinstalled", () => { setFab(null); });
   }
 }
 
 btnInstall.addEventListener("click", async () => {
+  if (fabMode === "update") {
+    if (swRegistration && swRegistration.waiting) swRegistration.waiting.postMessage("SKIP_WAITING");
+    else window.location.reload();
+    return;
+  }
   if (isIOS) {
     document.getElementById("ios-install-modal").style.display = "flex";
     return;
@@ -559,7 +683,7 @@ btnInstall.addEventListener("click", async () => {
   deferredInstallPrompt.prompt();
   await deferredInstallPrompt.userChoice;
   deferredInstallPrompt = null;
-  btnInstall.style.display = "none";
+  setFab(null);
 });
 document.getElementById("btn-close-ios-modal").addEventListener("click", () => {
   document.getElementById("ios-install-modal").style.display = "none";
@@ -621,6 +745,7 @@ function scheduleReconnect() {
 function doLeave() {
   intentionalDisconnect = true;
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+  if (lobbyStartLogStop) { lobbyStartLogStop(); lobbyStartLogStop = null; }
   try { if (ws) ws.send(JSON.stringify({ type: "leave" })); } catch (e) { /* ignore */ }
   setTimeout(() => { try { if (ws) ws.close(); } catch (e) { /* ignore */ } }, 80);
   myId = null; myCode = null; lastState = null;
@@ -647,6 +772,7 @@ function onMessage(msg) {
     myCode = msg.code;
     MODES_META = msg.modes || {};
     MAPS_META = msg.maps || {};
+    ATTACKS_LIST = msg.attacks || [];
     document.getElementById("room-code").textContent = myCode;
 
     const modeSelect = document.getElementById("mode-select");
@@ -670,6 +796,8 @@ function onMessage(msg) {
         const wheelState = mapWheelStates.get("modal-map-wheel");
         setWheelToMap(wheelState, document.getElementById("modal-map-wheel"), savedForMap.config.mapId, document.getElementById("modal-map-desc"));
       }
+      buildAttackWeightsEditor("attack-weights-list");
+      buildAttackWeightsEditor("end-attack-weights-list");
       applySavedSettings("");
       applySavedSettings("end-");
       appliedSavedSettingsOnce = true;
@@ -683,7 +811,12 @@ function onMessage(msg) {
     pushLog(msg.message);
   } else if (msg.type === "attackResolved") {
     if (msg.attackId === "teleport" || msg.attackId === "mine") noGlideFor.add(msg.by);
-    if (STAGGERED_ATTACKS.has(msg.attackId) && msg.groups && msg.groups.length) {
+    if (msg.attackId === "nuke") {
+      playNukeCinematic();
+    } else if (msg.attackId === "earthquake") {
+      playEarthquakeShake();
+      flashCells(msg.cells, msg.attackId);
+    } else if (STAGGERED_ATTACKS.has(msg.attackId) && msg.groups && msg.groups.length) {
       msg.groups.forEach((group, i) => {
         setTimeout(() => flashCells(group, msg.attackId), i * STAGGER_DELAY_MS);
       });
@@ -751,6 +884,7 @@ document.getElementById("lobby-public-toggle").addEventListener("change", (e) =>
 document.getElementById("lobby-maxplayers").addEventListener("change", (e) => {
   ws.send(JSON.stringify({ type: "setMaxPlayers", value: e.target.value }));
 });
+let lobbyStartLogStop = null;
 document.getElementById("btn-start").addEventListener("click", () => {
   const mode = document.getElementById("mode-select").value;
   const config = readModeConfig(document.getElementById("mode-config"));
@@ -765,6 +899,9 @@ document.getElementById("btn-start").addEventListener("click", () => {
   config.shrinkIntervalSec = document.getElementById("shrink-interval").value;
   Object.assign(config, readAdvancedConfig(""));
   saveLastSettings({ mode, config });
+  if (lobbyStartLogStop) lobbyStartLogStop();
+  lobbyStartLogStop = runLoadingLog(document.getElementById("lobby-status"),
+    ["Connexion avec le serveur...", "En attente de création de la partie..."], 700);
   ws.send(JSON.stringify({ type: "start", mode, config }));
 });
 document.getElementById("btn-restart").addEventListener("click", () => {
@@ -800,7 +937,110 @@ function readAdvancedConfig(prefix) {
     powerupMaxOnMap: val("adv-powerup-max"),
     weaponNoRepeat: checked("adv-weapon-no-repeat", true),
     mineVisibleToAll: checked("adv-mine-visible", false),
+    telegraphMultiplier: val("adv-telegraph-mult"),
+    buffDurationSec: val("adv-buff-duration"),
+    mudSlowMultiplier: val("adv-mud-mult"),
+    spawnProtectionSec: val("adv-spawn-protection"),
+    gridSize: val("adv-grid-size"),
+    passiveRegenPerSec: val("adv-passive-regen"),
+    attackWeights: readAttackWeights(prefix + "attack-weights-list"),
+    attackOverrides: readAttackOverrides(prefix + "attack-weights-list"),
   };
+}
+
+// ---------- Probabilité de chaque attaque + réglages fins ----------
+const TUNABLE_LABELS = {
+  damage: "Dégâts", heal: "Soin", size: "Taille de zone", ticks: "Durée (ticks)",
+  slowMs: "Ralentissement (ms)", rootMs: "Immobilisation (ms)", traceTicks: "Durée de la trace (ticks)",
+  distance: "Portée (cases)", hits: "Nombre d'impacts", telegraphMs: "Temps d'esquive (ms)",
+  fireDamage: "Dégâts du feu", fireTicks: "Durée du feu (ticks)",
+  dropDamage: "Dégâts par case toxique", dropTicks: "Durée par case (ticks)", drops: "Nombre de cases toxiques",
+  chainHops: "Nombre de rebonds", chainFalloff: "Affaiblissement par rebond", range: "Portée",
+};
+
+function buildAttackWeightsEditor(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container || !ATTACKS_LIST.length) return;
+  container.innerHTML = ATTACKS_LIST.map(a => {
+    const tunableKeys = Object.keys(a.tunables || {});
+    const hasTunables = tunableKeys.length > 0;
+    const tunablesHtml = tunableKeys.map(key => {
+      const step = key === "chainFalloff" ? 0.05 : 1;
+      return `<label class="field aw-tunable-field">
+        <span>${TUNABLE_LABELS[key] || key}</span>
+        <input type="number" class="aw-tunable" data-id="${a.id}" data-field="${key}" step="${step}" value="${a.tunables[key]}">
+      </label>`;
+    }).join("");
+    return `
+    <div class="attack-row" data-id="${a.id}">
+      <div class="attack-row-main">
+        <span class="attack-row-name">${ATTACK_ICON[a.id] || ""} ${escapeHtml(a.name)}</span>
+        <span class="toggle-switch toggle-switch-sm"><input type="checkbox" class="aw-enabled" data-id="${a.id}" checked><span class="toggle-slider"></span></span>
+        <input type="number" class="aw-input" data-id="${a.id}" min="0" max="500" step="25" value="100">
+        <span class="aw-prob" data-id="${a.id}">—</span>
+        ${hasTunables ? `<button type="button" class="attack-row-expand" data-id="${a.id}" aria-label="Réglages fins">▸</button>` : `<span class="attack-row-expand-spacer"></span>`}
+      </div>
+      ${hasTunables ? `<div class="attack-row-tunables">${tunablesHtml}</div>` : ""}
+    </div>`;
+  }).join("");
+
+  container.querySelectorAll(".aw-input").forEach(inp => inp.addEventListener("input", () => updateAttackProbabilities(containerId)));
+  container.querySelectorAll(".aw-enabled").forEach(chk => {
+    chk.addEventListener("change", () => {
+      const row = chk.closest(".attack-row");
+      row.querySelector(".aw-input").disabled = !chk.checked;
+      row.classList.toggle("aw-disabled", !chk.checked);
+      updateAttackProbabilities(containerId);
+    });
+  });
+  container.querySelectorAll(".attack-row-expand").forEach(btn => {
+    btn.addEventListener("click", () => btn.closest(".attack-row").classList.toggle("expanded"));
+  });
+  updateAttackProbabilities(containerId);
+}
+
+function updateAttackProbabilities(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const rows = ATTACKS_LIST.map(a => {
+    const chk = container.querySelector(`.aw-enabled[data-id="${a.id}"]`);
+    const enabled = chk ? chk.checked : true;
+    const inp = container.querySelector(`.aw-input[data-id="${a.id}"]`);
+    const pct = enabled && inp && inp.value !== "" ? parseFloat(inp.value) : 0;
+    return { id: a.id, weight: (a.weight || 1) * Math.max(0, pct) / 100 };
+  });
+  const total = rows.reduce((s, r) => s + r.weight, 0);
+  rows.forEach(r => {
+    const el = container.querySelector(`.aw-prob[data-id="${r.id}"]`);
+    if (!el) return;
+    const prob = total > 0 ? (r.weight / total) * 100 : 0;
+    el.textContent = "≈" + (prob > 0 && prob < 1 ? prob.toFixed(2) : prob.toFixed(1)) + "%";
+  });
+}
+
+function readAttackWeights(containerId) {
+  const container = document.getElementById(containerId);
+  const weights = {};
+  if (!container) return weights;
+  container.querySelectorAll(".aw-input").forEach(inp => {
+    const id = inp.dataset.id;
+    const chk = container.querySelector(`.aw-enabled[data-id="${id}"]`);
+    weights[id] = (chk && !chk.checked) ? 0 : inp.value;
+  });
+  return weights;
+}
+
+function readAttackOverrides(containerId) {
+  const container = document.getElementById(containerId);
+  const overrides = {};
+  if (!container) return overrides;
+  container.querySelectorAll(".aw-tunable").forEach(inp => {
+    if (inp.value === "") return;
+    const id = inp.dataset.id, field = inp.dataset.field;
+    if (!overrides[id]) overrides[id] = {};
+    overrides[id][field] = inp.value;
+  });
+  return overrides;
 }
 
 // ---------- Options de la zone qui rétrécit (afficher/masquer) ----------
@@ -821,13 +1061,16 @@ wireShrinkOptions("end-");
 
 // ---------- Rendu principal ----------
 let lastKnownStatus = null;
+let nukeCinematicPlaying = false;
 function render() {
   if (!lastState) return;
+  if (nukeCinematicPlaying) return; // on ne montre rien tant que la cinématique n'est pas finie
   if (lastState.status === "lobby") {
     renderLobby();
     lastKnownStatus = "lobby";
     return;
   }
+  if (lobbyStartLogStop) { lobbyStartLogStop(); lobbyStartLogStop = null; document.getElementById("lobby-status").textContent = ""; }
   if (lastState.status === "ended") {
     renderEndScreen();
     lastKnownStatus = "ended";
@@ -842,6 +1085,59 @@ function render() {
   const isHost = myId === lastState.hostId;
   document.getElementById("btn-end-match").style.display = isHost ? "block" : "none";
   document.getElementById("btn-leave-game").style.display = isHost ? "none" : "block";
+}
+
+// ---------- Cinématique de la bombe nucléaire ----------
+function sfxNukeWarning() {
+  // sirène montante : deux tons qui grimpent
+  playTone(220, 0.35, "sawtooth", 0.1);
+  setTimeout(() => playTone(330, 0.35, "sawtooth", 0.1), 350);
+  setTimeout(() => playTone(440, 0.4, "sawtooth", 0.12), 700);
+}
+function sfxNukeBlast() {
+  playNoise(0.9, 0.28);
+  playTone(60, 0.8, "sine", 0.22);
+}
+
+// ---------- Tremblement d'écran + vibration du Séisme ----------
+function sfxEarthquakeRumble() {
+  playNoise(0.5, 0.16);
+  playTone(45, 0.5, "sine", 0.18);
+  setTimeout(() => playTone(38, 0.35, "sine", 0.14), 180);
+}
+
+function playEarthquakeShake() {
+  const el = document.getElementById("screen-game");
+  if (el) {
+    el.classList.remove("earthquake-shake");
+    void el.offsetWidth; // force le navigateur à relancer l'animation même si elle vient de jouer
+    el.classList.add("earthquake-shake");
+    setTimeout(() => el.classList.remove("earthquake-shake"), 600);
+  }
+  sfxEarthquakeRumble();
+  if (navigator.vibrate) navigator.vibrate([60, 40, 60, 40, 100, 40, 80, 40, 60]);
+}
+
+function playNukeCinematic() {
+  nukeCinematicPlaying = true;
+  const overlay = document.getElementById("nuke-overlay");
+  overlay.className = "nuke-overlay";
+  overlay.style.display = "flex";
+  sfxNukeWarning();
+  if (navigator.vibrate) navigator.vibrate([80, 60, 80, 60, 80]);
+
+  setTimeout(() => { overlay.className = "nuke-overlay nuke-orange"; }, 500);
+  setTimeout(() => { overlay.className = "nuke-overlay nuke-red"; }, 1000);
+  setTimeout(() => {
+    overlay.className = "nuke-overlay nuke-white";
+    sfxNukeBlast();
+    if (navigator.vibrate) navigator.vibrate([150, 80, 250]);
+  }, 1600);
+  setTimeout(() => {
+    overlay.style.display = "none";
+    nukeCinematicPlaying = false;
+    render(); // la partie est déjà résolue côté serveur : on affiche enfin le résultat
+  }, 2700);
 }
 
 function startCountdownOverlay() {
@@ -1027,8 +1323,8 @@ function renderBoard() {
     const c = board.querySelector(`.cell[data-x="${h.x}"][data-y="${h.y}"]`);
     if (!c) return;
     if (h.type === "mine" && (lastState.mineVisibleToAll || h.ownerId === myId)) c.classList.add("hazard-mine");
-    if (h.type === "poison" || h.type === "frost") {
-      const cls = h.type === "poison" ? "hazard-poison" : "hazard-frost";
+    if (h.type === "poison" || h.type === "frost" || h.type === "fire" || h.type === "healzone") {
+      const cls = h.type === "poison" ? "hazard-poison" : h.type === "frost" ? "hazard-frost" : h.type === "fire" ? "hazard-fire" : "hazard-heal";
       const half = Math.floor(h.size/2);
       for (let dx=-half; dx<=h.size-1-half; dx++) for (let dy=-half; dy<=h.size-1-half; dy++) {
         const cc = board.querySelector(`.cell[data-x="${h.x+dx}"][data-y="${h.y+dy}"]`);
