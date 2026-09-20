@@ -189,6 +189,14 @@ html, body {
 
 .player-list { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .player-list li { display: flex; align-items: center; gap: 10px; background: var(--panel-2); padding: 8px 12px; border-radius: 8px; }
+.player-list li.boss-row { border: 1px solid #eab308; background: rgba(234,179,8,.1); }
+
+.cell.flag-base { box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); }
+.cell.flag-base-A { background: rgba(239,68,68,.16); }
+.cell.flag-base-B { background: rgba(59,130,246,.16); }
+.flag-marker { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 60%; pointer-events: none; }
+.flag-marker-A { filter: drop-shadow(0 0 3px rgba(239,68,68,.8)); }
+.flag-marker-B { filter: drop-shadow(0 0 3px rgba(59,130,246,.8)); }
 .player-list .dot { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
 .player-list .pname { flex: 1; font-weight: 500; }
 .player-list .hpbar { width: 70px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
@@ -549,6 +557,7 @@ html, body {
 .nuke-overlay.nuke-fade { opacity: 0; }
 .nuke-overlay.nuke-orange { background: rgba(249,115,22,.78); }
 .nuke-overlay.nuke-red { background: rgba(220,38,38,.92); }
+.nuke-overlay.nuke-preflash { background: #fefefe; transition: background-color .08s ease-out; }
 .nuke-overlay.nuke-white { background: #f8f8f8; transition: background-color .15s ease, opacity 1.4s ease; }
 .nuke-warning-icon {
   font-size: 72px; line-height: 1;
@@ -556,7 +565,7 @@ html, body {
   filter: drop-shadow(0 0 22px rgba(0,0,0,.55));
   transition: opacity .35s ease;
 }
-.nuke-overlay.nuke-white .nuke-warning-icon { opacity: 0; }
+.nuke-overlay.nuke-white .nuke-warning-icon, .nuke-overlay.nuke-preflash .nuke-warning-icon { opacity: 0; }
 @keyframes nuke-pulse {
   0% { transform: scale(1); }
   100% { transform: scale(1.18); }
@@ -671,12 +680,33 @@ html, body {
 }
 .secret-attack-choice:active { background: var(--accent-dim); border-color: var(--accent); }
 
+.avatar-color-swatches { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+.avatar-swatch {
+  width: 34px; height: 34px; border-radius: 50%; border: 3px solid transparent;
+  cursor: pointer; padding: 0;
+}
+.avatar-swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+.avatar-emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.avatar-emoji-btn {
+  font-size: 22px; padding: 8px 0; text-align: center;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  cursor: pointer;
+}
+.avatar-emoji-btn.selected { border-color: var(--accent); background: var(--accent-dim); }
+
 .player-manage-btn {
   border: none; background: var(--line); color: var(--text); border-radius: 6px;
   width: 26px; height: 26px; font-size: 13px; cursor: pointer; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .player-manage-btn:active { background: var(--accent-dim); }
+
+.custom-mode-row {
+  display: flex; align-items: center; gap: 8px; padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.custom-mode-row:last-child { border-bottom: none; }
+.custom-mode-name { flex: 1; font-size: 13.5px; color: var(--text); }
 
 .fab-install {
   position: fixed; left: 16px; bottom: 16px; z-index: 30;
@@ -688,3 +718,28 @@ html, body {
   cursor: pointer;
 }
 .fab-install:active { background: var(--line); }
+
+/* ---- Réactions emoji ---- */
+.reaction-bar { display: flex; justify-content: center; gap: 8px; margin: 4px 0; flex-wrap: wrap; }
+.reaction-btn {
+  font-size: 20px; padding: 6px 10px; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
+}
+.reaction-btn:active { background: var(--accent-dim); }
+.reaction-float {
+  position: absolute; font-size: 26px; line-height: 1; z-index: 5;
+  pointer-events: none; transform: translate(-50%, -50%);
+  animation: reaction-float-up 1.4s ease-out forwards;
+}
+@keyframes reaction-float-up {
+  0% { transform: translate(-50%, -50%) scale(.5); opacity: 0; }
+  15% { transform: translate(-50%, -120%) scale(1.2); opacity: 1; }
+  100% { transform: translate(-50%, -260%) scale(1); opacity: 0; }
+}
+
+/* ---- Confort : réduire les animations ---- */
+body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+}

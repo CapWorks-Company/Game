@@ -31,11 +31,19 @@
       <input id="input-pseudo" maxlength="16" placeholder="Ex: Faucon" />
     </label>
 
+    <label class="field">
+      <span>Ton avatar</span>
+      <div id="avatar-color-swatches" class="avatar-color-swatches"></div>
+      <div id="avatar-emoji-grid" class="avatar-emoji-grid"></div>
+    </label>
+
     <button id="btn-create" class="btn btn-primary">Créer une partie</button>
     <label class="toggle-field" style="margin-top:6px">
       <span class="toggle-text">Partie publique</span>
       <span class="toggle-switch"><input type="checkbox" id="create-public-toggle"><span class="toggle-slider"></span></span>
     </label>
+
+    <button id="btn-general-settings" class="btn btn-secondary" style="margin-top:6px">⚙️ Paramètres généraux</button>
 
     <button id="btn-install" class="fab-install" style="display:none" aria-label="Installer l'app" title="Installer l'app">📲</button>
 
@@ -70,6 +78,18 @@
       <label class="field">
         <span>Joueurs max dans la partie</span>
         <input type="number" id="lobby-maxplayers" min="2" max="6" value="6">
+      </label>
+      <label class="toggle-field">
+        <span class="toggle-text">Combler avec des bots</span>
+        <span class="toggle-switch"><input type="checkbox" id="lobby-fillbots-toggle"><span class="toggle-slider"></span></span>
+      </label>
+      <label class="field" id="lobby-fillbots-difficulty-wrap" style="display:none">
+        <span>Difficulté des bots</span>
+        <select id="lobby-fillbots-difficulty">
+          <option value="easy">Facile</option>
+          <option value="medium" selected>Moyen</option>
+          <option value="hard">Difficile</option>
+        </select>
       </label>
     </div>
 
@@ -168,6 +188,16 @@
         <summary>🎲 Paramètres des attaques</summary>
         <p class="hint" style="font-size:12px;margin-top:0">Ajuste le taux de tirage de chaque arme (100% = normal, 0% = désactivée). La probabilité affichée se recalcule en direct.</p>
         <div id="attack-weights-list"></div>
+      </details>
+
+      <details class="advanced-params">
+        <summary>💾 Mes modes personnalisés</summary>
+        <p class="hint" style="font-size:12px;margin-top:0">Enregistre la configuration actuelle (mode, carte, tous les réglages) pour la recharger en un clic la prochaine fois.</p>
+        <div id="custom-modes-list"></div>
+        <div style="display:flex; gap:8px; margin-top:10px">
+          <input type="text" id="custom-mode-name" maxlength="24" placeholder="Nom du préréglage" style="flex:1; padding:10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--text); font-size:14px">
+          <button id="btn-save-custom-mode" class="btn btn-secondary" style="width:auto; padding:10px 16px; flex-shrink:0">💾 Enregistrer</button>
+        </div>
       </details>
     </div>
 
@@ -321,6 +351,8 @@
     <ul id="game-players" class="player-list compact"></ul>
   </footer>
 
+  <div id="reaction-bar" class="reaction-bar"></div>
+
   <div class="match-controls">
     <button id="btn-end-match" class="btn btn-secondary" style="display:none">Terminer la partie</button>
     <button id="btn-leave-game" class="btn btn-secondary" style="display:none">Quitter</button>
@@ -348,6 +380,31 @@
     <p id="modal-map-desc" class="hint"></p>
     <button id="btn-edit-custom-map" class="btn btn-secondary" style="display:none;margin-bottom:8px">🖌️ Éditer ma carte personnalisée</button>
     <button id="btn-confirm-map" class="btn btn-primary">Valider</button>
+  </div>
+</div>
+
+<div id="general-settings-modal" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:380px">
+    <h2 class="lobby-title" style="font-size:18px">⚙️ Paramètres généraux</h2>
+    <p class="hint" style="font-size:12px">Ces réglages sont personnels, enregistrés sur cet appareil.</p>
+
+    <label class="toggle-field">
+      <span class="toggle-text">Réduire les animations</span>
+      <span class="toggle-switch"><input type="checkbox" id="gs-reduce-motion"><span class="toggle-slider"></span></span>
+    </label>
+    <label class="toggle-field">
+      <span class="toggle-text">Muet</span>
+      <span class="toggle-switch"><input type="checkbox" id="gs-mute"><span class="toggle-slider"></span></span>
+    </label>
+    <label class="toggle-field">
+      <span class="toggle-text">Palette daltonien</span>
+      <span class="toggle-switch"><input type="checkbox" id="gs-colorblind"><span class="toggle-slider"></span></span>
+    </label>
+
+    <p class="hint" style="font-size:12px;margin-top:14px">Réactions emoji disponibles en partie (choisis-en jusqu'à 6) :</p>
+    <div id="gs-emoji-grid" class="avatar-emoji-grid"></div>
+
+    <button id="btn-close-general-settings" class="btn btn-primary" style="margin-top:12px">Fermer</button>
   </div>
 </div>
 

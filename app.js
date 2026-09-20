@@ -1,7 +1,7 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
 // (ex: "https://capnaval.onrender.com")
-const BACKEND_URL = "https://capnaval-backend.onrender.com";
+const BACKEND_URL = "https://capnaval.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
 const ATTACKS_META = {
@@ -414,8 +414,8 @@ function loadLastSettings() {
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY)) || null; } catch (e) { return null; }
 }
 
-function applySavedSettings(prefix) {
-  const saved = loadLastSettings();
+function applySavedSettings(prefix, explicitSaved) {
+  const saved = explicitSaved || loadLastSettings();
   if (!saved) return;
   const modeSelect = document.getElementById(prefix + "mode-select");
   const modeConfig = document.getElementById(prefix + "mode-config");
@@ -509,6 +509,116 @@ const PSEUDO_KEY = "capnaval_pseudo";
 })();
 function saveLastPseudo(pseudo) {
   try { localStorage.setItem(PSEUDO_KEY, pseudo); } catch (e) { /* ignore */ }
+}
+
+// ---------- Avatar (couleur + emoji), mémorisé sur l'appareil ----------
+const AVATAR_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#f97316"];
+const AVATAR_EMOJIS = ["🦊", "🐺", "🦁", "🐯", "🦅", "🐉", "🦈", "🐸", "🐵", "🦉", "🐙", "🦂"];
+const AVATAR_KEY = "capnaval_avatar";
+
+function loadAvatar() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(AVATAR_KEY) || "{}");
+    return { color: AVATAR_COLORS.includes(raw.color) ? raw.color : AVATAR_COLORS[0], emoji: raw.emoji || AVATAR_EMOJIS[0] };
+  } catch (e) { return { color: AVATAR_COLORS[0], emoji: AVATAR_EMOJIS[0] }; }
+}
+function saveAvatar(avatar) { try { localStorage.setItem(AVATAR_KEY, JSON.stringify(avatar)); } catch (e) { /* ignore */ } }
+
+(function buildAvatarPicker() {
+  const avatar = loadAvatar();
+  const colorWrap = document.getElementById("avatar-color-swatches");
+  colorWrap.innerHTML = AVATAR_COLORS.map(c => `<button type="button" class="avatar-swatch${c === avatar.color ? " selected" : ""}" data-color="${c}" style="background:${c}" aria-label="Couleur"></button>`).join("");
+  colorWrap.querySelectorAll(".avatar-swatch").forEach(btn => {
+    btn.addEventListener("click", () => {
+      colorWrap.querySelectorAll(".avatar-swatch").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      saveAvatar({ ...loadAvatar(), color: btn.dataset.color });
+    });
+  });
+  const emojiWrap = document.getElementById("avatar-emoji-grid");
+  emojiWrap.innerHTML = AVATAR_EMOJIS.map(e => `<button type="button" class="avatar-emoji-btn${e === avatar.emoji ? " selected" : ""}" data-emoji="${e}">${e}</button>`).join("");
+  emojiWrap.querySelectorAll(".avatar-emoji-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      emojiWrap.querySelectorAll(".avatar-emoji-btn").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      saveAvatar({ ...loadAvatar(), emoji: btn.dataset.emoji });
+    });
+  });
+})();
+
+// ---------- Paramètres généraux (confort, personnels, enregistrés sur l'appareil) ----------
+const GENERAL_SETTINGS_KEY = "capnaval_general_settings";
+const DEFAULT_REACTION_EMOJIS = ["👍", "😂", "🔥"];
+const REACTION_EMOJI_CHOICES = ["👍", "😂", "🔥", "😮", "😭", "💀", "🎉", "😡", "❤️", "👏", "🤔", "😎"];
+
+function loadGeneralSettings() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(GENERAL_SETTINGS_KEY) || "{}");
+    return {
+      reduceMotion: !!raw.reduceMotion,
+      muted: !!raw.muted,
+      colorblind: !!raw.colorblind,
+      reactionEmojis: Array.isArray(raw.reactionEmojis) && raw.reactionEmojis.length ? raw.reactionEmojis.slice(0, 6) : DEFAULT_REACTION_EMOJIS,
+    };
+  } catch (e) {
+    return { reduceMotion: false, muted: false, colorblind: false, reactionEmojis: DEFAULT_REACTION_EMOJIS };
+  }
+}
+function saveGeneralSettings(s) { try { localStorage.setItem(GENERAL_SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ } }
+
+let generalSettings = loadGeneralSettings();
+function applyGeneralSettingsToDOM() {
+  document.body.classList.toggle("reduce-motion", generalSettings.reduceMotion);
+}
+applyGeneralSettingsToDOM();
+
+function buildReactionEmojiGrid(containerId) {
+  const grid = document.getElementById(containerId);
+  grid.innerHTML = REACTION_EMOJI_CHOICES.map(e => `<button type="button" class="avatar-emoji-btn${generalSettings.reactionEmojis.includes(e) ? " selected" : ""}" data-emoji="${e}">${e}</button>`).join("");
+  grid.querySelectorAll(".avatar-emoji-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const e = btn.dataset.emoji;
+      const idx = generalSettings.reactionEmojis.indexOf(e);
+      if (idx >= 0) {
+        generalSettings.reactionEmojis.splice(idx, 1);
+      } else if (generalSettings.reactionEmojis.length < 6) {
+        generalSettings.reactionEmojis.push(e);
+      }
+      saveGeneralSettings(generalSettings);
+      btn.classList.toggle("selected");
+    });
+  });
+}
+
+function openGeneralSettings() {
+  generalSettings = loadGeneralSettings();
+  document.getElementById("gs-reduce-motion").checked = generalSettings.reduceMotion;
+  document.getElementById("gs-mute").checked = generalSettings.muted;
+  document.getElementById("gs-colorblind").checked = generalSettings.colorblind;
+  buildReactionEmojiGrid("gs-emoji-grid");
+  document.getElementById("general-settings-modal").style.display = "flex";
+}
+document.getElementById("btn-general-settings").addEventListener("click", openGeneralSettings);
+document.getElementById("btn-close-general-settings").addEventListener("click", () => {
+  document.getElementById("general-settings-modal").style.display = "none";
+});
+["gs-reduce-motion", "gs-mute", "gs-colorblind"].forEach(id => {
+  document.getElementById(id).addEventListener("change", (e) => {
+    const key = id === "gs-reduce-motion" ? "reduceMotion" : id === "gs-mute" ? "muted" : "colorblind";
+    generalSettings[key] = e.target.checked;
+    saveGeneralSettings(generalSettings);
+    applyGeneralSettingsToDOM();
+  });
+});
+
+// Palette daltonien (Okabe-Ito) : remplace les couleurs serveur uniquement à l'affichage,
+// personnel à chaque appareil — les autres joueurs voient toujours les couleurs normales.
+const COLORBLIND_PALETTE = {
+  "#ef4444": "#d55e00", "#3b82f6": "#0072b2", "#22c55e": "#009e73",
+  "#eab308": "#f0e442", "#a855f7": "#cc79a7", "#f97316": "#e69f00",
+};
+function displayColor(serverColor) {
+  return generalSettings.colorblind ? (COLORBLIND_PALETTE[serverColor] || serverColor) : serverColor;
 }
 
 // ---------- Petit utilitaire de log progressif (retours de chargement "en vrai") ----------
@@ -717,7 +827,8 @@ function hideConnectionBanner() {
 function connect(code, pseudo) {
   stopPublicRoomsPolling();
   myCode = code; myPseudo = pseudo;
-  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?code=${code}&pseudo=${encodeURIComponent(pseudo)}&clientId=${myClientId}`;
+  const avatar = loadAvatar();
+  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?code=${code}&pseudo=${encodeURIComponent(pseudo)}&clientId=${myClientId}&color=${encodeURIComponent(avatar.color)}&avatarEmoji=${encodeURIComponent(avatar.emoji)}`;
   ws = new WebSocket(wsUrl);
 
   ws.addEventListener("open", () => { setHomeError(""); hideConnectionBanner(); reconnectAttempts = 0; });
@@ -798,6 +909,7 @@ function onMessage(msg) {
       }
       buildAttackWeightsEditor("attack-weights-list");
       buildAttackWeightsEditor("end-attack-weights-list");
+      renderCustomModesList();
       applySavedSettings("");
       applySavedSettings("end-");
       appliedSavedSettingsOnce = true;
@@ -828,6 +940,8 @@ function onMessage(msg) {
   } else if (msg.type === "telegraph") {
     showTelegraph(msg.cells, msg.resolveAt, msg.attackId);
     castingGlow(msg.by, msg.attackId, msg.resolveAt);
+  } else if (msg.type === "reaction") {
+    if (msg.by !== myId) showFloatingReaction(msg.by, msg.emoji);
   } else if (msg.type === "kicked") {
     intentionalDisconnect = true;
     myId = null; myCode = null; lastState = null;
@@ -850,8 +964,10 @@ function renderLobby() {
   lastState.players.forEach(p => {
     const li = document.createElement("li");
     const isMe = p.id === myId;
-    li.innerHTML = `<span class="dot" style="background:${p.color}"></span><span class="pname">${escapeHtml(p.pseudo)}${p.id === lastState.hostId ? " · hôte" : ""}</span>`;
-    if (isHost && !isMe) {
+    const botTag = p.isBot ? " 🤖" : "";
+    const avatarTag = p.avatarEmoji ? p.avatarEmoji + " " : "";
+    li.innerHTML = `<span class="dot" style="background:${displayColor(p.color)}"></span><span class="pname">${avatarTag}${escapeHtml(p.pseudo)}${botTag}${p.id === lastState.hostId ? " · hôte" : ""}</span>`;
+    if (isHost && !isMe && !p.isBot) {
       const actions = document.createElement("span");
       actions.style.display = "flex"; actions.style.gap = "6px"; actions.style.marginLeft = "auto";
       const transferBtn = document.createElement("button");
@@ -878,6 +994,11 @@ function renderLobby() {
     document.getElementById("lobby-public-toggle").checked = !!lastState.isPublic;
     const mpInput = document.getElementById("lobby-maxplayers");
     if (document.activeElement !== mpInput) mpInput.value = lastState.maxPlayers || 6;
+    const fillToggle = document.getElementById("lobby-fillbots-toggle");
+    const fillDiffSelect = document.getElementById("lobby-fillbots-difficulty");
+    if (document.activeElement !== fillToggle) fillToggle.checked = !!lastState.fillWithBots;
+    if (document.activeElement !== fillDiffSelect) fillDiffSelect.value = lastState.fillBotDifficulty || "medium";
+    document.getElementById("lobby-fillbots-difficulty-wrap").style.display = lastState.fillWithBots ? "block" : "none";
   }
 }
 document.getElementById("lobby-public-toggle").addEventListener("change", (e) => {
@@ -886,20 +1007,31 @@ document.getElementById("lobby-public-toggle").addEventListener("change", (e) =>
 document.getElementById("lobby-maxplayers").addEventListener("change", (e) => {
   ws.send(JSON.stringify({ type: "setMaxPlayers", value: e.target.value }));
 });
+document.getElementById("lobby-fillbots-toggle").addEventListener("change", (e) => {
+  document.getElementById("lobby-fillbots-difficulty-wrap").style.display = e.target.checked ? "block" : "none";
+  ws.send(JSON.stringify({ type: "setFillBots", enabled: e.target.checked, difficulty: document.getElementById("lobby-fillbots-difficulty").value }));
+});
+document.getElementById("lobby-fillbots-difficulty").addEventListener("change", (e) => {
+  ws.send(JSON.stringify({ type: "setFillBots", enabled: document.getElementById("lobby-fillbots-toggle").checked, difficulty: e.target.value }));
+});
 let lobbyStartLogStop = null;
-document.getElementById("btn-start").addEventListener("click", () => {
-  const mode = document.getElementById("mode-select").value;
-  const config = readModeConfig(document.getElementById("mode-config"));
+function gatherFullConfig(prefix) {
+  const mode = document.getElementById(prefix + "mode-select").value;
+  const config = readModeConfig(document.getElementById(prefix + "mode-config"));
   config.mapId = getWheelSelection();
   config.customMap = loadCustomMap();
-  config.powerupsEnabled = document.getElementById("powerups-toggle").checked;
-  config.powerupIntervalSec = document.getElementById("powerup-interval").value;
-  config.teamsEnabled = document.getElementById("teams-toggle").checked;
-  config.pushEnabled = document.getElementById("push-toggle").checked;
-  config.shrinkEnabled = document.getElementById("shrink-toggle").checked;
-  config.shrinkMode = document.getElementById("shrink-mode-select").value;
-  config.shrinkIntervalSec = document.getElementById("shrink-interval").value;
-  Object.assign(config, readAdvancedConfig(""));
+  config.powerupsEnabled = document.getElementById(prefix + "powerups-toggle").checked;
+  config.powerupIntervalSec = document.getElementById(prefix + "powerup-interval").value;
+  config.teamsEnabled = document.getElementById(prefix + "teams-toggle").checked;
+  config.pushEnabled = document.getElementById(prefix + "push-toggle").checked;
+  config.shrinkEnabled = document.getElementById(prefix + "shrink-toggle").checked;
+  config.shrinkMode = document.getElementById(prefix + "shrink-mode-select").value;
+  config.shrinkIntervalSec = document.getElementById(prefix + "shrink-interval").value;
+  Object.assign(config, readAdvancedConfig(prefix));
+  return { mode, config };
+}
+document.getElementById("btn-start").addEventListener("click", () => {
+  const { mode, config } = gatherFullConfig("");
   saveLastSettings({ mode, config });
   if (lobbyStartLogStop) lobbyStartLogStop();
   lobbyStartLogStop = runLoadingLog(document.getElementById("lobby-status"),
@@ -907,20 +1039,55 @@ document.getElementById("btn-start").addEventListener("click", () => {
   ws.send(JSON.stringify({ type: "start", mode, config }));
 });
 document.getElementById("btn-restart").addEventListener("click", () => {
-  const mode = document.getElementById("end-mode-select").value;
-  const config = readModeConfig(document.getElementById("end-mode-config"));
-  config.mapId = getWheelSelection();
-  config.customMap = loadCustomMap();
-  config.powerupsEnabled = document.getElementById("end-powerups-toggle").checked;
-  config.powerupIntervalSec = document.getElementById("end-powerup-interval").value;
-  config.teamsEnabled = document.getElementById("end-teams-toggle").checked;
-  config.pushEnabled = document.getElementById("end-push-toggle").checked;
-  config.shrinkEnabled = document.getElementById("end-shrink-toggle").checked;
-  config.shrinkMode = document.getElementById("end-shrink-mode-select").value;
-  config.shrinkIntervalSec = document.getElementById("end-shrink-interval").value;
-  Object.assign(config, readAdvancedConfig("end-"));
+  const { mode, config } = gatherFullConfig("end-");
   saveLastSettings({ mode, config });
   ws.send(JSON.stringify({ type: "start", mode, config }));
+});
+
+// ---------- Modes de jeu personnalisés (préréglages complets, enregistrés sur l'appareil) ----------
+const CUSTOM_MODES_KEY = "capnaval_custom_modes";
+function loadCustomModes() {
+  try { const l = JSON.parse(localStorage.getItem(CUSTOM_MODES_KEY) || "[]"); return Array.isArray(l) ? l : []; }
+  catch (e) { return []; }
+}
+function saveCustomModesList(list) { try { localStorage.setItem(CUSTOM_MODES_KEY, JSON.stringify(list)); } catch (e) { /* ignore */ } }
+
+function renderCustomModesList() {
+  const container = document.getElementById("custom-modes-list");
+  if (!container) return;
+  const presets = loadCustomModes();
+  if (!presets.length) { container.innerHTML = `<p class="hint" style="font-size:12px">Aucun préréglage enregistré pour l'instant.</p>`; return; }
+  container.innerHTML = presets.map((p, i) => `
+    <div class="custom-mode-row">
+      <span class="custom-mode-name">${escapeHtml(p.name)}</span>
+      <button type="button" class="player-manage-btn custom-mode-load" data-i="${i}" title="Charger">📂</button>
+      <button type="button" class="player-manage-btn custom-mode-delete" data-i="${i}" title="Supprimer">✕</button>
+    </div>`).join("");
+  container.querySelectorAll(".custom-mode-load").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const preset = loadCustomModes()[parseInt(btn.dataset.i)];
+      if (preset) applySavedSettings("", { mode: preset.mode, config: preset.config });
+    });
+  });
+  container.querySelectorAll(".custom-mode-delete").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const list = loadCustomModes();
+      list.splice(parseInt(btn.dataset.i), 1);
+      saveCustomModesList(list);
+      renderCustomModesList();
+    });
+  });
+}
+document.getElementById("btn-save-custom-mode").addEventListener("click", () => {
+  const nameInput = document.getElementById("custom-mode-name");
+  const name = nameInput.value.trim();
+  if (!name) return;
+  const { mode, config } = gatherFullConfig("");
+  const list = loadCustomModes();
+  list.push({ name, mode, config });
+  saveCustomModesList(list);
+  nameInput.value = "";
+  renderCustomModesList();
 });
 
 // ---------- Paramètres avancés (lecture générique par préfixe) ----------
@@ -1092,7 +1259,7 @@ function render() {
     lastKnownStatus = "ended";
     return;
   }
-  if (lastKnownStatus !== "playing") startCountdownOverlay();
+  if (lastKnownStatus !== "playing") { startCountdownOverlay(); buildReactionBar(); }
   lastKnownStatus = "playing";
   showScreen("screen-game");
   renderBoard();
@@ -1145,7 +1312,7 @@ function playEarthquakeShake() {
     setTimeout(() => el.classList.remove("earthquake-shake"), 600);
   }
   sfxEarthquakeRumble();
-  if (navigator.vibrate) navigator.vibrate([60, 40, 60, 40, 100, 40, 80, 40, 60]);
+  vibrate([60, 40, 60, 40, 100, 40, 80, 40, 60]);
 }
 
 // ---------- Cinématique de la bombe nucléaire ----------
@@ -1175,17 +1342,31 @@ function playNukeCinematic() {
   overlay.style.display = "flex";
   positionNukeOverlayOnBoard(overlay);
   sfxNukeSiren();
-  if (navigator.vibrate) navigator.vibrate([80, 60, 80, 60, 80]);
+  vibrate([80, 60, 80, 60, 80]);
 
-  const WARN_STEP_MS = 500, WHITE_HOLD_MS = 5200, FADE_MS = 1400;
+  const WARN_STEP_MS = 500, PREFLASH_MS = 160, BACK_TO_RED_MS = 220, WHITE_HOLD_MS = 5200, FADE_MS = 1400;
   setTimeout(() => { overlay.className = "nuke-overlay nuke-orange"; positionNukeOverlayOnBoard(overlay); }, WARN_STEP_MS);
   setTimeout(() => { overlay.className = "nuke-overlay nuke-red"; positionNukeOverlayOnBoard(overlay); }, WARN_STEP_MS * 2);
-  const whiteAt = WARN_STEP_MS * 2 + 600;
+
+  // Faux départ : un flash blanc bref, toujours confiné à la carte, qui retombe
+  // au rouge — comme une amorce avant la vraie explosion.
+  const preflashAt = WARN_STEP_MS * 2 + 600;
+  setTimeout(() => {
+    overlay.className = "nuke-overlay nuke-preflash";
+    playTone(1200, 0.07, "square", 0.1);
+  }, preflashAt);
+  const backToRedAt = preflashAt + PREFLASH_MS;
+  setTimeout(() => {
+    overlay.className = "nuke-overlay nuke-red";
+    positionNukeOverlayOnBoard(overlay);
+  }, backToRedAt);
+
+  const whiteAt = backToRedAt + BACK_TO_RED_MS;
   setTimeout(() => {
     overlay.className = "nuke-overlay nuke-white";
     positionNukeOverlayFullscreen(overlay);
     sfxNukeBlast();
-    if (navigator.vibrate) navigator.vibrate([150, 80, 250]);
+    vibrate([150, 80, 250]);
   }, whiteAt);
   setTimeout(() => { overlay.classList.add("nuke-fade"); }, whiteAt + WHITE_HOLD_MS);
   setTimeout(() => {
@@ -1263,7 +1444,7 @@ function renderEndScreen() {
       const isWinner = w && w.ids && w.ids.includes(p.id);
       li.innerHTML = `
         <div style="display:flex;align-items:center;gap:10px;width:100%">
-          <span class="dot" style="background:${p.color}"></span>
+          <span class="dot" style="background:${displayColor(p.color)}"></span>
           <span class="pname">${escapeHtml(p.pseudo)}${isWinner ? " 🏆" : ""}</span>
           ${teamBadge(p)}
           <span class="hint" style="margin-left:auto">${statLine(p, lastState.mode)}</span>
@@ -1389,6 +1570,21 @@ function renderBoard() {
     }
   });
 
+  // Capture du drapeau : bases (toujours visibles) + drapeaux (à leur position actuelle)
+  (lastState.flags || []).forEach(f => {
+    const baseCell = board.querySelector(`.cell[data-x="${f.baseX}"][data-y="${f.baseY}"]`);
+    if (baseCell) baseCell.classList.add("flag-base", "flag-base-" + f.team);
+    if (!f.carrierId) {
+      const flagCell = board.querySelector(`.cell[data-x="${f.x}"][data-y="${f.y}"]`);
+      if (flagCell) {
+        const el = document.createElement("div");
+        el.className = "flag-marker flag-marker-" + f.team;
+        el.textContent = "🚩";
+        flagCell.appendChild(el);
+      }
+    }
+  });
+
   updatePlayerTokens();
 }
 
@@ -1409,7 +1605,7 @@ function updatePlayerTokens() {
       layer.appendChild(el);
       playerTokenEls.set(p.id, el);
     }
-    el.style.background = p.color;
+    el.style.background = displayColor(p.color);
     const now = Date.now();
     let statusIcons = "";
     if (p.rootedUntil && p.rootedUntil > now) statusIcons += "🕸";
@@ -1577,17 +1773,19 @@ function renderHud() {
 
   const me = lastState.players.find(p => p.id === myId);
   if (me) {
-    const pct = Math.max(0, me.hp);
+    const isBossMe = lastState.bossId && me.id === lastState.bossId;
+    const myMaxHp = isBossMe ? Math.round((lastState.startingHP || 100) * (lastState.bossHpMultiplier || 1)) : (lastState.startingHP || 100);
+    const pct = Math.max(0, Math.min(100, Math.round((me.hp / myMaxHp) * 100)));
     const fill = document.querySelector(".my-hp-fill");
     fill.style.width = pct + "%";
     fill.style.background = pct > 50 ? "var(--hp-full)" : pct > 20 ? "var(--hp-mid)" : "var(--hp-low)";
 
-    if (lastMyHp !== null && me.hp < lastMyHp && navigator.vibrate) {
+    if (lastMyHp !== null && me.hp < lastMyHp) {
       let pattern = 100;
       if (me.hp === 0) pattern = [80, 60, 120];
       else if (recentHazardFlag === "explosion") pattern = [60, 40, 60, 40, 60];
       else if (recentHazardFlag === "mine") pattern = [40, 30, 40];
-      try { navigator.vibrate(pattern); } catch (e) { /* ignore */ }
+      vibrate(pattern);
     }
     lastMyHp = me.hp;
   }
@@ -1622,14 +1820,22 @@ function renderPlayersPanel() {
     .sort((a,b) => (b.id===myId)-(a.id===myId))
     .forEach(p => {
     const li = document.createElement("li");
-    const pct = Math.max(0, p.hp);
+    const isBoss = lastState.bossId && p.id === lastState.bossId;
+    const carriedFlag = (lastState.flags || []).find(f => f.carrierId === p.id);
+    const maxHp = isBoss ? Math.round((lastState.startingHP || 100) * (lastState.bossHpMultiplier || 1)) : (lastState.startingHP || 100);
+    const pct = Math.max(0, Math.min(100, Math.round((p.hp / maxHp) * 100)));
     const barColor = pct > 50 ? "var(--hp-full)" : pct > 20 ? "var(--hp-mid)" : "var(--hp-low)";
     const stat = lastState.mode && lastState.mode !== "survivor" ? statLine(p, lastState.mode) : "";
     const discoTxt = p.connected === false ? " · déconnecté" : "";
-    li.innerHTML = `<span class="dot" style="background:${p.color}"></span>
+    const bossTag = isBoss ? " 👑" : "";
+    const botTag = p.isBot ? " 🤖" : "";
+    const flagTag = carriedFlag ? " 🚩" : "";
+    const avatarTag = p.avatarEmoji ? p.avatarEmoji + " " : "";
+    li.innerHTML = `<span class="dot" style="background:${displayColor(p.color)}"></span>
       ${teamBadge(p)}
-      <span class="pname">${escapeHtml(p.pseudo)}${p.id===myId?" · toi":""}${!p.alive?" · K.O.":""}${stat?` · ${stat}`:""}${discoTxt}</span>
+      <span class="pname">${avatarTag}${escapeHtml(p.pseudo)}${bossTag}${botTag}${flagTag}${p.id===myId?" · toi":""}${!p.alive?" · K.O.":""}${stat?` · ${stat}`:""}${discoTxt}</span>
       <span class="hpbar"><span class="hpbar-fill" style="width:${pct}%;background:${barColor}"></span></span>`;
+    if (isBoss) li.classList.add("boss-row");
     if (p.connected === false) li.style.opacity = "0.5";
     list.appendChild(li);
   });
@@ -1637,7 +1843,12 @@ function renderPlayersPanel() {
 
 // ---------- Sons (synthétisés, pas de fichier audio à héberger) ----------
 let audioCtx = null;
+function vibrate(pattern) {
+  if (generalSettings.reduceMotion || !navigator.vibrate) return;
+  try { navigator.vibrate(pattern); } catch (e) { /* ignore */ }
+}
 function ensureAudio() {
+  if (generalSettings.muted) return null;
   if (!audioCtx) {
     try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
   }
@@ -1727,6 +1938,40 @@ function pushLog(message) {
 
 // Petite flèche qui file du lanceur jusqu'à la case la plus loin touchée,
 // puis déclenche les impacts habituels le long du trajet.
+// ---------- Réactions emoji ----------
+function buildReactionBar() {
+  const bar = document.getElementById("reaction-bar");
+  if (!bar) return;
+  const emojis = generalSettings.reactionEmojis && generalSettings.reactionEmojis.length ? generalSettings.reactionEmojis : DEFAULT_REACTION_EMOJIS;
+  bar.innerHTML = emojis.map(e => `<button type="button" class="reaction-btn" data-emoji="${e}">${e}</button>`).join("");
+  bar.querySelectorAll(".reaction-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "reaction", emoji: btn.dataset.emoji }));
+      showFloatingReaction(myId, btn.dataset.emoji);
+    });
+  });
+}
+
+function showFloatingReaction(byId, emoji) {
+  const layer = document.getElementById("player-layer");
+  if (!layer || !cellGeometry.track) return;
+  const p = lastState && lastState.players.find(pl => pl.id === byId);
+  const el = document.createElement("div");
+  el.className = "reaction-float";
+  el.textContent = emoji;
+  if (p) {
+    const left = p.x * (cellGeometry.track + cellGeometry.gap) + cellGeometry.track / 2;
+    const top = p.y * (cellGeometry.track + cellGeometry.gap);
+    el.style.left = left + "px";
+    el.style.top = top + "px";
+  } else {
+    el.style.left = "50%";
+    el.style.top = "10%";
+  }
+  layer.appendChild(el);
+  setTimeout(() => el.remove(), 1400);
+}
+
 function playArrowShot(cells, casterId) {
   if (!cells || !cells.length || !cellGeometry.track) { flashCells(cells, "arrow"); return; }
   const caster = lastState.players.find(p => p.id === casterId);
@@ -1873,11 +2118,11 @@ function recordCheatCodeInput(dir) {
   if (CHEAT_CODE_NUKE.every((d, i) => d === cheatCodeBuffer[i])) {
     cheatCodeBuffer = [];
     ws.send(JSON.stringify({ type: "cheatCode", code: "nuke" }));
-    if (navigator.vibrate) navigator.vibrate([40, 40, 40, 40, 120]);
+    vibrate([40, 40, 40, 40, 120]);
   } else if (CHEAT_CODE_PANEL.every((d, i) => d === cheatCodeBuffer[i])) {
     cheatCodeBuffer = [];
     openSecretAttackPanel();
-    if (navigator.vibrate) navigator.vibrate(60);
+    vibrate(60);
   }
 }
 
