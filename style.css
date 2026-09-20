@@ -456,6 +456,13 @@ html, body {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(-360deg); }
 }
+.arrow-shot {
+  position: absolute; font-size: 22px; line-height: 1; color: #f8fafc;
+  z-index: 3; pointer-events: none;
+  transition: left .22s linear, top .22s linear;
+  text-shadow: 0 0 6px rgba(0,0,0,.65);
+}
+
 .smoke-puff {
   position: absolute; border-radius: 50%; background: rgba(130,130,130,.4);
   pointer-events: none; z-index: 2;
@@ -532,16 +539,19 @@ html, body {
 
 /* ---- Cinématique de la bombe nucléaire ---- */
 .nuke-overlay {
-  position: fixed; inset: 0; z-index: 400;
+  position: fixed; z-index: 400;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(234,179,8,.55);
-  transition: background-color .4s ease;
+  background: rgba(234,179,8,.6);
+  transition: background-color .4s ease, opacity 1.4s ease, left .3s ease, top .3s ease, width .3s ease, height .3s ease;
+  opacity: 1;
+  overflow: hidden;
 }
-.nuke-overlay.nuke-orange { background: rgba(249,115,22,.72); }
-.nuke-overlay.nuke-red { background: rgba(220,38,38,.88); }
-.nuke-overlay.nuke-white { background: #f8f8f8; transition: background-color .9s ease-in; }
+.nuke-overlay.nuke-fade { opacity: 0; }
+.nuke-overlay.nuke-orange { background: rgba(249,115,22,.78); }
+.nuke-overlay.nuke-red { background: rgba(220,38,38,.92); }
+.nuke-overlay.nuke-white { background: #f8f8f8; transition: background-color .15s ease, opacity 1.4s ease; }
 .nuke-warning-icon {
-  font-size: 100px; line-height: 1;
+  font-size: 72px; line-height: 1;
   animation: nuke-pulse .5s ease-in-out infinite alternate;
   filter: drop-shadow(0 0 22px rgba(0,0,0,.55));
   transition: opacity .35s ease;
@@ -621,9 +631,9 @@ html, body {
 .attack-row-main { display: flex; align-items: center; gap: 6px; padding: 7px 0; }
 .attack-row.aw-disabled .attack-row-name { color: var(--text-dim); }
 .attack-row-name { flex: 1; font-size: 12.5px; color: var(--text); }
-.toggle-switch-sm { width: 34px; height: 20px; flex-shrink: 0; }
-.toggle-switch-sm .toggle-slider::before { width: 15px; height: 15px; }
-.toggle-switch-sm input:checked + .toggle-slider::before { transform: translateX(14px); }
+.toggle-switch-sm { width: 40px; height: 24px; flex-shrink: 0; }
+.toggle-switch-sm .toggle-slider::before { width: 18px; height: 18px; }
+.toggle-switch-sm input:checked + .toggle-slider::before { transform: translateX(16px); }
 .aw-input {
   width: 52px; padding: 6px 4px; text-align: center; font-size: 13px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--text);
@@ -649,6 +659,17 @@ html, body {
   width: 100%; padding: 7px 8px; font-size: 13px;
   background: var(--panel); border: 1px solid var(--line); border-radius: 6px; color: var(--text);
 }
+
+.secret-attack-list {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  max-height: 50vh; overflow-y: auto; margin: 10px 0;
+}
+.secret-attack-choice {
+  padding: 12px 8px; font-size: 13px; text-align: center;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; color: var(--text);
+  cursor: pointer;
+}
+.secret-attack-choice:active { background: var(--accent-dim); border-color: var(--accent); }
 
 .player-manage-btn {
   border: none; background: var(--line); color: var(--text); border-radius: 6px;

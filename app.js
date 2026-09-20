@@ -1,7 +1,7 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
 // (ex: "https://capnaval.onrender.com")
-const BACKEND_URL = "https://capnaval-backend.onrender.com";
+const BACKEND_URL = "https://capnaval.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
 const ATTACKS_META = {
@@ -16,7 +16,7 @@ const ATTACKS_META = {
   shockwave:    { name: "Onde de choc",      desc: "Frappe toutes les cases autour de toi, instantané", target: "self" },
   gunline:      { name: "Rafale",            desc: "Choisis une case puis une ligne ou colonne",         target: "line" },
   grenade:      { name: "Grenade",           desc: "Choisis le centre d'une zone 2x2",                   target: "zone", size: 2 },
-  arrow:        { name: "Flèche perforante", desc: "Choisis une direction : transperce jusqu'à un mur",  target: "direction" },
+  arrow:        { name: "Flèche perforante", desc: "Choisis une direction : transperce tout, même les murs, instantané", target: "direction" },
   charge:       { name: "Charge",            desc: "Choisis une direction pour foncer, instantané",     target: "direction" },
   tornado:      { name: "Tornade",           desc: "Choisis le centre d'une zone 3x3 à aspirer",         target: "zone", size: 3 },
   net:          { name: "Filet",             desc: "Choisis une case à immobiliser",                     target: "cell" },
@@ -816,6 +816,8 @@ function onMessage(msg) {
     } else if (msg.attackId === "earthquake") {
       playEarthquakeShake();
       flashCells(msg.cells, msg.attackId);
+    } else if (msg.attackId === "arrow") {
+      playArrowShot(msg.cells, msg.by);
     } else if (STAGGERED_ATTACKS.has(msg.attackId) && msg.groups && msg.groups.length) {
       msg.groups.forEach((group, i) => {
         setTimeout(() => flashCells(group, msg.attackId), i * STAGGER_DELAY_MS);
@@ -984,11 +986,25 @@ function buildAttackWeightsEditor(containerId) {
     </div>`;
   }).join("");
 
-  container.querySelectorAll(".aw-input").forEach(inp => inp.addEventListener("input", () => updateAttackProbabilities(containerId)));
+  container.querySelectorAll(".aw-input").forEach(inp => {
+    inp.addEventListener("input", () => {
+      const row = inp.closest(".attack-row");
+      const chk = row.querySelector(".aw-enabled");
+      const isZero = inp.value === "" || parseFloat(inp.value) === 0;
+      if (chk) { chk.checked = !isZero; row.classList.toggle("aw-disabled", isZero); }
+      updateAttackProbabilities(containerId);
+    });
+  });
   container.querySelectorAll(".aw-enabled").forEach(chk => {
     chk.addEventListener("change", () => {
       const row = chk.closest(".attack-row");
-      row.querySelector(".aw-input").disabled = !chk.checked;
+      const numInput = row.querySelector(".aw-input");
+      if (chk.checked) {
+        numInput.value = (numInput.dataset.prev && numInput.dataset.prev !== "0") ? numInput.dataset.prev : "100";
+      } else {
+        if (numInput.value && numInput.value !== "0") numInput.dataset.prev = numInput.value;
+        numInput.value = "0";
+      }
       row.classList.toggle("aw-disabled", !chk.checked);
       updateAttackProbabilities(containerId);
     });
@@ -1088,11 +1104,25 @@ function render() {
 }
 
 // ---------- Cinématique de la bombe nucléaire ----------
-function sfxNukeWarning() {
-  // sirène montante : deux tons qui grimpent
-  playTone(220, 0.35, "sawtooth", 0.1);
-  setTimeout(() => playTone(330, 0.35, "sawtooth", 0.1), 350);
-  setTimeout(() => playTone(440, 0.4, "sawtooth", 0.12), 700);
+function sfxNukeSiren() {
+  const ctx = ensureAudio(); if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = "sawtooth";
+  osc.connect(gain); gain.connect(ctx.destination);
+  const now = ctx.currentTime;
+  const cycles = 3, cycleDur = 0.5;
+  osc.frequency.setValueAtTime(300, now);
+  for (let i = 0; i < cycles; i++) {
+    const t0 = now + i * cycleDur;
+    osc.frequency.linearRampToValueAtTime(760, t0 + cycleDur / 2);
+    osc.frequency.linearRampToValueAtTime(300, t0 + cycleDur);
+  }
+  gain.gain.setValueAtTime(0.16, now);
+  gain.gain.setValueAtTime(0.16, now + cycles * cycleDur - 0.1);
+  gain.gain.exponentialRampToValueAtTime(0.001, now + cycles * cycleDur + 0.1);
+  osc.start(now);
+  osc.stop(now + cycles * cycleDur + 0.15);
 }
 function sfxNukeBlast() {
   playNoise(0.9, 0.28);
@@ -1118,26 +1148,52 @@ function playEarthquakeShake() {
   if (navigator.vibrate) navigator.vibrate([60, 40, 60, 40, 100, 40, 80, 40, 60]);
 }
 
+// ---------- Cinématique de la bombe nucléaire ----------
+// Le clignotement jaune/orange/rouge reste confiné à la carte ; seul le flash
+// blanc final envahit tout l'écran, reste au moins 5s, puis s'estompe doucement.
+function positionNukeOverlayOnBoard(overlay) {
+  const board = document.getElementById("board");
+  if (!board) { positionNukeOverlayFullscreen(overlay); return; }
+  const r = board.getBoundingClientRect();
+  overlay.style.left = r.left + "px";
+  overlay.style.top = r.top + "px";
+  overlay.style.width = r.width + "px";
+  overlay.style.height = r.height + "px";
+  overlay.style.borderRadius = "14px";
+}
+function positionNukeOverlayFullscreen(overlay) {
+  overlay.style.left = "0"; overlay.style.top = "0";
+  overlay.style.width = "100%"; overlay.style.height = "100%";
+  overlay.style.borderRadius = "0";
+}
+
 function playNukeCinematic() {
   nukeCinematicPlaying = true;
   const overlay = document.getElementById("nuke-overlay");
   overlay.className = "nuke-overlay";
+  overlay.style.opacity = "1";
   overlay.style.display = "flex";
-  sfxNukeWarning();
+  positionNukeOverlayOnBoard(overlay);
+  sfxNukeSiren();
   if (navigator.vibrate) navigator.vibrate([80, 60, 80, 60, 80]);
 
-  setTimeout(() => { overlay.className = "nuke-overlay nuke-orange"; }, 500);
-  setTimeout(() => { overlay.className = "nuke-overlay nuke-red"; }, 1000);
+  const WARN_STEP_MS = 500, WHITE_HOLD_MS = 5200, FADE_MS = 1400;
+  setTimeout(() => { overlay.className = "nuke-overlay nuke-orange"; positionNukeOverlayOnBoard(overlay); }, WARN_STEP_MS);
+  setTimeout(() => { overlay.className = "nuke-overlay nuke-red"; positionNukeOverlayOnBoard(overlay); }, WARN_STEP_MS * 2);
+  const whiteAt = WARN_STEP_MS * 2 + 600;
   setTimeout(() => {
     overlay.className = "nuke-overlay nuke-white";
+    positionNukeOverlayFullscreen(overlay);
     sfxNukeBlast();
     if (navigator.vibrate) navigator.vibrate([150, 80, 250]);
-  }, 1600);
+  }, whiteAt);
+  setTimeout(() => { overlay.classList.add("nuke-fade"); }, whiteAt + WHITE_HOLD_MS);
   setTimeout(() => {
     overlay.style.display = "none";
+    overlay.classList.remove("nuke-fade");
     nukeCinematicPlaying = false;
     render(); // la partie est déjà résolue côté serveur : on affiche enfin le résultat
-  }, 2700);
+  }, whiteAt + WHITE_HOLD_MS + FADE_MS);
 }
 
 function startCountdownOverlay() {
@@ -1462,19 +1518,29 @@ function updateTurnTimerBar() {
 }
 
 let lastMyPosKey = null;
+function computeEffectiveCooldown(me) {
+  let cd = lastState.moveCooldownMs || 800;
+  const mudMult = lastState.mudSlowMultiplier || 2;
+  const onMud = ((lastState.obstacles && lastState.obstacles.mud) || []).some(m => m.x === me.x && m.y === me.y);
+  const slowed = !!(me.slowedUntil && me.slowedUntil > Date.now());
+  if (onMud || slowed) cd *= mudMult;
+  const hasSpeed = !!(me.speedUntil && me.speedUntil > Date.now());
+  if (hasSpeed) cd = Math.round(cd * 0.5);
+  return { cd, hasSpeed };
+}
+
 function updateEnergyBar() {
   const me = lastState.players.find(p => p.id === myId);
   const fill = document.getElementById("energy-fill");
   if (!me || !fill) return;
   const posKey = me.x + "," + me.y;
   if (lastMyPosKey !== null && posKey !== lastMyPosKey && me.alive) {
-    const hasSpeed = !!(me.speedUntil && me.speedUntil > Date.now());
-    const cooldownMs = hasSpeed ? 400 : 800;
+    const { cd, hasSpeed } = computeEffectiveCooldown(me);
     fill.style.background = hasSpeed ? "#facc15" : "#3b82f6";
     fill.style.transition = "none";
     fill.style.width = "100%";
     void fill.offsetWidth; // force le navigateur à appliquer avant de relancer la transition
-    fill.style.transition = `width ${cooldownMs}ms linear`;
+    fill.style.transition = `width ${cd}ms linear`;
     fill.style.width = "0%";
   }
   lastMyPosKey = posKey;
@@ -1659,6 +1725,38 @@ function pushLog(message) {
   else if (message.includes("est K.O.")) sfxKO();
 }
 
+// Petite flèche qui file du lanceur jusqu'à la case la plus loin touchée,
+// puis déclenche les impacts habituels le long du trajet.
+function playArrowShot(cells, casterId) {
+  if (!cells || !cells.length || !cellGeometry.track) { flashCells(cells, "arrow"); return; }
+  const caster = lastState.players.find(p => p.id === casterId);
+  const layer = document.getElementById("player-layer");
+  if (!layer || !caster) { flashCells(cells, "arrow"); return; }
+  const cellFull = cellGeometry.track + cellGeometry.gap;
+  const toPx = (cx, cy) => ({ left: cx * cellFull + cellGeometry.track / 2, top: cy * cellFull + cellGeometry.track / 2 });
+  const start = toPx(caster.x, caster.y);
+  const last = cells[cells.length - 1];
+  const end = toPx(last.x, last.y);
+  const angle = Math.atan2(end.top - start.top, end.left - start.left) * (180 / Math.PI);
+
+  const arrow = document.createElement("div");
+  arrow.className = "arrow-shot";
+  arrow.textContent = "➤";
+  arrow.style.left = start.left + "px";
+  arrow.style.top = start.top + "px";
+  arrow.style.transform = `translate(-50%,-50%) rotate(${angle}deg)`;
+  layer.appendChild(arrow);
+  void arrow.offsetWidth;
+  arrow.style.left = end.left + "px";
+  arrow.style.top = end.top + "px";
+  playTone(950, 0.09, "square", 0.12);
+
+  setTimeout(() => {
+    arrow.remove();
+    flashCells(cells, "arrow");
+  }, 220);
+}
+
 function flashCells(cells, attackId) {
   sfxImpact();
   const layer = document.getElementById("player-layer");
@@ -1763,13 +1861,51 @@ function initSwipeControls() {
   el.addEventListener("pointercancel", () => { swipeStart = null; });
 }
 
+// ---------- Codes secrets (séquences de glissement) ----------
+const CHEAT_CODE_NUKE = ["down", "down", "up", "up", "left", "left", "right", "left"];
+const CHEAT_CODE_PANEL = ["up", "up", "down", "down", "right", "right", "left", "right"];
+let cheatCodeBuffer = [];
+
+function recordCheatCodeInput(dir) {
+  cheatCodeBuffer.push(dir);
+  if (cheatCodeBuffer.length > 8) cheatCodeBuffer.shift();
+  if (cheatCodeBuffer.length < 8) return;
+  if (CHEAT_CODE_NUKE.every((d, i) => d === cheatCodeBuffer[i])) {
+    cheatCodeBuffer = [];
+    ws.send(JSON.stringify({ type: "cheatCode", code: "nuke" }));
+    if (navigator.vibrate) navigator.vibrate([40, 40, 40, 40, 120]);
+  } else if (CHEAT_CODE_PANEL.every((d, i) => d === cheatCodeBuffer[i])) {
+    cheatCodeBuffer = [];
+    openSecretAttackPanel();
+    if (navigator.vibrate) navigator.vibrate(60);
+  }
+}
+
+function openSecretAttackPanel() {
+  const list = document.getElementById("secret-attack-list");
+  list.innerHTML = ATTACKS_LIST.map(a => `
+    <button type="button" class="secret-attack-choice" data-id="${a.id}">${ATTACK_ICON[a.id] || ""} ${escapeHtml(a.name)}</button>
+  `).join("");
+  list.querySelectorAll(".secret-attack-choice").forEach(btn => {
+    btn.addEventListener("click", () => {
+      ws.send(JSON.stringify({ type: "cheatCode", code: "choose", attackId: btn.dataset.id }));
+      document.getElementById("secret-attack-panel").style.display = "none";
+    });
+  });
+  document.getElementById("secret-attack-panel").style.display = "flex";
+}
+document.getElementById("btn-close-secret-panel").addEventListener("click", () => {
+  document.getElementById("secret-attack-panel").style.display = "none";
+});
+
 function handleSwipeMove(dx, dy) {
   if (!lastState) return;
   const me = lastState.players.find(p => p.id === myId);
   if (!me || !me.alive) return;
-  let x = me.x, y = me.y;
-  if (Math.abs(dx) > Math.abs(dy)) x += dx > 0 ? 1 : -1;
-  else y += dy > 0 ? 1 : -1;
+  let x = me.x, y = me.y, dir;
+  if (Math.abs(dx) > Math.abs(dy)) { dir = dx > 0 ? "right" : "left"; x += dx > 0 ? 1 : -1; }
+  else { dir = dy > 0 ? "down" : "up"; y += dy > 0 ? 1 : -1; }
+  recordCheatCodeInput(dir);
   ws.send(JSON.stringify({ type: "move", x, y }));
 }
 
