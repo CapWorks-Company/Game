@@ -132,6 +132,7 @@ html, body {
 }
 .toggle-slider {
   position: absolute; inset: 0; border-radius: 999px;
+  pointer-events: none;
   background: var(--line); border: 1px solid var(--line);
   transition: background .2s ease, border-color .2s ease;
 }
@@ -229,7 +230,17 @@ html, body {
 .cell.wall { background: #3a3f4c; }
 .cell.wall::after { content: ""; position: absolute; inset: 2px; background: repeating-linear-gradient(45deg, #4a5062, #4a5062 4px, #3a3f4c 4px, #3a3f4c 8px); border-radius: 2px; }
 .cell.barrel::after {
-  content: "🛢"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px;
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 56%; height: 68%; z-index: 1;
+  background: linear-gradient(180deg, #b9773a 0%, #8a5325 55%, #7a4820 100%);
+  border-radius: 25% / 12%;
+  border: 1.5px solid #4a2c12;
+}
+.cell.barrel::before {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 58%; height: 20%; z-index: 2;
+  border-top: 1.5px solid rgba(0,0,0,.4);
+  border-bottom: 1.5px solid rgba(0,0,0,.4);
 }
 .cell.mud { background: #3d3220; }
 .powerup {
@@ -464,6 +475,20 @@ html, body {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(-360deg); }
 }
+.lightning-bolt-svg { position: absolute; inset: 0; pointer-events: none; overflow: visible; z-index: 4; }
+.lightning-bolt-path {
+  fill: none; stroke: #bfe3ff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 0 4px #7dd3fc) drop-shadow(0 0 9px #38bdf8);
+  animation: lightning-flicker .28s ease-out forwards;
+}
+@keyframes lightning-flicker {
+  0% { opacity: 0; }
+  15% { opacity: 1; }
+  40% { opacity: .35; }
+  60% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .arrow-shot {
   position: absolute; font-size: 22px; line-height: 1; color: #f8fafc;
   z-index: 3; pointer-events: none;
@@ -517,12 +542,6 @@ html, body {
 .energy-fill {
   height: 100%; width: 0%; background: #3b82f6;
 }
-
-.log-feed {
-  font-size: 12px; color: var(--text-dim); max-height: 60px; overflow-y: auto;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px;
-}
-.log-feed div { padding: 1px 0; }
 
 /* ---- Contrôles de partie (Terminer / Quitter) ---- */
 .match-controls { display: flex; gap: 8px; margin: 4px 0 2px; }
@@ -622,6 +641,24 @@ html, body {
 .me-cell.me-wall { background: #4a5062; }
 .me-cell.me-barrel { background: #8a5a2a; }
 .me-cell.me-mud { background: #5a4a2a; }
+
+/* ---- Onglets de paramètres (salle, mode, options, avancé, attaques, modes) ---- */
+.settings-tabs {
+  display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  padding: 4px 2px 10px; margin: 16px 0 4px; scrollbar-width: none;
+  border-bottom: 1px solid var(--line);
+}
+.settings-tabs::-webkit-scrollbar { display: none; }
+.settings-tab {
+  flex-shrink: 0; white-space: nowrap;
+  padding: 9px 14px; font-size: 13px; font-weight: 600;
+  background: var(--panel-2); color: var(--text-dim);
+  border: 1px solid var(--line); border-radius: 999px; cursor: pointer;
+}
+.settings-tab.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
+.settings-panel { display: none; padding-top: 12px; }
+.settings-panel.active { display: block; }
+.settings-panel-grid.active { display: grid; grid-template-columns: 1fr; gap: 2px; }
 
 .advanced-params {
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;

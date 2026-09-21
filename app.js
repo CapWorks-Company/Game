@@ -1,7 +1,7 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
 // (ex: "https://capnaval.onrender.com")
-const BACKEND_URL = "https://capnaval-backend.onrender.com";
+const BACKEND_URL = "https://capnaval.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
 const ATTACKS_META = {
@@ -12,6 +12,7 @@ const ATTACKS_META = {
   acidRain:     { name: "Pluie acide",       desc: "Choisis une zone 7x7 : des cases deviennent toxiques au hasard", target: "zone", size: 7 },
   nuke:         { name: "Bombe nucléaire",   desc: "Rase toute la carte, instantané — quasi mythique", target: "self" },
   snipe:        { name: "Tir de précision",  desc: "Choisis une case à frapper, instantané",           target: "cell" },
+  chainLightning: { name: "Chaîne d'éclairs", desc: "Choisis une case ou un joueur : l'éclair frappe et rebondit sur les joueurs proches, instantané", target: "cell" },
   laser:        { name: "Rayon laser",       desc: "Choisis une case puis une ligne ou colonne, instantané", target: "line" },
   shockwave:    { name: "Onde de choc",      desc: "Frappe toutes les cases autour de toi, instantané", target: "self" },
   gunline:      { name: "Rafale",            desc: "Choisis une case puis une ligne ou colonne",         target: "line" },
@@ -37,14 +38,14 @@ const ATTACK_THEME = {
   snipe: "physical", gunline: "physical", laser: "physical", charge: "physical", arrow: "physical", earthquake: "physical",
   poison: "poison", acidRain: "poison",
   frost: "ice",
-  tornado: "control", net: "control",
+  tornado: "control", net: "control", chainLightning: "physical",
   heal: "heal", healZone: "heal", shield: "shield", teleport: "teleport", mine: "trap",
   nuke: "nuke",
 };
 const ATTACK_ICON = {
   meteor: "☄️", airstrike: "✈️", meteorShower: "🌠", napalm: "🔥", grenade: "💣",
   snipe: "🎯", gunline: "🔫", laser: "⚡", charge: "🐗", arrow: "🏹", earthquake: "🌍",
-  poison: "☠️", acidRain: "🧪", frost: "❄️", tornado: "🌪️", net: "🕸️",
+  poison: "☠️", acidRain: "🧪", frost: "❄️", tornado: "🌪️", net: "🕸️", chainLightning: "🌩️",
   heal: "💚", healZone: "💧", shield: "🛡️", teleport: "🌀", mine: "💥", nuke: "☢️",
 };
 // Attaques dont les impacts s'affichent un par un (son + explosion à chaque case
@@ -511,16 +512,15 @@ function saveLastPseudo(pseudo) {
   try { localStorage.setItem(PSEUDO_KEY, pseudo); } catch (e) { /* ignore */ }
 }
 
-// ---------- Avatar (couleur + emoji), mémorisé sur l'appareil ----------
+// ---------- Avatar (couleur), mémorisé sur l'appareil ----------
 const AVATAR_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#f97316"];
-const AVATAR_EMOJIS = ["🦊", "🐺", "🦁", "🐯", "🦅", "🐉", "🦈", "🐸", "🐵", "🦉", "🐙", "🦂"];
 const AVATAR_KEY = "capnaval_avatar";
 
 function loadAvatar() {
   try {
     const raw = JSON.parse(localStorage.getItem(AVATAR_KEY) || "{}");
-    return { color: AVATAR_COLORS.includes(raw.color) ? raw.color : AVATAR_COLORS[0], emoji: raw.emoji || AVATAR_EMOJIS[0] };
-  } catch (e) { return { color: AVATAR_COLORS[0], emoji: AVATAR_EMOJIS[0] }; }
+    return { color: AVATAR_COLORS.includes(raw.color) ? raw.color : AVATAR_COLORS[0] };
+  } catch (e) { return { color: AVATAR_COLORS[0] }; }
 }
 function saveAvatar(avatar) { try { localStorage.setItem(AVATAR_KEY, JSON.stringify(avatar)); } catch (e) { /* ignore */ } }
 
@@ -533,15 +533,6 @@ function saveAvatar(avatar) { try { localStorage.setItem(AVATAR_KEY, JSON.string
       colorWrap.querySelectorAll(".avatar-swatch").forEach(b => b.classList.remove("selected"));
       btn.classList.add("selected");
       saveAvatar({ ...loadAvatar(), color: btn.dataset.color });
-    });
-  });
-  const emojiWrap = document.getElementById("avatar-emoji-grid");
-  emojiWrap.innerHTML = AVATAR_EMOJIS.map(e => `<button type="button" class="avatar-emoji-btn${e === avatar.emoji ? " selected" : ""}" data-emoji="${e}">${e}</button>`).join("");
-  emojiWrap.querySelectorAll(".avatar-emoji-btn").forEach(btn => {
-    btn.addEventListener("click", () => {
-      emojiWrap.querySelectorAll(".avatar-emoji-btn").forEach(b => b.classList.remove("selected"));
-      btn.classList.add("selected");
-      saveAvatar({ ...loadAvatar(), emoji: btn.dataset.emoji });
     });
   });
 })();
@@ -828,7 +819,7 @@ function connect(code, pseudo) {
   stopPublicRoomsPolling();
   myCode = code; myPseudo = pseudo;
   const avatar = loadAvatar();
-  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?code=${code}&pseudo=${encodeURIComponent(pseudo)}&clientId=${myClientId}&color=${encodeURIComponent(avatar.color)}&avatarEmoji=${encodeURIComponent(avatar.emoji)}`;
+  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?code=${code}&pseudo=${encodeURIComponent(pseudo)}&clientId=${myClientId}&color=${encodeURIComponent(avatar.color)}`;
   ws = new WebSocket(wsUrl);
 
   ws.addEventListener("open", () => { setHomeError(""); hideConnectionBanner(); reconnectAttempts = 0; });
@@ -930,6 +921,8 @@ function onMessage(msg) {
       flashCells(msg.cells, msg.attackId);
     } else if (msg.attackId === "arrow") {
       playArrowShot(msg.cells, msg.by);
+    } else if (msg.attackId === "chainLightning") {
+      playChainLightning(msg.groups, msg.by);
     } else if (STAGGERED_ATTACKS.has(msg.attackId) && msg.groups && msg.groups.length) {
       msg.groups.forEach((group, i) => {
         setTimeout(() => flashCells(group, msg.attackId), i * STAGGER_DELAY_MS);
@@ -965,8 +958,7 @@ function renderLobby() {
     const li = document.createElement("li");
     const isMe = p.id === myId;
     const botTag = p.isBot ? " 🤖" : "";
-    const avatarTag = p.avatarEmoji ? p.avatarEmoji + " " : "";
-    li.innerHTML = `<span class="dot" style="background:${displayColor(p.color)}"></span><span class="pname">${avatarTag}${escapeHtml(p.pseudo)}${botTag}${p.id === lastState.hostId ? " · hôte" : ""}</span>`;
+    li.innerHTML = `<span class="dot" style="background:${displayColor(p.color)}"></span><span class="pname">${escapeHtml(p.pseudo)}${botTag}${p.id === lastState.hostId ? " · hôte" : ""}</span>`;
     if (isHost && !isMe && !p.isBot) {
       const actions = document.createElement("span");
       actions.style.display = "flex"; actions.style.gap = "6px"; actions.style.marginLeft = "auto";
@@ -986,33 +978,47 @@ function renderLobby() {
     list.appendChild(li);
   });
   document.getElementById("btn-start").style.display = isHost ? "block" : "none";
-  document.getElementById("mode-select-wrap").style.display = isHost ? "block" : "none";
+  document.getElementById("host-settings-wrap").style.display = isHost ? "block" : "none";
   document.getElementById("lobby-wait").style.display = isHost ? "none" : "block";
-  document.getElementById("host-public-toggle-wrap").style.display = isHost ? "block" : "none";
-  document.getElementById("host-maxplayers-wrap").style.display = isHost ? "block" : "none";
   if (isHost) {
     document.getElementById("lobby-public-toggle").checked = !!lastState.isPublic;
     const mpInput = document.getElementById("lobby-maxplayers");
     if (document.activeElement !== mpInput) mpInput.value = lastState.maxPlayers || 6;
-    const fillToggle = document.getElementById("lobby-fillbots-toggle");
+    const fillCountInput = document.getElementById("lobby-fillbots-count");
     const fillDiffSelect = document.getElementById("lobby-fillbots-difficulty");
-    if (document.activeElement !== fillToggle) fillToggle.checked = !!lastState.fillWithBots;
+    if (document.activeElement !== fillCountInput) fillCountInput.value = lastState.fillBotCount || 0;
     if (document.activeElement !== fillDiffSelect) fillDiffSelect.value = lastState.fillBotDifficulty || "medium";
-    document.getElementById("lobby-fillbots-difficulty-wrap").style.display = lastState.fillWithBots ? "block" : "none";
+    document.getElementById("lobby-fillbots-difficulty-wrap").style.display = (lastState.fillBotCount > 0) ? "block" : "none";
   }
 }
+// ---------- Onglets de paramètres (générique, réutilisable) ----------
+function wireSettingsTabs(tabsId) {
+  const tabsEl = document.getElementById(tabsId);
+  if (!tabsEl) return;
+  const panelsWrap = tabsEl.parentElement;
+  tabsEl.querySelectorAll(".settings-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      tabsEl.querySelectorAll(".settings-tab").forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      panelsWrap.querySelectorAll(".settings-panel").forEach(p => p.classList.toggle("active", p.dataset.panel === tab.dataset.tab));
+    });
+  });
+}
+wireSettingsTabs("lobby-settings-tabs");
+wireSettingsTabs("end-settings-tabs");
+
 document.getElementById("lobby-public-toggle").addEventListener("change", (e) => {
   ws.send(JSON.stringify({ type: "setPublic", value: e.target.checked }));
 });
 document.getElementById("lobby-maxplayers").addEventListener("change", (e) => {
   ws.send(JSON.stringify({ type: "setMaxPlayers", value: e.target.value }));
 });
-document.getElementById("lobby-fillbots-toggle").addEventListener("change", (e) => {
-  document.getElementById("lobby-fillbots-difficulty-wrap").style.display = e.target.checked ? "block" : "none";
-  ws.send(JSON.stringify({ type: "setFillBots", enabled: e.target.checked, difficulty: document.getElementById("lobby-fillbots-difficulty").value }));
+document.getElementById("lobby-fillbots-count").addEventListener("change", (e) => {
+  document.getElementById("lobby-fillbots-difficulty-wrap").style.display = (parseInt(e.target.value) > 0) ? "block" : "none";
+  ws.send(JSON.stringify({ type: "setFillBots", count: e.target.value, difficulty: document.getElementById("lobby-fillbots-difficulty").value }));
 });
 document.getElementById("lobby-fillbots-difficulty").addEventListener("change", (e) => {
-  ws.send(JSON.stringify({ type: "setFillBots", enabled: document.getElementById("lobby-fillbots-toggle").checked, difficulty: e.target.value }));
+  ws.send(JSON.stringify({ type: "setFillBots", count: document.getElementById("lobby-fillbots-count").value, difficulty: e.target.value }));
 });
 let lobbyStartLogStop = null;
 function gatherFullConfig(prefix) {
@@ -1037,6 +1043,13 @@ document.getElementById("btn-start").addEventListener("click", () => {
   lobbyStartLogStop = runLoadingLog(document.getElementById("lobby-status"),
     ["Connexion avec le serveur...", "En attente de création de la partie..."], 700);
   ws.send(JSON.stringify({ type: "start", mode, config }));
+});
+document.getElementById("btn-toggle-end-settings").addEventListener("click", () => {
+  const form = document.getElementById("end-settings-form");
+  const btn = document.getElementById("btn-toggle-end-settings");
+  const nowVisible = form.style.display === "none";
+  form.style.display = nowVisible ? "block" : "none";
+  btn.textContent = nowVisible ? "⚙️ Masquer les paramètres" : "⚙️ Modifier les paramètres";
 });
 document.getElementById("btn-restart").addEventListener("click", () => {
   const { mode, config } = gatherFullConfig("end-");
@@ -1144,7 +1157,7 @@ function buildAttackWeightsEditor(containerId) {
     <div class="attack-row" data-id="${a.id}">
       <div class="attack-row-main">
         <span class="attack-row-name">${ATTACK_ICON[a.id] || ""} ${escapeHtml(a.name)}</span>
-        <span class="toggle-switch toggle-switch-sm"><input type="checkbox" class="aw-enabled" data-id="${a.id}" checked><span class="toggle-slider"></span></span>
+        <label class="toggle-switch toggle-switch-sm"><input type="checkbox" class="aw-enabled" data-id="${a.id}" checked><span class="toggle-slider"></span></label>
         <input type="number" class="aw-input" data-id="${a.id}" min="0" max="500" step="25" value="100">
         <span class="aw-prob" data-id="${a.id}">—</span>
         ${hasTunables ? `<button type="button" class="attack-row-expand" data-id="${a.id}" aria-label="Réglages fins">▸</button>` : `<span class="attack-row-expand-spacer"></span>`}
@@ -1419,6 +1432,10 @@ function statSort(p, mode) {
 function renderEndScreen() {
   const wasAlreadyEnded = lastKnownStatus === "ended";
   showScreen("screen-end");
+  if (!wasAlreadyEnded) {
+    document.getElementById("end-settings-form").style.display = "none";
+    document.getElementById("btn-toggle-end-settings").textContent = "⚙️ Modifier les paramètres";
+  }
   const w = lastState.winner;
   const winnerEl = document.getElementById("end-winner");
   if (w && w.ids && w.ids.length) {
@@ -1830,10 +1847,9 @@ function renderPlayersPanel() {
     const bossTag = isBoss ? " 👑" : "";
     const botTag = p.isBot ? " 🤖" : "";
     const flagTag = carriedFlag ? " 🚩" : "";
-    const avatarTag = p.avatarEmoji ? p.avatarEmoji + " " : "";
     li.innerHTML = `<span class="dot" style="background:${displayColor(p.color)}"></span>
       ${teamBadge(p)}
-      <span class="pname">${avatarTag}${escapeHtml(p.pseudo)}${bossTag}${botTag}${flagTag}${p.id===myId?" · toi":""}${!p.alive?" · K.O.":""}${stat?` · ${stat}`:""}${discoTxt}</span>
+      <span class="pname">${escapeHtml(p.pseudo)}${bossTag}${botTag}${flagTag}${p.id===myId?" · toi":""}${!p.alive?" · K.O.":""}${stat?` · ${stat}`:""}${discoTxt}</span>
       <span class="hpbar"><span class="hpbar-fill" style="width:${pct}%;background:${barColor}"></span></span>`;
     if (isBoss) li.classList.add("boss-row");
     if (p.connected === false) li.style.opacity = "0.5";
@@ -1922,13 +1938,6 @@ function flagRecentHazard(kind) {
 }
 
 function pushLog(message) {
-  const feed = document.getElementById("log-feed");
-  const div = document.createElement("div");
-  div.textContent = message;
-  feed.appendChild(div);
-  feed.scrollTop = feed.scrollHeight;
-  while (feed.children.length > 30) feed.removeChild(feed.firstChild);
-
   if (message.includes("piège explosif")) flagRecentHazard("mine");
   if (message.includes("tonneau explose")) flagRecentHazard("explosion");
   if (message.includes("explose") || message.includes("piège explosif")) sfxExplosion();
@@ -1970,6 +1979,53 @@ function showFloatingReaction(byId, emoji) {
   }
   layer.appendChild(el);
   setTimeout(() => el.remove(), 1400);
+}
+
+// Éclair en zigzag qui relie le lanceur à chaque point d'impact successif,
+// avec un flash de zone (qui "s'étend") à chaque case touchée.
+function playChainLightning(groups, casterId) {
+  const points = (groups || []).map(g => g[0]).filter(Boolean);
+  if (!points.length || !cellGeometry.track) { flashCells(points, "chainLightning"); return; }
+  const layer = document.getElementById("player-layer");
+  if (!layer) return;
+  const caster = lastState.players.find(p => p.id === casterId);
+  const cellFull = cellGeometry.track + cellGeometry.gap;
+  const toPx = (cx, cy) => ({ x: cx * cellFull + cellGeometry.track / 2, y: cy * cellFull + cellGeometry.track / 2 });
+
+  const chain = [caster ? toPx(caster.x, caster.y) : toPx(points[0].x, points[0].y)];
+  points.forEach(p => chain.push(toPx(p.x, p.y)));
+
+  const STEP_MS = 150;
+  for (let i = 0; i < chain.length - 1; i++) {
+    setTimeout(() => drawLightningBolt(layer, chain[i], chain[i + 1]), i * STEP_MS);
+  }
+  points.forEach((p, i) => {
+    setTimeout(() => flashCells([p], "chainLightning"), i * STEP_MS + 90);
+  });
+}
+
+function drawLightningBolt(layer, from, to) {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(svgNS, "svg");
+  svg.setAttribute("class", "lightning-bolt-svg");
+  const dx = to.x - from.x, dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = -dy / len, ny = dx / len; // normale pour le jitter perpendiculaire au trait
+  const segments = 5;
+  let d = `M ${from.x} ${from.y} `;
+  for (let s = 1; s < segments; s++) {
+    const t = s / segments;
+    const jitter = (Math.random() - 0.5) * 16;
+    d += `L ${from.x + dx * t + nx * jitter} ${from.y + dy * t + ny * jitter} `;
+  }
+  d += `L ${to.x} ${to.y}`;
+  const path = document.createElementNS(svgNS, "path");
+  path.setAttribute("d", d);
+  path.setAttribute("class", "lightning-bolt-path");
+  svg.appendChild(path);
+  layer.appendChild(svg);
+  playTone(1400, 0.06, "square", 0.1);
+  setTimeout(() => svg.remove(), 280);
 }
 
 function playArrowShot(cells, casterId) {
@@ -2107,24 +2163,54 @@ function initSwipeControls() {
 }
 
 // ---------- Codes secrets (séquences de glissement) ----------
-const CHEAT_CODE_NUKE = ["down", "down", "up", "up", "left", "left", "right", "left"];
-const CHEAT_CODE_PANEL = ["up", "up", "down", "down", "right", "right", "left", "right"];
+const CHEAT_CODES = [
+  { seq: ["up", "down", "up", "down", "left", "right", "left", "right", "right"], action: "nukeConfirm" },
+  { seq: ["down", "up", "down", "down", "down", "up"], action: "panel" },
+  { seq: ["up", "down", "down", "up", "right", "right"], action: "buffPanel" },
+];
+const CHEAT_BUFFER_MAX = Math.max(...CHEAT_CODES.map(c => c.seq.length));
 let cheatCodeBuffer = [];
 
 function recordCheatCodeInput(dir) {
   cheatCodeBuffer.push(dir);
-  if (cheatCodeBuffer.length > 8) cheatCodeBuffer.shift();
-  if (cheatCodeBuffer.length < 8) return;
-  if (CHEAT_CODE_NUKE.every((d, i) => d === cheatCodeBuffer[i])) {
-    cheatCodeBuffer = [];
-    ws.send(JSON.stringify({ type: "cheatCode", code: "nuke" }));
-    vibrate([40, 40, 40, 40, 120]);
-  } else if (CHEAT_CODE_PANEL.every((d, i) => d === cheatCodeBuffer[i])) {
-    cheatCodeBuffer = [];
-    openSecretAttackPanel();
-    vibrate(60);
+  if (cheatCodeBuffer.length > CHEAT_BUFFER_MAX) cheatCodeBuffer.shift();
+  for (const code of CHEAT_CODES) {
+    const tail = cheatCodeBuffer.slice(-code.seq.length);
+    if (tail.length !== code.seq.length) continue;
+    if (code.seq.every((d, i) => d === tail[i])) {
+      cheatCodeBuffer = [];
+      vibrate(code.action === "nukeConfirm" ? [40, 40, 40, 40, 120] : 60);
+      if (code.action === "nukeConfirm") openNukeConfirmPanel();
+      else if (code.action === "buffPanel") openBuffPanel();
+      else openSecretAttackPanel();
+      return;
+    }
   }
 }
+
+function openNukeConfirmPanel() {
+  document.getElementById("nuke-confirm-panel").style.display = "flex";
+}
+document.getElementById("btn-nuke-confirm-no").addEventListener("click", () => {
+  document.getElementById("nuke-confirm-panel").style.display = "none";
+});
+document.getElementById("btn-nuke-confirm-yes").addEventListener("click", () => {
+  ws.send(JSON.stringify({ type: "cheatCode", code: "nuke" }));
+  document.getElementById("nuke-confirm-panel").style.display = "none";
+});
+
+function openBuffPanel() {
+  document.getElementById("buff-panel").style.display = "flex";
+}
+document.getElementById("btn-close-buff-panel").addEventListener("click", () => {
+  document.getElementById("buff-panel").style.display = "none";
+});
+document.querySelectorAll(".buff-choice").forEach(btn => {
+  btn.addEventListener("click", () => {
+    ws.send(JSON.stringify({ type: "cheatCode", code: "buff", buff: btn.dataset.buff }));
+    document.getElementById("buff-panel").style.display = "none";
+  });
+});
 
 function openSecretAttackPanel() {
   const list = document.getElementById("secret-attack-list");
@@ -2184,6 +2270,16 @@ function stopTargeting() {
 
 function onTargetClick(x, y) {
   const meta = ATTACKS_META[targetingAttackId] || {};
+  if (meta.target === "direction") {
+    const me = lastState.players.find(p => p.id === myId);
+    if (!me) return;
+    const dx = x - me.x, dy = y - me.y;
+    if (dx === 0 && dy === 0) return; // tap sur sa propre case : ambigu, on attend un tap plus clair
+    const dir = Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? "right" : "left") : (dy > 0 ? "down" : "up");
+    ws.send(JSON.stringify({ type: "attack", dir }));
+    stopTargeting();
+    return;
+  }
   if (meta.target === "line") {
     selectedCell = { x, y };
     document.getElementById("line-controls").style.display = "flex";

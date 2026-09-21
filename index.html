@@ -31,12 +31,6 @@
       <input id="input-pseudo" maxlength="16" placeholder="Ex: Faucon" />
     </label>
 
-    <label class="field">
-      <span>Ton avatar</span>
-      <div id="avatar-color-swatches" class="avatar-color-swatches"></div>
-      <div id="avatar-emoji-grid" class="avatar-emoji-grid"></div>
-    </label>
-
     <button id="btn-create" class="btn btn-primary">Créer une partie</button>
     <label class="toggle-field" style="margin-top:6px">
       <span class="toggle-text">Partie publique</span>
@@ -74,91 +68,100 @@
 
     <ul id="lobby-players" class="player-list"></ul>
 
-    <div id="host-maxplayers-wrap" style="display:none">
-      <label class="field">
-        <span>Joueurs max dans la partie</span>
-        <input type="number" id="lobby-maxplayers" min="2" max="6" value="6">
-      </label>
-      <label class="toggle-field">
-        <span class="toggle-text">Combler avec des bots</span>
-        <span class="toggle-switch"><input type="checkbox" id="lobby-fillbots-toggle"><span class="toggle-slider"></span></span>
-      </label>
-      <label class="field" id="lobby-fillbots-difficulty-wrap" style="display:none">
-        <span>Difficulté des bots</span>
-        <select id="lobby-fillbots-difficulty">
-          <option value="easy">Facile</option>
-          <option value="medium" selected>Moyen</option>
-          <option value="hard">Difficile</option>
-        </select>
-      </label>
-    </div>
+    <div id="host-settings-wrap" style="display:none">
+      <div class="settings-tabs" id="lobby-settings-tabs">
+        <button type="button" class="settings-tab active" data-tab="room">🏠 Salle</button>
+        <button type="button" class="settings-tab" data-tab="mode">🎮 Mode</button>
+        <button type="button" class="settings-tab" data-tab="options">⚡ Options</button>
+        <button type="button" class="settings-tab" data-tab="advanced">⚙️ Avancé</button>
+        <button type="button" class="settings-tab" data-tab="attacks">🎲 Attaques</button>
+        <button type="button" class="settings-tab" data-tab="presets">💾 Modes</button>
+      </div>
 
-    <div id="host-public-toggle-wrap" style="display:none">
-      <label class="toggle-field">
-        <span class="toggle-text">Partie publique</span>
-        <span class="toggle-switch"><input type="checkbox" id="lobby-public-toggle"><span class="toggle-slider"></span></span>
-      </label>
-    </div>
-
-    <div id="mode-select-wrap" style="display:none">
-      <label class="field">
-        <span>Mode de jeu</span>
-        <select id="mode-select"></select>
-      </label>
-      <p id="mode-desc" class="hint" style="margin-top:-8px"></p>
-      <div id="mode-config"></div>
-
-      <button type="button" id="map-field-trigger" class="map-field-trigger">
-        <span class="field-label">Carte</span>
-        <span class="map-field-value">
-          <span id="map-field-label">—</span>
-          <span class="map-field-chevron">›</span>
-        </span>
-      </button>
-      <p id="map-desc" class="hint" style="margin-top:-6px"></p>
-
-      <label class="toggle-field">
-        <span class="toggle-text">Bonus sur la carte</span>
-        <span class="toggle-switch"><input type="checkbox" id="powerups-toggle" checked><span class="toggle-slider"></span></span>
-      </label>
-      <label class="field" id="powerup-interval-wrap">
-        <span>Fréquence des bonus en secondes</span>
-        <input type="number" id="powerup-interval" min="5" max="120" value="14">
-      </label>
-
-      <label class="toggle-field">
-        <span class="toggle-text">Mode équipes</span>
-        <span class="toggle-switch"><input type="checkbox" id="teams-toggle"><span class="toggle-slider"></span></span>
-      </label>
-
-      <label class="toggle-field">
-        <span class="toggle-text">Poussée autorisée</span>
-        <span class="toggle-switch"><input type="checkbox" id="push-toggle" checked><span class="toggle-slider"></span></span>
-      </label>
-
-      <label class="toggle-field">
-        <span class="toggle-text">Zone qui rétrécit</span>
-        <span class="toggle-switch"><input type="checkbox" id="shrink-toggle"><span class="toggle-slider"></span></span>
-      </label>
-      <div id="shrink-options-wrap" style="display:none">
+      <div class="settings-panel active" data-panel="room">
         <label class="field">
-          <span>Vitesse de rétrécissement</span>
-          <select id="shrink-mode-select">
-            <option value="slow">Lent</option>
+          <span>Joueurs max dans la partie</span>
+          <input type="number" id="lobby-maxplayers" min="2" max="6" value="6">
+        </label>
+        <label class="field">
+          <span>Nombre de bots</span>
+          <input type="number" id="lobby-fillbots-count" min="0" max="5" value="0">
+        </label>
+        <label class="field" id="lobby-fillbots-difficulty-wrap" style="display:none">
+          <span>Difficulté des bots</span>
+          <select id="lobby-fillbots-difficulty">
+            <option value="easy">Facile</option>
             <option value="medium" selected>Moyen</option>
-            <option value="fast">Rapide</option>
-            <option value="onKO">À chaque K.O.</option>
-            <option value="custom">Personnalisé</option>
+            <option value="hard">Difficile</option>
           </select>
         </label>
-        <label class="field" id="shrink-custom-wrap" style="display:none">
-          <span>Intervalle personnalisé en secondes</span>
-          <input type="number" id="shrink-interval" min="3" max="300" value="18">
+        <label class="toggle-field">
+          <span class="toggle-text">Partie publique</span>
+          <span class="toggle-switch"><input type="checkbox" id="lobby-public-toggle"><span class="toggle-slider"></span></span>
         </label>
       </div>
 
-      <details class="advanced-params">
-        <summary>⚙️ Paramètres avancés</summary>
+      <div class="settings-panel" data-panel="mode">
+        <label class="field">
+          <span>Mode de jeu</span>
+          <select id="mode-select"></select>
+        </label>
+        <p id="mode-desc" class="hint" style="margin-top:-8px"></p>
+        <div id="mode-config"></div>
+
+        <button type="button" id="map-field-trigger" class="map-field-trigger">
+          <span class="field-label">Carte</span>
+          <span class="map-field-value">
+            <span id="map-field-label">—</span>
+            <span class="map-field-chevron">›</span>
+          </span>
+        </button>
+        <p id="map-desc" class="hint" style="margin-top:-6px"></p>
+      </div>
+
+      <div class="settings-panel" data-panel="options">
+        <label class="toggle-field">
+          <span class="toggle-text">Bonus sur la carte</span>
+          <span class="toggle-switch"><input type="checkbox" id="powerups-toggle" checked><span class="toggle-slider"></span></span>
+        </label>
+        <label class="field" id="powerup-interval-wrap">
+          <span>Fréquence des bonus en secondes</span>
+          <input type="number" id="powerup-interval" min="5" max="120" value="14">
+        </label>
+
+        <label class="toggle-field">
+          <span class="toggle-text">Mode équipes</span>
+          <span class="toggle-switch"><input type="checkbox" id="teams-toggle"><span class="toggle-slider"></span></span>
+        </label>
+
+        <label class="toggle-field">
+          <span class="toggle-text">Poussée autorisée</span>
+          <span class="toggle-switch"><input type="checkbox" id="push-toggle" checked><span class="toggle-slider"></span></span>
+        </label>
+
+        <label class="toggle-field">
+          <span class="toggle-text">Zone qui rétrécit</span>
+          <span class="toggle-switch"><input type="checkbox" id="shrink-toggle"><span class="toggle-slider"></span></span>
+        </label>
+        <div id="shrink-options-wrap" style="display:none">
+          <label class="field">
+            <span>Vitesse de rétrécissement</span>
+            <select id="shrink-mode-select">
+              <option value="slow">Lent</option>
+              <option value="medium" selected>Moyen</option>
+              <option value="fast">Rapide</option>
+              <option value="onKO">À chaque K.O.</option>
+              <option value="custom">Personnalisé</option>
+            </select>
+          </label>
+          <label class="field" id="shrink-custom-wrap" style="display:none">
+            <span>Intervalle personnalisé en secondes</span>
+            <input type="number" id="shrink-interval" min="3" max="300" value="18">
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-panel settings-panel-grid" data-panel="advanced">
         <label class="field"><span>PV de départ</span><input type="number" id="adv-starting-hp" min="30" max="300" value="100"></label>
         <label class="field"><span>Délai de respawn en secondes</span><input type="number" id="adv-respawn-delay" min="1" max="20" step="0.5" value="4"></label>
         <label class="field"><span>% PV au respawn</span><input type="number" id="adv-respawn-hp-percent" min="5" max="100" value="50"></label>
@@ -168,6 +171,12 @@
         <label class="field"><span>Multiplicateur de dégâts</span><input type="number" id="adv-damage-mult" min="0.25" max="3" step="0.05" value="1"></label>
         <label class="field"><span>Dégâts des tonneaux</span><input type="number" id="adv-barrel-damage" min="0" max="100" value="22"></label>
         <label class="field"><span>Bonus max simultanés sur la carte</span><input type="number" id="adv-powerup-max" min="0" max="8" value="3"></label>
+        <label class="field"><span>Multiplicateur du temps d'esquive</span><input type="number" id="adv-telegraph-mult" min="0.4" max="3" step="0.1" value="1"></label>
+        <label class="field"><span>Durée des bonus en secondes</span><input type="number" id="adv-buff-duration" min="3" max="30" step="1" value="10"></label>
+        <label class="field"><span>Force du ralentissement (boue/givre)</span><input type="number" id="adv-mud-mult" min="1" max="5" step="0.5" value="2"></label>
+        <label class="field"><span>Protection au (re)spawn en secondes</span><input type="number" id="adv-spawn-protection" min="0" max="8" step="0.5" value="0"></label>
+        <label class="field"><span>Taille de la grille</span><input type="number" id="adv-grid-size" min="8" max="16" step="1" value="12"></label>
+        <label class="field"><span>Régénération passive en PV/seconde</span><input type="number" id="adv-passive-regen" min="0" max="10" step="0.5" value="0"></label>
         <label class="toggle-field">
           <span class="toggle-text">Interdire la répétition d'arme</span>
           <span class="toggle-switch"><input type="checkbox" id="adv-weapon-no-repeat" checked><span class="toggle-slider"></span></span>
@@ -176,29 +185,21 @@
           <span class="toggle-text">Mines visibles de tous</span>
           <span class="toggle-switch"><input type="checkbox" id="adv-mine-visible"><span class="toggle-slider"></span></span>
         </label>
-        <label class="field"><span>Multiplicateur du temps d'esquive</span><input type="number" id="adv-telegraph-mult" min="0.4" max="3" step="0.1" value="1"></label>
-        <label class="field"><span>Durée des bonus en secondes</span><input type="number" id="adv-buff-duration" min="3" max="30" step="1" value="10"></label>
-        <label class="field"><span>Force du ralentissement (boue/givre)</span><input type="number" id="adv-mud-mult" min="1" max="5" step="0.5" value="2"></label>
-        <label class="field"><span>Protection au (re)spawn en secondes</span><input type="number" id="adv-spawn-protection" min="0" max="8" step="0.5" value="0"></label>
-        <label class="field"><span>Taille de la grille</span><input type="number" id="adv-grid-size" min="8" max="16" step="1" value="12"></label>
-        <label class="field"><span>Régénération passive en PV/seconde</span><input type="number" id="adv-passive-regen" min="0" max="10" step="0.5" value="0"></label>
-      </details>
+      </div>
 
-      <details class="advanced-params">
-        <summary>🎲 Paramètres des attaques</summary>
+      <div class="settings-panel" data-panel="attacks">
         <p class="hint" style="font-size:12px;margin-top:0">Ajuste le taux de tirage de chaque arme (100% = normal, 0% = désactivée). La probabilité affichée se recalcule en direct.</p>
         <div id="attack-weights-list"></div>
-      </details>
+      </div>
 
-      <details class="advanced-params">
-        <summary>💾 Mes modes personnalisés</summary>
+      <div class="settings-panel" data-panel="presets">
         <p class="hint" style="font-size:12px;margin-top:0">Enregistre la configuration actuelle (mode, carte, tous les réglages) pour la recharger en un clic la prochaine fois.</p>
         <div id="custom-modes-list"></div>
         <div style="display:flex; gap:8px; margin-top:10px">
           <input type="text" id="custom-mode-name" maxlength="24" placeholder="Nom du préréglage" style="flex:1; padding:10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--text); font-size:14px">
           <button id="btn-save-custom-mode" class="btn btn-secondary" style="width:auto; padding:10px 16px; flex-shrink:0">💾 Enregistrer</button>
         </div>
-      </details>
+      </div>
     </div>
 
     <button id="btn-start" class="btn btn-primary" style="display:none">Démarrer la partie</button>
@@ -218,65 +219,76 @@
     <ul id="end-stats" class="player-list"></ul>
 
     <div id="end-host-controls" style="display:none">
-      <div class="divider"><span>rejouer</span></div>
-      <label class="field">
-        <span>Mode de jeu</span>
-        <select id="end-mode-select"></select>
-      </label>
-      <p id="end-mode-desc" class="hint" style="margin-top:-8px"></p>
-      <div id="end-mode-config"></div>
-
-      <button type="button" id="end-map-field-trigger" class="map-field-trigger">
-        <span class="field-label">Carte</span>
-        <span class="map-field-value">
-          <span id="end-map-field-label">—</span>
-          <span class="map-field-chevron">›</span>
-        </span>
-      </button>
-      <p id="end-map-desc" class="hint" style="margin-top:-6px"></p>
-
-      <label class="toggle-field">
-        <span class="toggle-text">Bonus sur la carte</span>
-        <span class="toggle-switch"><input type="checkbox" id="end-powerups-toggle" checked><span class="toggle-slider"></span></span>
-      </label>
-      <label class="field" id="end-powerup-interval-wrap">
-        <span>Fréquence des bonus en secondes</span>
-        <input type="number" id="end-powerup-interval" min="5" max="120" value="14">
-      </label>
-
-      <label class="toggle-field">
-        <span class="toggle-text">Mode équipes</span>
-        <span class="toggle-switch"><input type="checkbox" id="end-teams-toggle"><span class="toggle-slider"></span></span>
-      </label>
-
-      <label class="toggle-field">
-        <span class="toggle-text">Poussée autorisée</span>
-        <span class="toggle-switch"><input type="checkbox" id="end-push-toggle" checked><span class="toggle-slider"></span></span>
-      </label>
-
-      <label class="toggle-field">
-        <span class="toggle-text">Zone qui rétrécit</span>
-        <span class="toggle-switch"><input type="checkbox" id="end-shrink-toggle"><span class="toggle-slider"></span></span>
-      </label>
-      <div id="end-shrink-options-wrap" style="display:none">
-        <label class="field">
-          <span>Vitesse de rétrécissement</span>
-          <select id="end-shrink-mode-select">
-            <option value="slow">Lent</option>
-            <option value="medium" selected>Moyen</option>
-            <option value="fast">Rapide</option>
-            <option value="onKO">À chaque K.O.</option>
-            <option value="custom">Personnalisé</option>
-          </select>
-        </label>
-        <label class="field" id="end-shrink-custom-wrap" style="display:none">
-          <span>Intervalle personnalisé en secondes</span>
-          <input type="number" id="end-shrink-interval" min="3" max="300" value="18">
-        </label>
+      <button type="button" id="btn-toggle-end-settings" class="btn btn-secondary">⚙️ Modifier les paramètres</button>
+      <div id="end-settings-form" style="display:none">
+      <div class="settings-tabs" id="end-settings-tabs">
+        <button type="button" class="settings-tab active" data-tab="mode">🎮 Mode</button>
+        <button type="button" class="settings-tab" data-tab="options">⚡ Options</button>
+        <button type="button" class="settings-tab" data-tab="advanced">⚙️ Avancé</button>
+        <button type="button" class="settings-tab" data-tab="attacks">🎲 Attaques</button>
       </div>
 
-      <details class="advanced-params">
-        <summary>⚙️ Paramètres avancés</summary>
+      <div class="settings-panel active" data-panel="mode">
+        <label class="field">
+          <span>Mode de jeu</span>
+          <select id="end-mode-select"></select>
+        </label>
+        <p id="end-mode-desc" class="hint" style="margin-top:-8px"></p>
+        <div id="end-mode-config"></div>
+
+        <button type="button" id="end-map-field-trigger" class="map-field-trigger">
+          <span class="field-label">Carte</span>
+          <span class="map-field-value">
+            <span id="end-map-field-label">—</span>
+            <span class="map-field-chevron">›</span>
+          </span>
+        </button>
+        <p id="end-map-desc" class="hint" style="margin-top:-6px"></p>
+      </div>
+
+      <div class="settings-panel" data-panel="options">
+        <label class="toggle-field">
+          <span class="toggle-text">Bonus sur la carte</span>
+          <span class="toggle-switch"><input type="checkbox" id="end-powerups-toggle" checked><span class="toggle-slider"></span></span>
+        </label>
+        <label class="field" id="end-powerup-interval-wrap">
+          <span>Fréquence des bonus en secondes</span>
+          <input type="number" id="end-powerup-interval" min="5" max="120" value="14">
+        </label>
+
+        <label class="toggle-field">
+          <span class="toggle-text">Mode équipes</span>
+          <span class="toggle-switch"><input type="checkbox" id="end-teams-toggle"><span class="toggle-slider"></span></span>
+        </label>
+
+        <label class="toggle-field">
+          <span class="toggle-text">Poussée autorisée</span>
+          <span class="toggle-switch"><input type="checkbox" id="end-push-toggle" checked><span class="toggle-slider"></span></span>
+        </label>
+
+        <label class="toggle-field">
+          <span class="toggle-text">Zone qui rétrécit</span>
+          <span class="toggle-switch"><input type="checkbox" id="end-shrink-toggle"><span class="toggle-slider"></span></span>
+        </label>
+        <div id="end-shrink-options-wrap" style="display:none">
+          <label class="field">
+            <span>Vitesse de rétrécissement</span>
+            <select id="end-shrink-mode-select">
+              <option value="slow">Lent</option>
+              <option value="medium" selected>Moyen</option>
+              <option value="fast">Rapide</option>
+              <option value="onKO">À chaque K.O.</option>
+              <option value="custom">Personnalisé</option>
+            </select>
+          </label>
+          <label class="field" id="end-shrink-custom-wrap" style="display:none">
+            <span>Intervalle personnalisé en secondes</span>
+            <input type="number" id="end-shrink-interval" min="3" max="300" value="18">
+          </label>
+        </div>
+      </div>
+
+      <div class="settings-panel settings-panel-grid" data-panel="advanced">
         <label class="field"><span>PV de départ</span><input type="number" id="end-adv-starting-hp" min="30" max="300" value="100"></label>
         <label class="field"><span>Délai de respawn en secondes</span><input type="number" id="end-adv-respawn-delay" min="1" max="20" step="0.5" value="4"></label>
         <label class="field"><span>% PV au respawn</span><input type="number" id="end-adv-respawn-hp-percent" min="5" max="100" value="50"></label>
@@ -286,6 +298,12 @@
         <label class="field"><span>Multiplicateur de dégâts</span><input type="number" id="end-adv-damage-mult" min="0.25" max="3" step="0.05" value="1"></label>
         <label class="field"><span>Dégâts des tonneaux</span><input type="number" id="end-adv-barrel-damage" min="0" max="100" value="22"></label>
         <label class="field"><span>Bonus max simultanés sur la carte</span><input type="number" id="end-adv-powerup-max" min="0" max="8" value="3"></label>
+        <label class="field"><span>Multiplicateur du temps d'esquive</span><input type="number" id="end-adv-telegraph-mult" min="0.4" max="3" step="0.1" value="1"></label>
+        <label class="field"><span>Durée des bonus en secondes</span><input type="number" id="end-adv-buff-duration" min="3" max="30" step="1" value="10"></label>
+        <label class="field"><span>Force du ralentissement (boue/givre)</span><input type="number" id="end-adv-mud-mult" min="1" max="5" step="0.5" value="2"></label>
+        <label class="field"><span>Protection au (re)spawn en secondes</span><input type="number" id="end-adv-spawn-protection" min="0" max="8" step="0.5" value="0"></label>
+        <label class="field"><span>Taille de la grille</span><input type="number" id="end-adv-grid-size" min="8" max="16" step="1" value="12"></label>
+        <label class="field"><span>Régénération passive en PV/seconde</span><input type="number" id="end-adv-passive-regen" min="0" max="10" step="0.5" value="0"></label>
         <label class="toggle-field">
           <span class="toggle-text">Interdire la répétition d'arme</span>
           <span class="toggle-switch"><input type="checkbox" id="end-adv-weapon-no-repeat" checked><span class="toggle-slider"></span></span>
@@ -294,19 +312,13 @@
           <span class="toggle-text">Mines visibles de tous</span>
           <span class="toggle-switch"><input type="checkbox" id="end-adv-mine-visible"><span class="toggle-slider"></span></span>
         </label>
-        <label class="field"><span>Multiplicateur du temps d'esquive</span><input type="number" id="end-adv-telegraph-mult" min="0.4" max="3" step="0.1" value="1"></label>
-        <label class="field"><span>Durée des bonus en secondes</span><input type="number" id="end-adv-buff-duration" min="3" max="30" step="1" value="10"></label>
-        <label class="field"><span>Force du ralentissement (boue/givre)</span><input type="number" id="end-adv-mud-mult" min="1" max="5" step="0.5" value="2"></label>
-        <label class="field"><span>Protection au (re)spawn en secondes</span><input type="number" id="end-adv-spawn-protection" min="0" max="8" step="0.5" value="0"></label>
-        <label class="field"><span>Taille de la grille</span><input type="number" id="end-adv-grid-size" min="8" max="16" step="1" value="12"></label>
-        <label class="field"><span>Régénération passive en PV/seconde</span><input type="number" id="end-adv-passive-regen" min="0" max="10" step="0.5" value="0"></label>
-      </details>
+      </div>
 
-      <details class="advanced-params">
-        <summary>🎲 Paramètres des attaques</summary>
+      <div class="settings-panel" data-panel="attacks">
         <p class="hint" style="font-size:12px;margin-top:0">Ajuste le taux de tirage de chaque arme (100% = normal, 0% = désactivée). La probabilité affichée se recalcule en direct.</p>
         <div id="end-attack-weights-list"></div>
-      </details>
+      </div>
+      </div>
 
       <button id="btn-restart" class="btn btn-primary">Rejouer</button>
     </div>
@@ -361,8 +373,6 @@
   <div class="energy-bar-wrap">
     <div id="energy-bar" class="energy-bar"><div id="energy-fill" class="energy-fill"></div></div>
   </div>
-
-  <div id="log-feed" class="log-feed"></div>
 </section>
 
 <div id="nuke-overlay" class="nuke-overlay" style="display:none">
@@ -388,6 +398,11 @@
     <h2 class="lobby-title" style="font-size:18px">⚙️ Paramètres généraux</h2>
     <p class="hint" style="font-size:12px">Ces réglages sont personnels, enregistrés sur cet appareil.</p>
 
+    <label class="field">
+      <span>Ta couleur</span>
+      <div id="avatar-color-swatches" class="avatar-color-swatches"></div>
+    </label>
+
     <label class="toggle-field">
       <span class="toggle-text">Réduire les animations</span>
       <span class="toggle-switch"><input type="checkbox" id="gs-reduce-motion"><span class="toggle-slider"></span></span>
@@ -405,6 +420,30 @@
     <div id="gs-emoji-grid" class="avatar-emoji-grid"></div>
 
     <button id="btn-close-general-settings" class="btn btn-primary" style="margin-top:12px">Fermer</button>
+  </div>
+</div>
+
+<div id="nuke-confirm-panel" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:380px">
+    <h2 class="lobby-title" style="font-size:18px">☢️ Code secret détecté</h2>
+    <p class="hint" style="font-size:14px; color:var(--text)">Voulez-vous obtenir la bombe nucléaire ?</p>
+    <div style="display:flex; gap:8px; margin-top:12px">
+      <button type="button" id="btn-nuke-confirm-no" class="btn btn-secondary" style="flex:1">Non</button>
+      <button type="button" id="btn-nuke-confirm-yes" class="btn btn-primary" style="flex:1">Oui</button>
+    </div>
+  </div>
+</div>
+
+<div id="buff-panel" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:380px">
+    <h2 class="lobby-title" style="font-size:18px">🕹️ Code secret détecté</h2>
+    <p class="hint" style="font-size:13px">Choisis ton effet — appliqué immédiatement, sans consommer de tour.</p>
+    <div class="secret-attack-list" style="grid-template-columns:1fr">
+      <button type="button" class="secret-attack-choice buff-choice" data-buff="heal">🩹 Soin complet</button>
+      <button type="button" class="secret-attack-choice buff-choice" data-buff="shield">🛡️ Bouclier</button>
+      <button type="button" class="secret-attack-choice buff-choice" data-buff="speed">⚡ Vitesse</button>
+    </div>
+    <button type="button" id="btn-close-buff-panel" class="btn btn-secondary" style="margin-top:10px">Fermer</button>
   </div>
 </div>
 
