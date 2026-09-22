@@ -18,6 +18,7 @@
 </head>
 <body>
 
+<div id="offline-banner" class="connection-banner offline-banner" style="display:none">📶 Pas de connexion Internet</div>
 <div id="connection-banner" class="connection-banner" style="display:none"></div>
 
 <!-- ===== ECRAN ACCUEIL ===== -->
@@ -38,6 +39,7 @@
     </label>
 
     <button id="btn-general-settings" class="btn btn-secondary" style="margin-top:6px">⚙️ Paramètres généraux</button>
+    <button id="btn-show-tutorial" class="btn btn-secondary" style="margin-top:6px">❓ Comment jouer</button>
 
     <button id="btn-install" class="fab-install" style="display:none" aria-label="Installer l'app" title="Installer l'app">📲</button>
 
@@ -63,8 +65,15 @@
   <div class="card">
     <h2 class="lobby-title">Salle d'attente</h2>
     <p class="room-code-label">Code de la partie</p>
-    <p id="room-code" class="room-code">------</p>
-    <p class="hint">Partage ce code avec tes amis pour qu'ils rejoignent.</p>
+    <button type="button" id="room-code" class="room-code" title="Partager le code">------</button>
+    <p class="hint">Tape le code pour le partager avec tes amis.</p>
+    <div class="room-code-actions">
+      <button type="button" id="btn-copy-code" class="btn btn-secondary room-code-action-btn">📋 Copier le code</button>
+    </div>
+    <div id="room-qr-wrap" class="room-qr-wrap" style="display:none">
+      <div id="room-qr"></div>
+      <p class="hint" style="font-size:11px;margin-top:6px">Scanne pour rejoindre directement</p>
+    </div>
 
     <ul id="lobby-players" class="player-list"></ul>
 
@@ -159,6 +168,19 @@
             <input type="number" id="shrink-interval" min="3" max="300" value="18">
           </label>
         </div>
+
+        <label class="toggle-field">
+          <span class="toggle-text">Main de 2 armes (choisir laquelle utiliser)</span>
+          <span class="toggle-switch"><input type="checkbox" id="two-weapon-toggle"><span class="toggle-slider"></span></span>
+        </label>
+
+        <label class="toggle-field">
+          <span class="toggle-text">Cacher l'arme aux autres joueurs</span>
+          <span class="toggle-switch"><input type="checkbox" id="hide-attack-toggle" checked><span class="toggle-slider"></span></span>
+        </label>
+
+        <p class="hint" style="font-size:12px;margin:14px 0 4px;text-align:left">Modificateurs de carte (cumulables)</p>
+        <div id="map-modifiers-list"></div>
       </div>
 
       <div class="settings-panel settings-panel-grid" data-panel="advanced">
@@ -175,7 +197,6 @@
         <label class="field"><span>Durée des bonus en secondes</span><input type="number" id="adv-buff-duration" min="3" max="30" step="1" value="10"></label>
         <label class="field"><span>Force du ralentissement (boue/givre)</span><input type="number" id="adv-mud-mult" min="1" max="5" step="0.5" value="2"></label>
         <label class="field"><span>Protection au (re)spawn en secondes</span><input type="number" id="adv-spawn-protection" min="0" max="8" step="0.5" value="0"></label>
-        <label class="field"><span>Taille de la grille</span><input type="number" id="adv-grid-size" min="8" max="16" step="1" value="12"></label>
         <label class="field"><span>Régénération passive en PV/seconde</span><input type="number" id="adv-passive-regen" min="0" max="10" step="0.5" value="0"></label>
         <label class="toggle-field">
           <span class="toggle-text">Interdire la répétition d'arme</span>
@@ -195,10 +216,9 @@
       <div class="settings-panel" data-panel="presets">
         <p class="hint" style="font-size:12px;margin-top:0">Enregistre la configuration actuelle (mode, carte, tous les réglages) pour la recharger en un clic la prochaine fois.</p>
         <div id="custom-modes-list"></div>
-        <div style="display:flex; gap:8px; margin-top:10px">
-          <input type="text" id="custom-mode-name" maxlength="24" placeholder="Nom du préréglage" style="flex:1; padding:10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--text); font-size:14px">
-          <button id="btn-save-custom-mode" class="btn btn-secondary" style="width:auto; padding:10px 16px; flex-shrink:0">💾 Enregistrer</button>
-        </div>
+        <input type="text" id="custom-mode-name" maxlength="24" placeholder="Nom du préréglage" style="width:100%; padding:10px; margin-top:10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--text); font-size:14px; box-sizing:border-box">
+        <button id="btn-save-custom-mode" class="btn btn-secondary" style="margin-top:8px">💾 Enregistrer</button>
+        <button id="btn-cancel-edit-custom-mode" class="btn btn-secondary" style="margin-top:8px; display:none">Annuler la modification</button>
       </div>
     </div>
 
@@ -217,6 +237,7 @@
     <p id="end-winner" class="hint" style="font-size:16px;color:var(--accent)"></p>
 
     <ul id="end-stats" class="player-list"></ul>
+    <div id="end-awards"></div>
 
     <div id="end-host-controls" style="display:none">
       <button type="button" id="btn-toggle-end-settings" class="btn btn-secondary">⚙️ Modifier les paramètres</button>
@@ -286,6 +307,19 @@
             <input type="number" id="end-shrink-interval" min="3" max="300" value="18">
           </label>
         </div>
+
+        <label class="toggle-field">
+          <span class="toggle-text">Main de 2 armes (choisir laquelle utiliser)</span>
+          <span class="toggle-switch"><input type="checkbox" id="end-two-weapon-toggle"><span class="toggle-slider"></span></span>
+        </label>
+
+        <label class="toggle-field">
+          <span class="toggle-text">Cacher l'arme aux autres joueurs</span>
+          <span class="toggle-switch"><input type="checkbox" id="end-hide-attack-toggle" checked><span class="toggle-slider"></span></span>
+        </label>
+
+        <p class="hint" style="font-size:12px;margin:14px 0 4px;text-align:left">Modificateurs de carte (cumulables)</p>
+        <div id="end-map-modifiers-list"></div>
       </div>
 
       <div class="settings-panel settings-panel-grid" data-panel="advanced">
@@ -302,7 +336,6 @@
         <label class="field"><span>Durée des bonus en secondes</span><input type="number" id="end-adv-buff-duration" min="3" max="30" step="1" value="10"></label>
         <label class="field"><span>Force du ralentissement (boue/givre)</span><input type="number" id="end-adv-mud-mult" min="1" max="5" step="0.5" value="2"></label>
         <label class="field"><span>Protection au (re)spawn en secondes</span><input type="number" id="end-adv-spawn-protection" min="0" max="8" step="0.5" value="0"></label>
-        <label class="field"><span>Taille de la grille</span><input type="number" id="end-adv-grid-size" min="8" max="16" step="1" value="12"></label>
         <label class="field"><span>Régénération passive en PV/seconde</span><input type="number" id="end-adv-passive-regen" min="0" max="10" step="0.5" value="0"></label>
         <label class="toggle-field">
           <span class="toggle-text">Interdire la répétition d'arme</span>
@@ -335,7 +368,10 @@
 
   <header class="hud">
     <div id="mode-status" class="mode-status"></div>
-    <div id="turn-banner" class="turn-banner">En attente du prochain tour…</div>
+    <div id="turn-banner" class="turn-banner">
+      <span id="turn-banner-text">En attente du prochain tour…</span>
+      <div id="alt-weapon-picker" class="alt-weapon-picker" style="display:none"></div>
+    </div>
     <div id="turn-timer-bar" class="turn-timer-bar" style="display:none"><div id="turn-timer-fill" class="turn-timer-fill"></div></div>
     <div id="my-hp-bar" class="my-hp-bar"><div class="my-hp-fill"></div></div>
   </header>
@@ -393,6 +429,38 @@
   </div>
 </div>
 
+<div id="tutorial-modal" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:380px">
+    <div id="tutorial-slides">
+      <div class="tutorial-slide active" data-slide="0">
+        <div class="tutorial-icon">⚓</div>
+        <h2 class="lobby-title" style="font-size:19px">Bienvenue dans CapNaval !</h2>
+        <p class="hint" style="font-size:13.5px">Un jeu de combat au tour par tour, tactique et chaotique à la fois. Petit tour du propriétaire en 3 écrans.</p>
+      </div>
+      <div class="tutorial-slide" data-slide="1">
+        <div class="tutorial-icon">👆</div>
+        <h2 class="lobby-title" style="font-size:19px">Déplace-toi</h2>
+        <p class="hint" style="font-size:13.5px">Glisse ton doigt sur le plateau dans la direction voulue pour te déplacer, case par case. Attention aux murs et aux tonneaux !</p>
+      </div>
+      <div class="tutorial-slide" data-slide="2">
+        <div class="tutorial-icon">⚔️</div>
+        <h2 class="lobby-title" style="font-size:19px">Attaque à ton tour</h2>
+        <p class="hint" style="font-size:13.5px">Une arme aléatoire t'est attribuée à chaque tour. Tape une case pour viser, ou utilise les flèches à l'écran pour les attaques en ligne.</p>
+      </div>
+      <div class="tutorial-slide" data-slide="3">
+        <div class="tutorial-icon">🏆</div>
+        <h2 class="lobby-title" style="font-size:19px">À toi de jouer !</h2>
+        <p class="hint" style="font-size:13.5px">Survis, élimine tes adversaires, et découvre les dizaines d'attaques et de modes de jeu. Amuse-toi bien !</p>
+      </div>
+    </div>
+    <div id="tutorial-dots" class="tutorial-dots"></div>
+    <div style="display:flex; gap:8px; margin-top:14px">
+      <button type="button" id="btn-tutorial-skip" class="btn btn-secondary" style="flex:1">Passer</button>
+      <button type="button" id="btn-tutorial-next" class="btn btn-primary" style="flex:1">Suivant</button>
+    </div>
+  </div>
+</div>
+
 <div id="general-settings-modal" class="ios-install-modal" style="display:none">
   <div class="card" style="max-width:380px">
     <h2 class="lobby-title" style="font-size:18px">⚙️ Paramètres généraux</h2>
@@ -408,8 +476,12 @@
       <span class="toggle-switch"><input type="checkbox" id="gs-reduce-motion"><span class="toggle-slider"></span></span>
     </label>
     <label class="toggle-field">
-      <span class="toggle-text">Muet</span>
-      <span class="toggle-switch"><input type="checkbox" id="gs-mute"><span class="toggle-slider"></span></span>
+      <span class="toggle-text">Effets sonores</span>
+      <span class="toggle-switch"><input type="checkbox" id="gs-sound" checked><span class="toggle-slider"></span></span>
+    </label>
+    <label class="toggle-field">
+      <span class="toggle-text">Vibrations</span>
+      <span class="toggle-switch"><input type="checkbox" id="gs-vibration" checked><span class="toggle-slider"></span></span>
     </label>
     <label class="toggle-field">
       <span class="toggle-text">Palette daltonien</span>
@@ -459,7 +531,7 @@
 <div id="map-editor-modal" class="ios-install-modal" style="display:none">
   <div class="card" style="max-width:380px">
     <h2 class="lobby-title" style="font-size:18px">Éditeur de carte</h2>
-    <p class="hint" style="font-size:12px">Tape une case pour faire défiler : vide → mur → tonneau → boue → vide.</p>
+    <p class="hint" style="font-size:12px">Tape une case pour faire défiler : vide → mur → tonneau → boue → soin → téléport → cassable → paratonnerre → buisson → vide.</p>
     <div id="map-editor-grid" class="map-editor-grid"></div>
     <p id="map-editor-counts" class="hint" style="font-size:12px"></p>
     <p id="map-editor-error" class="error" style="font-size:12px"></p>
@@ -484,6 +556,7 @@
   </div>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
 <script src="app.js"></script>
 </body>
 </html>

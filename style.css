@@ -157,7 +157,9 @@ html, body {
   position: fixed; top: 0; left: 0; right: 0; z-index: 100;
   background: var(--danger); color: #fff; text-align: center;
   padding: 8px 12px; font-size: 13px; font-weight: 600;
+  transition: top .2s ease;
 }
+.offline-banner { background: #4b5563; z-index: 101; }
 
 .team-badge {
   display: inline-flex; align-items: center; justify-content: center;
@@ -185,12 +187,33 @@ html, body {
 
 .lobby-title { font-family: var(--font-display); font-size: 26px; margin: 0 0 4px; text-align: center; }
 .room-code-label { text-align: center; color: var(--text-dim); font-size: 13px; margin: 12px 0 2px; }
-.room-code { text-align: center; font-family: var(--font-display); font-size: 44px; letter-spacing: 6px; color: var(--accent); margin: 0; }
+.room-code {
+  display: block; width: 100%; text-align: center; font-family: var(--font-display);
+  font-size: 44px; letter-spacing: 6px; color: var(--accent); margin: 0;
+  background: none; border: none; padding: 4px; cursor: pointer;
+  border-radius: 10px; transition: background-color .15s ease;
+}
+.room-code:active { background: var(--panel-2); }
 .hint { text-align: center; color: var(--text-dim); font-size: 13px; margin: 10px 0 18px; }
+
+.room-code-actions { display: flex; justify-content: center; margin: -8px 0 12px; }
+.room-code-action-btn { width: auto; padding: 8px 16px; font-size: 13px; }
+.room-qr-wrap { display: flex; flex-direction: column; align-items: center; margin-bottom: 16px; }
+.room-qr-wrap #room-qr { background: #fff; padding: 8px; border-radius: 10px; line-height: 0; }
 
 .player-list { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .player-list li { display: flex; align-items: center; gap: 10px; background: var(--panel-2); padding: 8px 12px; border-radius: 8px; }
 .player-list li.boss-row { border: 1px solid #eab308; background: rgba(234,179,8,.1); }
+
+.award-row {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px 12px; margin-bottom: 8px;
+}
+.award-icon { font-size: 24px; flex-shrink: 0; }
+.award-text { display: flex; flex-direction: column; gap: 1px; }
+.award-title { font-size: 13px; font-weight: 700; color: var(--text); }
+.award-detail { font-size: 12px; color: var(--text-dim); }
 
 .cell.flag-base { box-shadow: inset 0 0 0 2px rgba(255,255,255,.35); }
 .cell.flag-base-A { background: rgba(239,68,68,.16); }
@@ -198,6 +221,16 @@ html, body {
 .flag-marker { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 60%; pointer-events: none; }
 .flag-marker-A { filter: drop-shadow(0 0 3px rgba(239,68,68,.8)); }
 .flag-marker-B { filter: drop-shadow(0 0 3px rgba(59,130,246,.8)); }
+.zombie-marker {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 62%; pointer-events: none; z-index: 3;
+  filter: drop-shadow(0 0 4px rgba(134,239,172,.7));
+  animation: zombie-bob 1.1s ease-in-out infinite;
+}
+@keyframes zombie-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
 .player-list .dot { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0; }
 .player-list .pname { flex: 1; font-weight: 500; }
 .player-list .hpbar { width: 70px; height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
@@ -243,6 +276,58 @@ html, body {
   border-bottom: 1.5px solid rgba(0,0,0,.4);
 }
 .cell.mud { background: #3d3220; }
+
+/* ---- Carte Labo : soin / téléportation / paratonnerre ---- */
+.cell.tile-heal { background: #103324; }
+.cell.tile-heal::after {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 34%; height: 10%; background: #34d399; border-radius: 2px; box-shadow: 0 0 6px rgba(52,211,153,.7);
+}
+.cell.tile-heal::before {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(90deg);
+  width: 34%; height: 10%; background: #34d399; border-radius: 2px; box-shadow: 0 0 6px rgba(52,211,153,.7);
+}
+.cell.tile-teleport { background: #241b3d; }
+.cell.tile-teleport::after {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: 60%; height: 60%; border-radius: 50%;
+  background: radial-gradient(circle, #c084fc 0%, #7c3aed 55%, transparent 75%);
+  animation: portal-spin 2.2s linear infinite;
+}
+@keyframes portal-spin { from { transform: translate(-50%, -50%) rotate(0deg) scale(1); } to { transform: translate(-50%, -50%) rotate(360deg) scale(1); } }
+.cell.tile-rod::after {
+  content: ""; position: absolute; left: 50%; bottom: 8%; transform: translateX(-50%);
+  width: 8%; height: 55%; background: #9ca3af; border-radius: 2px;
+}
+.cell.tile-rod::before {
+  content: ""; position: absolute; left: 50%; top: 12%; transform: translateX(-50%);
+  width: 22%; height: 22%; border-radius: 50%; background: #fde047;
+  box-shadow: 0 0 8px 2px rgba(253,224,71,.8); animation: rod-pulse 1s ease-in-out infinite alternate;
+}
+@keyframes rod-pulse { from { opacity: .6; } to { opacity: 1; } }
+
+/* ---- Carte Jardin : buisson / mur cassable ---- */
+.cell.tile-bush::after {
+  content: ""; position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%);
+  width: 70%; height: 55%; border-radius: 50% 50% 45% 45%;
+  background: radial-gradient(circle at 35% 35%, #4ade80, #16803d 75%);
+}
+.cell.tile-bush::before {
+  content: ""; position: absolute; left: 32%; top: 30%;
+  width: 30%; height: 30%; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #4ade80, #15803d 75%);
+}
+.cell.tile-breakable { background: #4a3624; }
+.cell.tile-breakable::after {
+  content: ""; position: absolute; inset: 2px; border-radius: 2px;
+  background: repeating-linear-gradient(45deg, #5c4630, #5c4630 4px, #4a3624 4px, #4a3624 8px);
+}
+.cell.tile-breakable::before {
+  content: ""; position: absolute; inset: 0;
+  background:
+    linear-gradient(105deg, transparent 46%, #2a1d10 47%, #2a1d10 49%, transparent 50%),
+    linear-gradient(15deg, transparent 56%, #2a1d10 57%, #2a1d10 59%, transparent 60%);
+}
 .powerup {
   position: absolute; inset: 4px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
@@ -257,6 +342,13 @@ html, body {
   padding: 10px 14px; text-align: center; font-weight: 600; font-size: 14px;
 }
 .turn-banner.my-turn { border-color: var(--accent); color: var(--accent); }
+.alt-weapon-picker { display: flex; gap: 8px; margin: 10px -4px -4px; padding-top: 10px; border-top: 1px solid var(--line); }
+.alt-weapon-choice {
+  flex: 1; padding: 8px 6px; font-size: 12.5px; font-weight: 600;
+  background: var(--panel-2); color: var(--text-dim); border: 1px solid var(--line); border-radius: 8px;
+  cursor: pointer;
+}
+.alt-weapon-choice.active { background: var(--accent-dim); color: var(--accent); border-color: var(--accent); }
 .my-hp-bar { height: 10px; background: var(--panel-2); border-radius: 5px; overflow: hidden; border: 1px solid var(--line); }
 .my-hp-fill { height: 100%; width: 100%; background: var(--hp-full); transition: width .2s; }
 .turn-timer-bar { height: 5px; background: var(--panel-2); border-radius: 3px; overflow: hidden; }
@@ -281,7 +373,7 @@ html, body {
   content: ""; position: absolute; inset: 4px;
   border: 1.5px dashed var(--accent-dim); border-radius: 4px; opacity: .6;
 }
-.cell.targetable { background: #2a2117; }
+.cell.targetable { background: none; }
 .cell.hazard-mine::before {
   content: "✕"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   color: var(--danger); font-size: 10px; animation: pulse-warn 1.1s ease-in-out infinite;
@@ -304,6 +396,9 @@ html, body {
   z-index: 3;
 }
 .player-token.no-glide { transition: none; }
+.player-token.boss-token {
+  border-radius: 8px; box-shadow: 0 0 0 2px #eab308 inset, 0 0 12px rgba(234,179,8,.6);
+}
 .player-token .pseudo-label {
   position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
   font-size: 9px; white-space: nowrap; color: var(--text);
@@ -311,6 +406,8 @@ html, body {
 }
 .player-token.me { box-shadow: 0 0 0 2px #fff inset; }
 .player-token.dead { opacity: .25; }
+.player-token.hidden-in-bush { opacity: 0; pointer-events: none; }
+.player-token.me.hidden-in-bush { opacity: .35; pointer-events: auto; } /* toi, tu te vois toujours un peu */
 .player-token.disconnected { filter: grayscale(1); opacity: .5; }
 .player-token.ko-shake { animation: ko-shake .45s ease; }
 
@@ -641,6 +738,11 @@ html, body {
 .me-cell.me-wall { background: #4a5062; }
 .me-cell.me-barrel { background: #8a5a2a; }
 .me-cell.me-mud { background: #5a4a2a; }
+.me-cell.me-heal { background: #16a34a; }
+.me-cell.me-teleport { background: #9333ea; }
+.me-cell.me-breakable { background: #6b4a2e; }
+.me-cell.me-lightningRod { background: #ca8a04; }
+.me-cell.me-bush { background: #22c55e; }
 
 /* ---- Onglets de paramètres (salle, mode, options, avancé, attaques, modes) ---- */
 .settings-tabs {
@@ -723,6 +825,13 @@ html, body {
   cursor: pointer; padding: 0;
 }
 .avatar-swatch.selected { border-color: #fff; box-shadow: 0 0 0 2px var(--accent); }
+
+.tutorial-slide { display: none; text-align: center; padding: 6px 0 2px; }
+.tutorial-slide.active { display: block; }
+.tutorial-icon { font-size: 52px; margin-bottom: 10px; line-height: 1; }
+.tutorial-dots { display: flex; justify-content: center; gap: 6px; margin-top: 10px; }
+.tutorial-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--line); }
+.tutorial-dot.active { background: var(--accent); }
 .avatar-emoji-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
 .avatar-emoji-btn {
   font-size: 22px; padding: 8px 0; text-align: center;

@@ -1,7 +1,7 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
 // (ex: "https://capnaval.onrender.com")
-const BACKEND_URL = "https://capnaval-backend.onrender.com";
+const BACKEND_URL = "https://capnaval.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
 const ATTACKS_META = {
@@ -34,9 +34,9 @@ const ATTACKS_META = {
 // Thème visuel + icône par attaque (regroupe les animations par famille plutôt
 // que d'en écrire une par attaque : plus lisible, tout aussi distinctif à l'écran)
 const ATTACK_THEME = {
-  meteor: "fire", airstrike: "fire", meteorShower: "fire", napalm: "fire", grenade: "fire",
-  snipe: "physical", gunline: "physical", laser: "physical", charge: "physical", arrow: "physical", earthquake: "physical",
-  poison: "poison", acidRain: "poison",
+  meteor: "fire", airstrike: "fire", meteorShower: "fire", napalm: "fire", grenade: "fire", meteorRain: "fire",
+  snipe: "physical", gunline: "physical", laser: "physical", charge: "physical", arrow: "physical", earthquake: "physical", storm: "physical",
+  poison: "poison", acidRain: "poison", acidRainMod: "poison",
   frost: "ice",
   tornado: "control", net: "control", chainLightning: "physical",
   heal: "heal", healZone: "heal", shield: "shield", teleport: "teleport", mine: "trap",
@@ -63,6 +63,7 @@ let selectedCell = null;
 let MODES_META = {};
 let MAPS_META = {};
 let ATTACKS_LIST = [];
+let MAP_MODIFIERS_META = {};
 const mapWheelStates = new Map(); // containerId -> état de la roue (rotation, sélection...)
 let lastMyHp = null;
 let chronoTickHandle = null;
@@ -272,30 +273,31 @@ document.getElementById("btn-confirm-map").addEventListener("click", closeMapMod
 
 // ---------- Éditeur de carte personnalisée (enregistré en local sur l'appareil) ----------
 const CUSTOM_MAP_KEY = "capnaval_custom_map";
-const CUSTOM_MAP_CYCLE = ["empty", "wall", "barrel", "mud"];
+const CUSTOM_MAP_TYPES = ["wall", "barrel", "mud", "heal", "teleport", "breakable", "lightningRod", "bush"];
+const CUSTOM_MAP_KEY_BY_TYPE = { wall: "walls", barrel: "barrels", mud: "mud", heal: "heal", teleport: "teleport", breakable: "breakable", lightningRod: "lightningRod", bush: "bush" };
+const CUSTOM_MAP_CYCLE = ["empty", ...CUSTOM_MAP_TYPES];
+function emptyCustomMap() { return { walls: [], barrels: [], mud: [], heal: [], teleport: [], breakable: [], lightningRod: [], bush: [] }; }
 
 function loadCustomMap() {
   try {
     const raw = localStorage.getItem(CUSTOM_MAP_KEY);
-    if (!raw) return { walls: [], barrels: [], mud: [] };
+    const base = emptyCustomMap();
+    if (!raw) return base;
     const parsed = JSON.parse(raw);
-    return {
-      walls: Array.isArray(parsed.walls) ? parsed.walls : [],
-      barrels: Array.isArray(parsed.barrels) ? parsed.barrels : [],
-      mud: Array.isArray(parsed.mud) ? parsed.mud : [],
-    };
-  } catch (e) { return { walls: [], barrels: [], mud: [] }; }
+    Object.keys(base).forEach(k => { if (Array.isArray(parsed[k])) base[k] = parsed[k]; });
+    return base;
+  } catch (e) { return emptyCustomMap(); }
 }
 function saveCustomMapToStorage(data) {
   try { localStorage.setItem(CUSTOM_MAP_KEY, JSON.stringify(data)); } catch (e) { /* ignore */ }
 }
 
-let editingMap = { walls: [], barrels: [], mud: [] };
+let editingMap = emptyCustomMap();
 
 function cellTypeInEditor(x, y) {
-  if (editingMap.walls.some(c => c.x === x && c.y === y)) return "wall";
-  if (editingMap.barrels.some(c => c.x === x && c.y === y)) return "barrel";
-  if (editingMap.mud.some(c => c.x === x && c.y === y)) return "mud";
+  for (const type of CUSTOM_MAP_TYPES) {
+    if (editingMap[CUSTOM_MAP_KEY_BY_TYPE[type]].some(c => c.x === x && c.y === y)) return type;
+  }
   return "empty";
 }
 
@@ -318,28 +320,31 @@ function buildEditorGrid() {
 function cycleEditorCell(x, y) {
   const current = cellTypeInEditor(x, y);
   const next = CUSTOM_MAP_CYCLE[(CUSTOM_MAP_CYCLE.indexOf(current) + 1) % CUSTOM_MAP_CYCLE.length];
-  editingMap.walls = editingMap.walls.filter(c => !(c.x === x && c.y === y));
-  editingMap.barrels = editingMap.barrels.filter(c => !(c.x === x && c.y === y));
-  editingMap.mud = editingMap.mud.filter(c => !(c.x === x && c.y === y));
-  if (next === "wall") editingMap.walls.push({ x, y });
-  else if (next === "barrel") editingMap.barrels.push({ x, y });
-  else if (next === "mud") editingMap.mud.push({ x, y });
+  CUSTOM_MAP_TYPES.forEach(type => {
+    const key = CUSTOM_MAP_KEY_BY_TYPE[type];
+    editingMap[key] = editingMap[key].filter(c => !(c.x === x && c.y === y));
+  });
+  if (next !== "empty") editingMap[CUSTOM_MAP_KEY_BY_TYPE[next]].push({ x, y });
   const cell = document.querySelector(`.me-cell[data-x="${x}"][data-y="${y}"]`);
   if (cell) cell.className = "me-cell" + (next !== "empty" ? " me-" + next : "");
   updateEditorCounts();
 }
 
 function updateEditorCounts() {
-  const free = 144 - editingMap.walls.length - editingMap.barrels.length;
+  const blocking = editingMap.walls.length + editingMap.barrels.length + editingMap.breakable.length;
+  const free = 144 - blocking;
   const countsEl = document.getElementById("map-editor-counts");
-  countsEl.textContent = `Murs : ${editingMap.walls.length} · Tonneaux : ${editingMap.barrels.length} · Boue : ${editingMap.mud.length} · Cases libres : ${free}/144`;
+  countsEl.textContent = `Murs : ${editingMap.walls.length} · Tonneaux : ${editingMap.barrels.length} · Boue : ${editingMap.mud.length} · ` +
+    `Soin : ${editingMap.heal.length} · Téléport : ${editingMap.teleport.length} · Cassables : ${editingMap.breakable.length} · ` +
+    `Paratonnerres : ${editingMap.lightningRod.length} · Buissons : ${editingMap.bush.length} · Cases libres : ${free}/144`;
   countsEl.style.color = free < 12 ? "var(--danger)" : "var(--text-dim)";
   document.getElementById("map-editor-error").textContent = free < 12 ? "Il faut au moins 12 cases libres pour 6 joueurs." : "";
 }
 
 function openMapEditor() {
   const saved = loadCustomMap();
-  editingMap = { walls: saved.walls.slice(), barrels: saved.barrels.slice(), mud: saved.mud.slice() };
+  editingMap = emptyCustomMap();
+  Object.keys(editingMap).forEach(k => { editingMap[k] = saved[k].slice(); });
   buildEditorGrid();
   updateEditorCounts();
   document.getElementById("map-editor-modal").style.display = "flex";
@@ -349,12 +354,13 @@ document.getElementById("btn-editor-close").addEventListener("click", () => {
   document.getElementById("map-editor-modal").style.display = "none";
 });
 document.getElementById("btn-editor-reset").addEventListener("click", () => {
-  editingMap = { walls: [], barrels: [], mud: [] };
+  editingMap = emptyCustomMap();
   buildEditorGrid();
   updateEditorCounts();
 });
 document.getElementById("btn-editor-save").addEventListener("click", () => {
-  const free = 144 - editingMap.walls.length - editingMap.barrels.length;
+  const blocking = editingMap.walls.length + editingMap.barrels.length + editingMap.breakable.length;
+  const free = 144 - blocking;
   if (free < 12) return;
   saveCustomMapToStorage(editingMap);
   document.getElementById("map-editor-modal").style.display = "none";
@@ -478,7 +484,7 @@ function applySavedSettings(prefix, explicitSaved) {
 
   const extraIds = { "adv-telegraph-mult": "telegraphMultiplier", "adv-buff-duration": "buffDurationSec",
     "adv-mud-mult": "mudSlowMultiplier", "adv-spawn-protection": "spawnProtectionSec",
-    "adv-grid-size": "gridSize", "adv-passive-regen": "passiveRegenPerSec" };
+    "adv-passive-regen": "passiveRegenPerSec" };
   Object.entries(extraIds).forEach(([id, key]) => {
     const el = document.getElementById(prefix + id);
     if (el && saved.config && saved.config[key] !== undefined) el.value = saved.config[key];
@@ -511,6 +517,112 @@ const PSEUDO_KEY = "capnaval_pseudo";
 function saveLastPseudo(pseudo) {
   try { localStorage.setItem(PSEUDO_KEY, pseudo); } catch (e) { /* ignore */ }
 }
+
+// ---------- Lien direct (?code=XXXXX) : pré-remplit le code depuis un lien partagé ----------
+(function prefillCodeFromLink() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const code = (params.get("code") || "").trim().toUpperCase();
+    if (!code) return;
+    const codeInput = document.getElementById("input-code");
+    codeInput.value = code;
+    const pseudoInput = document.getElementById("input-pseudo");
+    if (!pseudoInput.value) pseudoInput.focus();
+    codeInput.scrollIntoView({ block: "center" });
+    // Ne nettoie pas l'URL tout de suite : l'enregistrement du service worker peut
+    // déclencher un rechargement juste après le tout premier chargement, et il faut
+    // que le code reste dans l'URL pour être repris correctement à ce moment-là.
+  } catch (e) { /* ignore */ }
+})();
+
+// ---------- Partage du code de partie ----------
+const GAME_SHARE_URL = "https://capworks-company.github.io/Game";
+function roomShareLink() { return `${GAME_SHARE_URL}/?code=${myCode}`; }
+function shareRoomCode() {
+  if (!myCode) return;
+  const link = roomShareLink();
+  const text = `Hey ! Rejoins ma partie de CapNaval sur ${link} !`;
+  if (navigator.share) {
+    navigator.share({ text, url: link }).catch(() => { /* annulé ou indisponible, sans gravité */ });
+    return;
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(flashRoomCodeCopied).catch(() => {});
+  } else {
+    flashRoomCodeCopied();
+  }
+}
+function flashRoomCodeCopied() {
+  const btn = document.getElementById("room-code");
+  if (!btn) return;
+  const original = myCode || btn.textContent;
+  btn.textContent = "Copié !";
+  setTimeout(() => { btn.textContent = original; }, 1300);
+}
+document.getElementById("room-code").addEventListener("click", shareRoomCode);
+
+document.getElementById("btn-copy-code").addEventListener("click", () => {
+  if (!myCode) return;
+  const btn = document.getElementById("btn-copy-code");
+  const original = btn.textContent;
+  const flash = () => { btn.textContent = "✅ Copié !"; setTimeout(() => { btn.textContent = original; }, 1300); };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(myCode).then(flash).catch(() => {});
+  } else {
+    flash();
+  }
+});
+
+// ---------- QR code du lien de partie (facultatif : dégradation silencieuse si indisponible) ----------
+function renderRoomQR(retriesLeft) {
+  const wrap = document.getElementById("room-qr-wrap");
+  const el = document.getElementById("room-qr");
+  if (!wrap || !el || !myCode) return;
+  if (typeof QRCode === "undefined") {
+    if (retriesLeft === undefined) retriesLeft = 4;
+    if (retriesLeft > 0) setTimeout(() => renderRoomQR(retriesLeft - 1), 400); // la librairie charge peut-être encore
+    return;
+  }
+  el.innerHTML = "";
+  try {
+    new QRCode(el, { text: roomShareLink(), width: 128, height: 128, colorDark: "#10131a", colorLight: "#ffffff" });
+    wrap.style.display = "block";
+  } catch (e) { /* pas grave, le code texte + le partage restent disponibles */ }
+}
+
+// ---------- Tutoriel rapide (au tout premier lancement, ou à la demande) ----------
+const TUTORIAL_KEY = "capnaval_tutorial_seen";
+const TUTORIAL_SLIDE_COUNT = 4;
+let tutorialSlide = 0;
+
+function buildTutorialDots() {
+  const dots = document.getElementById("tutorial-dots");
+  dots.innerHTML = Array.from({ length: TUTORIAL_SLIDE_COUNT }, (_, i) => `<span class="tutorial-dot${i === 0 ? " active" : ""}"></span>`).join("");
+}
+function showTutorialSlide(i) {
+  tutorialSlide = i;
+  document.querySelectorAll(".tutorial-slide").forEach(el => el.classList.toggle("active", parseInt(el.dataset.slide, 10) === i));
+  document.querySelectorAll(".tutorial-dot").forEach((d, idx) => d.classList.toggle("active", idx === i));
+  document.getElementById("btn-tutorial-next").textContent = i === TUTORIAL_SLIDE_COUNT - 1 ? "C'est parti !" : "Suivant";
+}
+function openTutorial() {
+  buildTutorialDots();
+  showTutorialSlide(0);
+  document.getElementById("tutorial-modal").style.display = "flex";
+}
+function closeTutorial() {
+  document.getElementById("tutorial-modal").style.display = "none";
+  try { localStorage.setItem(TUTORIAL_KEY, "1"); } catch (e) { /* ignore */ }
+}
+document.getElementById("btn-tutorial-skip").addEventListener("click", closeTutorial);
+document.getElementById("btn-tutorial-next").addEventListener("click", () => {
+  if (tutorialSlide >= TUTORIAL_SLIDE_COUNT - 1) { closeTutorial(); return; }
+  showTutorialSlide(tutorialSlide + 1);
+});
+document.getElementById("btn-show-tutorial").addEventListener("click", openTutorial);
+(function autoOpenTutorialOnFirstLaunch() {
+  try { if (!localStorage.getItem(TUTORIAL_KEY)) openTutorial(); } catch (e) { /* ignore */ }
+})();
 
 // ---------- Avatar (couleur), mémorisé sur l'appareil ----------
 const AVATAR_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#eab308", "#a855f7", "#f97316"];
@@ -547,12 +659,13 @@ function loadGeneralSettings() {
     const raw = JSON.parse(localStorage.getItem(GENERAL_SETTINGS_KEY) || "{}");
     return {
       reduceMotion: !!raw.reduceMotion,
-      muted: !!raw.muted,
+      soundEnabled: raw.soundEnabled !== false,
+      vibrationEnabled: raw.vibrationEnabled !== false,
       colorblind: !!raw.colorblind,
       reactionEmojis: Array.isArray(raw.reactionEmojis) && raw.reactionEmojis.length ? raw.reactionEmojis.slice(0, 6) : DEFAULT_REACTION_EMOJIS,
     };
   } catch (e) {
-    return { reduceMotion: false, muted: false, colorblind: false, reactionEmojis: DEFAULT_REACTION_EMOJIS };
+    return { reduceMotion: false, soundEnabled: true, vibrationEnabled: true, colorblind: false, reactionEmojis: DEFAULT_REACTION_EMOJIS };
   }
 }
 function saveGeneralSettings(s) { try { localStorage.setItem(GENERAL_SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ } }
@@ -572,11 +685,14 @@ function buildReactionEmojiGrid(containerId) {
       const idx = generalSettings.reactionEmojis.indexOf(e);
       if (idx >= 0) {
         generalSettings.reactionEmojis.splice(idx, 1);
+        btn.classList.remove("selected");
       } else if (generalSettings.reactionEmojis.length < 6) {
         generalSettings.reactionEmojis.push(e);
+        btn.classList.add("selected");
+      } else {
+        return; // limite de 6 atteinte : ne touche ni aux données ni au visuel
       }
       saveGeneralSettings(generalSettings);
-      btn.classList.toggle("selected");
     });
   });
 }
@@ -584,7 +700,8 @@ function buildReactionEmojiGrid(containerId) {
 function openGeneralSettings() {
   generalSettings = loadGeneralSettings();
   document.getElementById("gs-reduce-motion").checked = generalSettings.reduceMotion;
-  document.getElementById("gs-mute").checked = generalSettings.muted;
+  document.getElementById("gs-sound").checked = generalSettings.soundEnabled;
+  document.getElementById("gs-vibration").checked = generalSettings.vibrationEnabled;
   document.getElementById("gs-colorblind").checked = generalSettings.colorblind;
   buildReactionEmojiGrid("gs-emoji-grid");
   document.getElementById("general-settings-modal").style.display = "flex";
@@ -593,10 +710,10 @@ document.getElementById("btn-general-settings").addEventListener("click", openGe
 document.getElementById("btn-close-general-settings").addEventListener("click", () => {
   document.getElementById("general-settings-modal").style.display = "none";
 });
-["gs-reduce-motion", "gs-mute", "gs-colorblind"].forEach(id => {
+const GS_TOGGLE_KEYS = { "gs-reduce-motion": "reduceMotion", "gs-sound": "soundEnabled", "gs-vibration": "vibrationEnabled", "gs-colorblind": "colorblind" };
+Object.keys(GS_TOGGLE_KEYS).forEach(id => {
   document.getElementById(id).addEventListener("change", (e) => {
-    const key = id === "gs-reduce-motion" ? "reduceMotion" : id === "gs-mute" ? "muted" : "colorblind";
-    generalSettings[key] = e.target.checked;
+    generalSettings[GS_TOGGLE_KEYS[id]] = e.target.checked;
     saveGeneralSettings(generalSettings);
     applyGeneralSettingsToDOM();
   });
@@ -815,6 +932,18 @@ function hideConnectionBanner() {
   if (b) b.style.display = "none";
 }
 
+// ---------- Bannière hors-ligne (perte complète d'Internet, pas juste du serveur) ----------
+function updateOfflineBanner() {
+  const b = document.getElementById("offline-banner");
+  const isOffline = navigator.onLine === false;
+  if (b) b.style.display = isOffline ? "block" : "none";
+  const cb = document.getElementById("connection-banner");
+  if (cb) cb.style.top = isOffline && b ? b.offsetHeight + "px" : "0";
+}
+window.addEventListener("online", updateOfflineBanner);
+window.addEventListener("offline", updateOfflineBanner);
+updateOfflineBanner();
+
 function connect(code, pseudo) {
   stopPublicRoomsPolling();
   myCode = code; myPseudo = pseudo;
@@ -846,6 +975,7 @@ function scheduleReconnect() {
 // ---------- Quitter une partie ----------
 function doLeave() {
   intentionalDisconnect = true;
+  releaseWakeLock();
   if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
   if (lobbyStartLogStop) { lobbyStartLogStop(); lobbyStartLogStop = null; }
   try { if (ws) ws.send(JSON.stringify({ type: "leave" })); } catch (e) { /* ignore */ }
@@ -875,7 +1005,9 @@ function onMessage(msg) {
     MODES_META = msg.modes || {};
     MAPS_META = msg.maps || {};
     ATTACKS_LIST = msg.attacks || [];
+    MAP_MODIFIERS_META = msg.mapModifiers || {};
     document.getElementById("room-code").textContent = myCode;
+    renderRoomQR();
 
     const modeSelect = document.getElementById("mode-select");
     const modeConfig = document.getElementById("mode-config");
@@ -900,6 +1032,8 @@ function onMessage(msg) {
       }
       buildAttackWeightsEditor("attack-weights-list");
       buildAttackWeightsEditor("end-attack-weights-list");
+      buildMapModifiersList("map-modifiers-list");
+      buildMapModifiersList("end-map-modifiers-list");
       renderCustomModesList();
       applySavedSettings("");
       applySavedSettings("end-");
@@ -935,6 +1069,8 @@ function onMessage(msg) {
     castingGlow(msg.by, msg.attackId, msg.resolveAt);
   } else if (msg.type === "reaction") {
     if (msg.by !== myId) showFloatingReaction(msg.by, msg.emoji);
+  } else if (msg.type === "mapEvent") {
+    playMapEvent(msg.kind, msg.cells);
   } else if (msg.type === "kicked") {
     intentionalDisconnect = true;
     myId = null; myCode = null; lastState = null;
@@ -1033,6 +1169,9 @@ function gatherFullConfig(prefix) {
   config.shrinkEnabled = document.getElementById(prefix + "shrink-toggle").checked;
   config.shrinkMode = document.getElementById(prefix + "shrink-mode-select").value;
   config.shrinkIntervalSec = document.getElementById(prefix + "shrink-interval").value;
+  config.mapModifiers = readMapModifiers(prefix + "map-modifiers-list");
+  config.hideAttackFromOthers = document.getElementById(prefix + "hide-attack-toggle").checked;
+  config.twoWeaponHand = document.getElementById(prefix + "two-weapon-toggle").checked;
   Object.assign(config, readAdvancedConfig(prefix));
   return { mode, config };
 }
@@ -1044,10 +1183,86 @@ document.getElementById("btn-start").addEventListener("click", () => {
     ["Connexion avec le serveur...", "En attente de création de la partie..."], 700);
   ws.send(JSON.stringify({ type: "start", mode, config }));
 });
+// Recharge le panel de paramètres avec les VRAIS réglages de la partie qui vient
+// de se terminer (pas des valeurs par défaut ni un vieux localStorage périmé).
+function populateSettingsFromLiveState(prefix) {
+  if (!lastState) return;
+  const modeSelect = document.getElementById(prefix + "mode-select");
+  const modeConfigEl = document.getElementById(prefix + "mode-config");
+  const modeDescEl = document.getElementById(prefix + "mode-desc");
+  if (modeSelect && lastState.mode && MODES_META[lastState.mode]) {
+    modeSelect.value = lastState.mode;
+    renderModeConfigFields(lastState.mode, modeConfigEl, modeDescEl);
+    if (lastState.config) {
+      modeConfigEl.querySelectorAll("input[name], select[name]").forEach(inp => {
+        if (lastState.config[inp.name] !== undefined) inp.value = lastState.config[inp.name];
+      });
+    }
+  }
+  if (lastState.mapId && MAPS_META[lastState.mapId]) {
+    const wheelState = mapWheelStates.get("modal-map-wheel");
+    if (wheelState) setWheelToMap(wheelState, document.getElementById("modal-map-wheel"), lastState.mapId, document.getElementById("modal-map-desc"));
+  }
+
+  const rc = lastState.roomConfig || {};
+  const setChecked = (id, val) => { const el = document.getElementById(prefix + id); if (el) el.checked = !!val; };
+  const setVal = (id, val) => { const el = document.getElementById(prefix + id); if (el && val !== undefined && val !== null) el.value = val; };
+
+  setChecked("powerups-toggle", rc.powerupsEnabled);
+  setVal("powerup-interval", rc.powerupIntervalSec);
+  setChecked("teams-toggle", lastState.teamsEnabled);
+  setChecked("push-toggle", lastState.pushEnabled);
+  setChecked("shrink-toggle", rc.shrinkEnabled);
+  setVal("shrink-mode-select", rc.shrinkMode);
+  setVal("shrink-interval", rc.shrinkIntervalSec);
+  document.getElementById(prefix + "shrink-options-wrap").style.display = rc.shrinkEnabled ? "block" : "none";
+  document.getElementById(prefix + "shrink-custom-wrap").style.display = rc.shrinkMode === "custom" ? "block" : "none";
+  document.getElementById(prefix + "powerup-interval-wrap").style.display = rc.powerupsEnabled ? "block" : "none";
+
+  setChecked("hide-attack-toggle", rc.hideAttackFromOthers);
+  setChecked("two-weapon-toggle", rc.twoWeaponHand);
+  const modifiersListEl = document.getElementById(prefix + "map-modifiers-list");
+  if (modifiersListEl) {
+    const active = lastState.mapModifiers || [];
+    modifiersListEl.querySelectorAll(".map-modifier-toggle").forEach(el => { el.checked = active.includes(el.dataset.id); });
+  }
+
+  setVal("adv-starting-hp", lastState.startingHP);
+  setVal("adv-respawn-delay", rc.respawnDelaySec);
+  setVal("adv-respawn-hp-percent", rc.respawnHpPercent);
+  setVal("adv-attack-window", rc.attackWindowSec);
+  setVal("adv-turn-gap", rc.turnGapSec);
+  setVal("adv-move-cooldown", lastState.moveCooldownMs);
+  setVal("adv-damage-mult", rc.damageMultiplier);
+  setVal("adv-barrel-damage", rc.barrelDamage);
+  setVal("adv-powerup-max", rc.powerupMaxOnMap);
+  setChecked("adv-weapon-no-repeat", rc.weaponNoRepeat);
+  setChecked("adv-mine-visible", lastState.mineVisibleToAll);
+  setVal("adv-telegraph-mult", rc.telegraphMultiplier);
+  setVal("adv-buff-duration", rc.buffDurationSec);
+  setVal("adv-mud-mult", lastState.mudSlowMultiplier);
+  setVal("adv-spawn-protection", rc.spawnProtectionSec);
+  setVal("adv-passive-regen", rc.passiveRegenPerSec);
+
+  const weightsListId = prefix + "attack-weights-list";
+  if (document.getElementById(weightsListId)) {
+    buildAttackWeightsEditor(weightsListId);
+    if (rc.attackWeightOverrides) {
+      const container = document.getElementById(weightsListId);
+      container.querySelectorAll(".aw-input").forEach(inp => {
+        const w = rc.attackWeightOverrides[inp.dataset.id];
+        if (w !== undefined) inp.value = Math.round(w * 100);
+      });
+      updateAttackProbabilities(weightsListId);
+    }
+  }
+}
+
 document.getElementById("btn-toggle-end-settings").addEventListener("click", () => {
   const form = document.getElementById("end-settings-form");
   const btn = document.getElementById("btn-toggle-end-settings");
   const nowVisible = form.style.display === "none";
+  if (nowVisible) populateSettingsFromLiveState("end-");
   form.style.display = nowVisible ? "block" : "none";
   btn.textContent = nowVisible ? "⚙️ Masquer les paramètres" : "⚙️ Modifier les paramètres";
 });
@@ -1065,6 +1280,7 @@ function loadCustomModes() {
 }
 function saveCustomModesList(list) { try { localStorage.setItem(CUSTOM_MODES_KEY, JSON.stringify(list)); } catch (e) { /* ignore */ } }
 
+let editingCustomModeIndex = null;
 function renderCustomModesList() {
   const container = document.getElementById("custom-modes-list");
   if (!container) return;
@@ -1074,6 +1290,7 @@ function renderCustomModesList() {
     <div class="custom-mode-row">
       <span class="custom-mode-name">${escapeHtml(p.name)}</span>
       <button type="button" class="player-manage-btn custom-mode-load" data-i="${i}" title="Charger">📂</button>
+      <button type="button" class="player-manage-btn custom-mode-edit" data-i="${i}" title="Modifier">✏️</button>
       <button type="button" class="player-manage-btn custom-mode-delete" data-i="${i}" title="Supprimer">✕</button>
     </div>`).join("");
   container.querySelectorAll(".custom-mode-load").forEach(btn => {
@@ -1082,26 +1299,53 @@ function renderCustomModesList() {
       if (preset) applySavedSettings("", { mode: preset.mode, config: preset.config });
     });
   });
+  container.querySelectorAll(".custom-mode-edit").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const i = parseInt(btn.dataset.i);
+      const preset = loadCustomModes()[i];
+      if (!preset) return;
+      applySavedSettings("", { mode: preset.mode, config: preset.config });
+      editingCustomModeIndex = i;
+      document.getElementById("custom-mode-name").value = preset.name;
+      document.getElementById("btn-save-custom-mode").textContent = "💾 Mettre à jour";
+      document.getElementById("btn-cancel-edit-custom-mode").style.display = "block";
+      document.getElementById("custom-mode-name").scrollIntoView({ block: "center" });
+    });
+  });
   container.querySelectorAll(".custom-mode-delete").forEach(btn => {
     btn.addEventListener("click", () => {
+      const i = parseInt(btn.dataset.i);
       const list = loadCustomModes();
-      list.splice(parseInt(btn.dataset.i), 1);
+      list.splice(i, 1);
       saveCustomModesList(list);
+      if (editingCustomModeIndex === i) resetCustomModeEditState();
       renderCustomModesList();
     });
   });
 }
+function resetCustomModeEditState() {
+  editingCustomModeIndex = null;
+  document.getElementById("custom-mode-name").value = "";
+  document.getElementById("btn-save-custom-mode").textContent = "💾 Enregistrer";
+  document.getElementById("btn-cancel-edit-custom-mode").style.display = "none";
+}
+document.getElementById("btn-cancel-edit-custom-mode").addEventListener("click", resetCustomModeEditState);
 document.getElementById("btn-save-custom-mode").addEventListener("click", () => {
   const nameInput = document.getElementById("custom-mode-name");
   const name = nameInput.value.trim();
   if (!name) return;
   const { mode, config } = gatherFullConfig("");
   const list = loadCustomModes();
-  list.push({ name, mode, config });
+  if (editingCustomModeIndex !== null && list[editingCustomModeIndex]) {
+    list[editingCustomModeIndex] = { name, mode, config };
+  } else {
+    list.push({ name, mode, config });
+  }
   saveCustomModesList(list);
-  nameInput.value = "";
+  resetCustomModeEditState();
   renderCustomModesList();
 });
+
 
 // ---------- Paramètres avancés (lecture générique par préfixe) ----------
 function readAdvancedConfig(prefix) {
@@ -1123,7 +1367,6 @@ function readAdvancedConfig(prefix) {
     buffDurationSec: val("adv-buff-duration"),
     mudSlowMultiplier: val("adv-mud-mult"),
     spawnProtectionSec: val("adv-spawn-protection"),
-    gridSize: val("adv-grid-size"),
     passiveRegenPerSec: val("adv-passive-regen"),
     attackWeights: readAttackWeights(prefix + "attack-weights-list"),
     attackOverrides: readAttackOverrides(prefix + "attack-weights-list"),
@@ -1139,6 +1382,26 @@ const TUNABLE_LABELS = {
   dropDamage: "Dégâts par case toxique", dropTicks: "Durée par case (ticks)", drops: "Nombre de cases toxiques",
   chainHops: "Nombre de rebonds", chainFalloff: "Affaiblissement par rebond", range: "Portée",
 };
+
+// ---------- Modificateurs de carte (cumulables) ----------
+function buildMapModifiersList(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return;
+  const ids = Object.keys(MAP_MODIFIERS_META);
+  if (!ids.length) return;
+  container.innerHTML = ids.map(id => {
+    const m = MAP_MODIFIERS_META[id];
+    return `<label class="toggle-field">
+      <span class="toggle-text">${m.icon || ""} ${escapeHtml(m.label)}</span>
+      <span class="toggle-switch"><input type="checkbox" class="map-modifier-toggle" data-id="${id}"><span class="toggle-slider"></span></span>
+    </label>`;
+  }).join("");
+}
+function readMapModifiers(containerId) {
+  const container = document.getElementById(containerId);
+  if (!container) return [];
+  return [...container.querySelectorAll(".map-modifier-toggle")].filter(el => el.checked).map(el => el.dataset.id);
+}
 
 function buildAttackWeightsEditor(containerId) {
   const container = document.getElementById(containerId);
@@ -1262,17 +1525,19 @@ function render() {
   if (!lastState) return;
   if (nukeCinematicPlaying) return; // on ne montre rien tant que la cinématique n'est pas finie
   if (lastState.status === "lobby") {
+    releaseWakeLock();
     renderLobby();
     lastKnownStatus = "lobby";
     return;
   }
   if (lobbyStartLogStop) { lobbyStartLogStop(); lobbyStartLogStop = null; document.getElementById("lobby-status").textContent = ""; }
   if (lastState.status === "ended") {
+    releaseWakeLock();
     renderEndScreen();
     lastKnownStatus = "ended";
     return;
   }
-  if (lastKnownStatus !== "playing") { startCountdownOverlay(); buildReactionBar(); }
+  if (lastKnownStatus !== "playing") { startCountdownOverlay(); buildReactionBar(); requestWakeLock(); }
   lastKnownStatus = "playing";
   showScreen("screen-game");
   renderBoard();
@@ -1282,6 +1547,22 @@ function render() {
   document.getElementById("btn-end-match").style.display = isHost ? "block" : "none";
   document.getElementById("btn-leave-game").style.display = isHost ? "none" : "block";
 }
+
+// ---------- Empêcher l'écran de s'éteindre pendant la partie ----------
+let wakeLock = null;
+async function requestWakeLock() {
+  try {
+    if (!("wakeLock" in navigator)) return;
+    wakeLock = await navigator.wakeLock.request("screen");
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+  } catch (e) { /* pas grave, juste un confort */ }
+}
+function releaseWakeLock() {
+  if (wakeLock) { try { wakeLock.release(); } catch (e) { /* ignore */ } wakeLock = null; }
+}
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && !wakeLock && lastState && lastState.status === "playing") requestWakeLock();
+});
 
 // ---------- Cinématique de la bombe nucléaire ----------
 function sfxNukeSiren() {
@@ -1351,7 +1632,7 @@ function playNukeCinematic() {
   nukeCinematicPlaying = true;
   const overlay = document.getElementById("nuke-overlay");
   overlay.className = "nuke-overlay";
-  overlay.style.opacity = "1";
+  overlay.style.removeProperty("opacity"); // laisse le CSS (dont .nuke-fade) contrôler l'opacité de bout en bout
   overlay.style.display = "flex";
   positionNukeOverlayOnBoard(overlay);
   sfxNukeSiren();
@@ -1472,9 +1753,52 @@ function renderEndScreen() {
       list.appendChild(li);
     });
 
+  renderEndAwards();
+
   const isHost = myId === lastState.hostId;
   document.getElementById("end-host-controls").style.display = isHost ? "block" : "none";
   document.getElementById("end-wait").style.display = isHost ? "none" : "block";
+}
+
+function renderEndAwards() {
+  const wrap = document.getElementById("end-awards");
+  if (!wrap) return;
+  const players = lastState.players || [];
+  const awards = [];
+
+  const topBy = (key) => players.reduce((best, p) => (p[key] || 0) > (best ? best[key] || 0 : -1) ? p : best, null);
+
+  const mostKills = topBy("eliminations");
+  if (mostKills && mostKills.eliminations > 0) awards.push({ icon: "⚔️", title: "Bourreau", detail: `${mostKills.eliminations} élimination${mostKills.eliminations > 1 ? "s" : ""}`, p: mostKills });
+
+  const hardestHit = topBy("biggestHit");
+  if (hardestHit && hardestHit.biggestHit > 0) awards.push({ icon: "💥", title: "Coup le plus violent", detail: `${hardestHit.biggestHit} dégâts en un coup`, p: hardestHit });
+
+  const mostDamageTaken = topBy("damageTaken");
+  if (mostDamageTaken && mostDamageTaken.damageTaken > 0) awards.push({ icon: "🩸", title: "Souffre-douleur", detail: `${mostDamageTaken.damageTaken} dégâts subis`, p: mostDamageTaken });
+
+  const fastestKillers = players.filter(p => p.firstKillAt && lastState.matchStartedAt);
+  if (fastestKillers.length) {
+    const fastest = fastestKillers.reduce((best, p) => (p.firstKillAt < best.firstKillAt ? p : best));
+    const secs = Math.max(0, Math.round((fastest.firstKillAt - lastState.matchStartedAt) / 1000));
+    awards.push({ icon: "⚡", title: "K.O. éclair", detail: `premier K.O. en ${secs}s`, p: fastest });
+  }
+
+  const toughest = players.filter(p => p.timesKO === 0);
+  if (toughest.length && toughest.length < players.length) {
+    awards.push({ icon: "🛡️", title: "Increvable", detail: "jamais mis K.O.", p: toughest[0] });
+  }
+
+  if (!awards.length) { wrap.innerHTML = ""; return; }
+  wrap.innerHTML = `<p class="hint" style="font-size:12px;margin:14px 0 6px">Récompenses de la partie</p>` +
+    awards.map(a => `
+      <div class="award-row">
+        <span class="award-icon">${a.icon}</span>
+        <span class="award-text">
+          <span class="award-title">${a.title}</span>
+          <span class="award-detail">${escapeHtml(a.p.pseudo)} · ${a.detail}</span>
+        </span>
+      </div>`).join("");
 }
 
 let boardBuilt = false;
@@ -1560,6 +1884,26 @@ function renderBoard() {
     const c = board.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
     if (c) c.classList.add("barrel");
   });
+  (obstacles.heal || []).forEach(({ x, y }) => {
+    const c = board.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+    if (c) c.classList.add("tile-heal");
+  });
+  (obstacles.teleport || []).forEach(({ x, y }) => {
+    const c = board.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+    if (c) c.classList.add("tile-teleport");
+  });
+  (obstacles.breakable || []).forEach(({ x, y }) => {
+    const c = board.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+    if (c) c.classList.add("tile-breakable");
+  });
+  (obstacles.lightningRod || []).forEach(({ x, y }) => {
+    const c = board.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+    if (c) c.classList.add("tile-rod");
+  });
+  (obstacles.bush || []).forEach(({ x, y }) => {
+    const c = board.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
+    if (c) c.classList.add("tile-bush");
+  });
 
   // bonus au sol
   const POWERUP_ICON = { heal: "+PV", resist: "🛡", speed: "⚡" };
@@ -1602,6 +1946,17 @@ function renderBoard() {
     }
   });
 
+  // Cimetière : ombres sans nom qui rôdent sur la carte
+  (lastState.zombies || []).forEach(z => {
+    const cell = board.querySelector(`.cell[data-x="${z.x}"][data-y="${z.y}"]`);
+    if (cell) {
+      const el = document.createElement("div");
+      el.className = "zombie-marker";
+      el.textContent = "🧟";
+      cell.appendChild(el);
+    }
+  });
+
   updatePlayerTokens();
 }
 
@@ -1633,16 +1988,20 @@ function updatePlayerTokens() {
     el.classList.toggle("me", p.id === myId);
     el.classList.toggle("dead", !p.alive);
     el.classList.toggle("disconnected", p.connected === false);
+    el.classList.toggle("hidden-in-bush", !!p.hidden && p.alive);
 
     const prev = prevPlayerStats.get(p.id);
     const respawned = !!(prev && prev.alive === false && p.alive === true);
     const skipGlide = isNew || respawned || noGlideFor.has(p.id);
 
-    const left = p.x * (cellGeometry.track + cellGeometry.gap) + 2;
-    const top = p.y * (cellGeometry.track + cellGeometry.gap) + 2;
-    const size = Math.max(4, cellGeometry.track - 4);
+    const cellFull = cellGeometry.track + cellGeometry.gap;
+    const pSize = p.size || 1;
+    const left = p.x * cellFull + 2;
+    const top = p.y * cellFull + 2;
+    const size = Math.max(4, pSize * cellGeometry.track + (pSize - 1) * cellGeometry.gap - 4);
     el.style.width = size + "px";
     el.style.height = size + "px";
+    el.classList.toggle("boss-token", pSize > 1);
 
     if (skipGlide) {
       el.classList.add("no-glide");
@@ -1771,6 +2130,7 @@ function renderHud() {
   }
 
   const banner = document.getElementById("turn-banner");
+  const bannerText = document.getElementById("turn-banner-text");
   const turn = lastState.turn;
   if (turn) {
     const isMe = turn.playerId === myId;
@@ -1778,13 +2138,15 @@ function renderHud() {
     banner.classList.toggle("my-turn", isMe);
     if (turnKey !== lastTurnKey) {
       lastTurnKey = turnKey;
-      runSlotMachine(banner, turn, isMe);
+      runSlotMachine(bannerText, turn, isMe);
     }
+    updateAltWeaponPicker(turn, isMe);
   } else {
     lastTurnKey = null;
-    banner.textContent = "En attente du prochain tour…";
+    bannerText.textContent = "En attente du prochain tour…";
     banner.classList.remove("my-turn");
     stopTargeting();
+    document.getElementById("alt-weapon-picker").style.display = "none";
   }
   updateTurnTimerBar();
 
@@ -1813,6 +2175,14 @@ function renderHud() {
 function runSlotMachine(banner, turn, isMe) {
   const p = lastState.players.find(pl => pl.id === turn.playerId);
   const who = isMe ? "À toi de jouer" : `${p ? p.pseudo : "Un joueur"} prépare`;
+
+  if (!isMe && !turn.attackId) {
+    // Arme cachée aux autres (option activée par défaut) : pas de machine à sous,
+    // juste un message générique — le suspense reste entier jusqu'au tir.
+    banner.textContent = `${who} une attaque… 🤫`;
+    return;
+  }
+
   const ids = Object.keys(ATTACKS_META);
   let spins = 0;
   const maxSpins = 8;
@@ -1827,6 +2197,29 @@ function runSlotMachine(banner, turn, isMe) {
       if (isMe) startTargeting(turn.attackId);
     }
   }, 65);
+}
+
+// Main de 2 armes : laisse le joueur actif basculer entre les deux armes
+// tirées au sort, avant de viser. Invisible pour les autres (arme cachée).
+let altPickerKey = null;
+function updateAltWeaponPicker(turn, isMe) {
+  const picker = document.getElementById("alt-weapon-picker");
+  if (!isMe || !turn.altAttackId) { picker.style.display = "none"; altPickerKey = null; return; }
+  const key = turn.attackId + ":" + turn.altAttackId + ":" + turn.deadline;
+  if (key === altPickerKey) return; // déjà construit pour ce tour, évite de perdre le focus/anim au clic
+  altPickerKey = key;
+  const renderChoice = (id, name, active) => `
+    <button type="button" class="alt-weapon-choice${active ? " active" : ""}" data-id="${id}">
+      ${ATTACK_ICON[id] || ""} ${escapeHtml(name)}${active ? " ✓" : ""}
+    </button>`;
+  picker.innerHTML = renderChoice(turn.attackId, turn.attackName, true) + renderChoice(turn.altAttackId, turn.altAttackName, false);
+  picker.querySelectorAll(".alt-weapon-choice").forEach(btn => {
+    btn.addEventListener("click", () => {
+      if (btn.classList.contains("active")) return;
+      ws.send(JSON.stringify({ type: "chooseWeapon", attackId: btn.dataset.id }));
+    });
+  });
+  picker.style.display = "flex";
 }
 
 function renderPlayersPanel() {
@@ -1860,11 +2253,11 @@ function renderPlayersPanel() {
 // ---------- Sons (synthétisés, pas de fichier audio à héberger) ----------
 let audioCtx = null;
 function vibrate(pattern) {
-  if (generalSettings.reduceMotion || !navigator.vibrate) return;
+  if (generalSettings.reduceMotion || !generalSettings.vibrationEnabled || !navigator.vibrate) return;
   try { navigator.vibrate(pattern); } catch (e) { /* ignore */ }
 }
 function ensureAudio() {
-  if (generalSettings.muted) return null;
+  if (!generalSettings.soundEnabled) return null;
   if (!audioCtx) {
     try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { return null; }
   }
@@ -2058,6 +2451,13 @@ function playArrowShot(cells, casterId) {
   }, 220);
 }
 
+// Événements des modificateurs de carte (météorite, orage, séisme, pluie acide) :
+// réutilise les impacts et effets existants, avec le bon thème visuel/sonore.
+function playMapEvent(kind, cells) {
+  if (kind === "earthquakeMod") { playEarthquakeShake(); return; }
+  flashCells(cells, kind);
+}
+
 function flashCells(cells, attackId) {
   sfxImpact();
   const layer = document.getElementById("player-layer");
@@ -2130,9 +2530,26 @@ function castingGlow(playerId, attackId, resolveAt) {
 // ---------- Déplacement (glissement de doigt) ----------
 // Le déplacement reste possible même quand on doit viser une attaque : un tap
 // bref sert à choisir la cible, un glissement plus large déplace le joueur.
+// ---------- Geste de déverrouillage des codes secrets ----------
+// Avant tout code, il faut taper la case en haut à gauche, puis celle en bas
+// à droite — sinon les glissements suivants ne comptent pour aucun code.
+let cheatUnlockStage = 0; // 0 = verrouillé, 1 = coin haut-gauche tapé, 2 = déverrouillé
+function checkCheatUnlockTap(x, y) {
+  const size = (lastState && lastState.gridSize) || 12;
+  const isTopLeft = x === 0 && y === 0;
+  const isBottomRight = x === size - 1 && y === size - 1;
+  if (cheatUnlockStage === 0) {
+    if (isTopLeft) cheatUnlockStage = 1;
+  } else if (cheatUnlockStage === 1) {
+    if (isBottomRight) { cheatUnlockStage = 2; cheatCodeBuffer = []; vibrate(30); }
+    else if (!isTopLeft) cheatUnlockStage = 0;
+  }
+}
+
 function onCellClick(x, y) {
   if (dragMoved) { dragMoved = false; return; } // c'était un glissement, pas un tap de ciblage
-  if (targetingAttackId) onTargetClick(x, y);
+  if (targetingAttackId) { onTargetClick(x, y); return; }
+  checkCheatUnlockTap(x, y);
 }
 
 const SWIPE_THRESHOLD_PX = 22;
@@ -2172,6 +2589,7 @@ const CHEAT_BUFFER_MAX = Math.max(...CHEAT_CODES.map(c => c.seq.length));
 let cheatCodeBuffer = [];
 
 function recordCheatCodeInput(dir) {
+  if (cheatUnlockStage !== 2) return; // le geste (coin haut-gauche puis bas-droite) doit précéder
   cheatCodeBuffer.push(dir);
   if (cheatCodeBuffer.length > CHEAT_BUFFER_MAX) cheatCodeBuffer.shift();
   for (const code of CHEAT_CODES) {
@@ -2179,6 +2597,7 @@ function recordCheatCodeInput(dir) {
     if (tail.length !== code.seq.length) continue;
     if (code.seq.every((d, i) => d === tail[i])) {
       cheatCodeBuffer = [];
+      cheatUnlockStage = 0; // se reverrouille : il faudra refaire le geste pour le prochain code
       vibrate(code.action === "nukeConfirm" ? [40, 40, 40, 40, 120] : 60);
       if (code.action === "nukeConfirm") openNukeConfirmPanel();
       else if (code.action === "buffPanel") openBuffPanel();
