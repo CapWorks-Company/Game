@@ -373,7 +373,7 @@ html, body {
   content: ""; position: absolute; inset: 4px;
   border: 1.5px dashed var(--accent-dim); border-radius: 4px; opacity: .6;
 }
-.cell.targetable { background: none; }
+.cell.targetable { background: var(--panel); }
 .cell.hazard-mine::before {
   content: "✕"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   color: var(--danger); font-size: 10px; animation: pulse-warn 1.1s ease-in-out infinite;
@@ -403,6 +403,7 @@ html, body {
   position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
   font-size: 9px; white-space: nowrap; color: var(--text);
   background: rgba(16,19,26,.85); padding: 1px 4px; border-radius: 3px; margin-bottom: 2px;
+  pointer-events: auto; cursor: pointer;
 }
 .player-token.me { box-shadow: 0 0 0 2px #fff inset; }
 .player-token.dead { opacity: .25; }

@@ -1,7 +1,7 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
 // (ex: "https://capnaval.onrender.com")
-const BACKEND_URL = "https://capnaval-backend.onrender.com";
+const BACKEND_URL = "https://capnaval.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
 const ATTACKS_META = {
@@ -35,7 +35,7 @@ const ATTACKS_META = {
 // que d'en écrire une par attaque : plus lisible, tout aussi distinctif à l'écran)
 const ATTACK_THEME = {
   meteor: "fire", airstrike: "fire", meteorShower: "fire", napalm: "fire", grenade: "fire", meteorRain: "fire",
-  snipe: "physical", gunline: "physical", laser: "physical", charge: "physical", arrow: "physical", earthquake: "physical", storm: "physical",
+  snipe: "physical", gunline: "physical", laser: "physical", charge: "physical", arrow: "physical", earthquake: "physical", storm: "physical", shockwave: "physical",
   poison: "poison", acidRain: "poison", acidRainMod: "poison",
   frost: "ice",
   tornado: "control", net: "control", chainLightning: "physical",
@@ -44,7 +44,7 @@ const ATTACK_THEME = {
 };
 const ATTACK_ICON = {
   meteor: "☄️", airstrike: "✈️", meteorShower: "🌠", napalm: "🔥", grenade: "💣",
-  snipe: "🎯", gunline: "🔫", laser: "⚡", charge: "🐗", arrow: "🏹", earthquake: "🌍",
+  snipe: "🎯", gunline: "🔫", laser: "⚡", charge: "🐗", arrow: "🏹", earthquake: "🌍", shockwave: "💢",
   poison: "☠️", acidRain: "🧪", frost: "❄️", tornado: "🌪️", net: "🕸️", chainLightning: "🌩️",
   heal: "💚", healZone: "💧", shield: "🛡️", teleport: "🌀", mine: "💥", nuke: "☢️",
 };
@@ -64,6 +64,7 @@ let MODES_META = {};
 let MAPS_META = {};
 let ATTACKS_LIST = [];
 let MAP_MODIFIERS_META = {};
+let MODIFIER_TUNABLE_RANGES = {};
 const mapWheelStates = new Map(); // containerId -> état de la roue (rotation, sélection...)
 let lastMyHp = null;
 let chronoTickHandle = null;
@@ -662,10 +663,11 @@ function loadGeneralSettings() {
       soundEnabled: raw.soundEnabled !== false,
       vibrationEnabled: raw.vibrationEnabled !== false,
       colorblind: !!raw.colorblind,
+      showAdjacentCells: raw.showAdjacentCells !== false,
       reactionEmojis: Array.isArray(raw.reactionEmojis) && raw.reactionEmojis.length ? raw.reactionEmojis.slice(0, 6) : DEFAULT_REACTION_EMOJIS,
     };
   } catch (e) {
-    return { reduceMotion: false, soundEnabled: true, vibrationEnabled: true, colorblind: false, reactionEmojis: DEFAULT_REACTION_EMOJIS };
+    return { reduceMotion: false, soundEnabled: true, vibrationEnabled: true, colorblind: false, showAdjacentCells: true, reactionEmojis: DEFAULT_REACTION_EMOJIS };
   }
 }
 function saveGeneralSettings(s) { try { localStorage.setItem(GENERAL_SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ } }
@@ -703,6 +705,7 @@ function openGeneralSettings() {
   document.getElementById("gs-sound").checked = generalSettings.soundEnabled;
   document.getElementById("gs-vibration").checked = generalSettings.vibrationEnabled;
   document.getElementById("gs-colorblind").checked = generalSettings.colorblind;
+  document.getElementById("gs-adjacent-cells").checked = generalSettings.showAdjacentCells;
   buildReactionEmojiGrid("gs-emoji-grid");
   document.getElementById("general-settings-modal").style.display = "flex";
 }
@@ -710,12 +713,13 @@ document.getElementById("btn-general-settings").addEventListener("click", openGe
 document.getElementById("btn-close-general-settings").addEventListener("click", () => {
   document.getElementById("general-settings-modal").style.display = "none";
 });
-const GS_TOGGLE_KEYS = { "gs-reduce-motion": "reduceMotion", "gs-sound": "soundEnabled", "gs-vibration": "vibrationEnabled", "gs-colorblind": "colorblind" };
+const GS_TOGGLE_KEYS = { "gs-reduce-motion": "reduceMotion", "gs-sound": "soundEnabled", "gs-vibration": "vibrationEnabled", "gs-colorblind": "colorblind", "gs-adjacent-cells": "showAdjacentCells" };
 Object.keys(GS_TOGGLE_KEYS).forEach(id => {
   document.getElementById(id).addEventListener("change", (e) => {
     generalSettings[GS_TOGGLE_KEYS[id]] = e.target.checked;
     saveGeneralSettings(generalSettings);
     applyGeneralSettingsToDOM();
+    if (lastState && lastState.status === "playing") renderBoard(); // reflète le changement tout de suite en partie
   });
 });
 
@@ -1006,6 +1010,7 @@ function onMessage(msg) {
     MAPS_META = msg.maps || {};
     ATTACKS_LIST = msg.attacks || [];
     MAP_MODIFIERS_META = msg.mapModifiers || {};
+    MODIFIER_TUNABLE_RANGES = msg.modifierTunableRanges || {};
     document.getElementById("room-code").textContent = myCode;
     renderRoomQR();
 
@@ -1169,7 +1174,9 @@ function gatherFullConfig(prefix) {
   config.shrinkEnabled = document.getElementById(prefix + "shrink-toggle").checked;
   config.shrinkMode = document.getElementById(prefix + "shrink-mode-select").value;
   config.shrinkIntervalSec = document.getElementById(prefix + "shrink-interval").value;
-  config.mapModifiers = readMapModifiers(prefix + "map-modifiers-list");
+  const modifiersRead = readMapModifiers(prefix + "map-modifiers-list");
+  config.mapModifiers = modifiersRead.ids;
+  config.modifierOverrides = modifiersRead.overrides;
   config.hideAttackFromOthers = document.getElementById(prefix + "hide-attack-toggle").checked;
   config.twoWeaponHand = document.getElementById(prefix + "two-weapon-toggle").checked;
   Object.assign(config, readAdvancedConfig(prefix));
@@ -1225,6 +1232,11 @@ function populateSettingsFromLiveState(prefix) {
   if (modifiersListEl) {
     const active = lastState.mapModifiers || [];
     modifiersListEl.querySelectorAll(".map-modifier-toggle").forEach(el => { el.checked = active.includes(el.dataset.id); });
+    const modOverrides = rc.modifierOverrides || {};
+    modifiersListEl.querySelectorAll(".mm-tunable").forEach(inp => {
+      const val = modOverrides[inp.dataset.id] && modOverrides[inp.dataset.id][inp.dataset.field];
+      if (val !== undefined) inp.value = val;
+    });
   }
 
   setVal("adv-starting-hp", lastState.startingHP);
@@ -1381,9 +1393,10 @@ const TUNABLE_LABELS = {
   fireDamage: "Dégâts du feu", fireTicks: "Durée du feu (ticks)",
   dropDamage: "Dégâts par case toxique", dropTicks: "Durée par case (ticks)", drops: "Nombre de cases toxiques",
   chainHops: "Nombre de rebonds", chainFalloff: "Affaiblissement par rebond", range: "Portée",
+  perMinute: "Occurrences par minute", zombieHp: "PV des ombres", explosionDamage: "Dégâts d'explosion",
 };
 
-// ---------- Modificateurs de carte (cumulables) ----------
+// ---------- Modificateurs de carte (cumulables), avec réglages fins dépliables ----------
 function buildMapModifiersList(containerId) {
   const container = document.getElementById(containerId);
   if (!container) return;
@@ -1391,16 +1404,45 @@ function buildMapModifiersList(containerId) {
   if (!ids.length) return;
   container.innerHTML = ids.map(id => {
     const m = MAP_MODIFIERS_META[id];
-    return `<label class="toggle-field">
-      <span class="toggle-text">${m.icon || ""} ${escapeHtml(m.label)}</span>
-      <span class="toggle-switch"><input type="checkbox" class="map-modifier-toggle" data-id="${id}"><span class="toggle-slider"></span></span>
-    </label>`;
+    const ranges = MODIFIER_TUNABLE_RANGES[id] || {};
+    const tunableKeys = Object.keys(ranges);
+    const hasTunables = tunableKeys.length > 0;
+    const tunablesHtml = tunableKeys.map(key => {
+      const [min, max, def] = ranges[key];
+      const step = key === "perMinute" ? 0.5 : 1;
+      return `<label class="field aw-tunable-field">
+        <span>${TUNABLE_LABELS[key] || key}</span>
+        <input type="number" class="mm-tunable" data-id="${id}" data-field="${key}" min="${min}" max="${max}" step="${step}" value="${def}">
+      </label>`;
+    }).join("");
+    return `
+    <div class="attack-row" data-id="${id}">
+      <div class="attack-row-main">
+        <span class="attack-row-name">${m.icon || ""} ${escapeHtml(m.label)}</span>
+        <label class="toggle-switch toggle-switch-sm"><input type="checkbox" class="map-modifier-toggle" data-id="${id}"><span class="toggle-slider"></span></label>
+        ${hasTunables ? `<button type="button" class="attack-row-expand" data-id="${id}" aria-label="Réglages fins">▸</button>` : `<span class="attack-row-expand-spacer"></span>`}
+      </div>
+      ${hasTunables ? `<div class="attack-row-tunables">${tunablesHtml}</div>` : ""}
+    </div>`;
   }).join("");
+
+  container.querySelectorAll(".attack-row-expand").forEach(btn => {
+    btn.addEventListener("click", () => btn.closest(".attack-row").classList.toggle("expanded"));
+  });
 }
+// Renvoie {ids: [...modificateurs actifs], overrides: {id: {champ: valeur}}}
 function readMapModifiers(containerId) {
   const container = document.getElementById(containerId);
-  if (!container) return [];
-  return [...container.querySelectorAll(".map-modifier-toggle")].filter(el => el.checked).map(el => el.dataset.id);
+  if (!container) return { ids: [], overrides: {} };
+  const ids = [...container.querySelectorAll(".map-modifier-toggle")].filter(el => el.checked).map(el => el.dataset.id);
+  const overrides = {};
+  container.querySelectorAll(".mm-tunable").forEach(inp => {
+    const id = inp.dataset.id, field = inp.dataset.field;
+    if (inp.value === "") return;
+    overrides[id] = overrides[id] || {};
+    overrides[id][field] = parseFloat(inp.value);
+  });
+  return { ids, overrides };
 }
 
 function buildAttackWeightsEditor(containerId) {
@@ -1840,7 +1882,7 @@ function renderBoard() {
   const me = lastState.players.find(p => p.id === myId);
 
   // cases marchables (adjacentes à moi) — visibles même en train de viser une attaque
-  if (me && me.alive) {
+  if (me && me.alive && generalSettings.showAdjacentCells) {
     [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy]) => {
       const x = me.x+dx, y = me.y+dy;
       const c = board.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
@@ -1976,6 +2018,12 @@ function updatePlayerTokens() {
       el.innerHTML = `<span class="pseudo-label"></span>`;
       layer.appendChild(el);
       playerTokenEls.set(p.id, el);
+      const pid = p.id;
+      el.querySelector(".pseudo-label").addEventListener("click", (e) => {
+        if (pid !== myId) return;
+        e.stopPropagation();
+        handleOwnPseudoClick();
+      });
     }
     el.style.background = displayColor(p.color);
     const now = Date.now();
@@ -2454,8 +2502,23 @@ function playArrowShot(cells, casterId) {
 // Événements des modificateurs de carte (météorite, orage, séisme, pluie acide) :
 // réutilise les impacts et effets existants, avec le bon thème visuel/sonore.
 function playMapEvent(kind, cells) {
-  if (kind === "earthquakeMod") { playEarthquakeShake(); return; }
+  if (kind === "earthquakeMod") { playEarthquakeShake(); flashCells(cells, kind); return; }
+  if (kind === "storm") { playStormBolt(cells); return; }
   flashCells(cells, kind);
+}
+
+// Orage : un éclair spectaculaire tombe du ciel jusqu'à la case frappée,
+// bien plus visible qu'un simple flash perdu sur une seule case.
+function playStormBolt(cells) {
+  const target = (cells || [])[0];
+  if (!target || !cellGeometry.track) { flashCells(cells, "storm"); return; }
+  const layer = document.getElementById("player-layer");
+  if (!layer) return;
+  const cellFull = cellGeometry.track + cellGeometry.gap;
+  const to = { x: target.x * cellFull + cellGeometry.track / 2, y: target.y * cellFull + cellGeometry.track / 2 };
+  const from = { x: to.x, y: -40 };
+  drawLightningBolt(layer, from, to);
+  setTimeout(() => flashCells(cells, "storm"), 90);
 }
 
 function flashCells(cells, attackId) {
@@ -2531,25 +2594,27 @@ function castingGlow(playerId, attackId, resolveAt) {
 // Le déplacement reste possible même quand on doit viser une attaque : un tap
 // bref sert à choisir la cible, un glissement plus large déplace le joueur.
 // ---------- Geste de déverrouillage des codes secrets ----------
-// Avant tout code, il faut taper la case en haut à gauche, puis celle en bas
-// à droite — sinon les glissements suivants ne comptent pour aucun code.
-let cheatUnlockStage = 0; // 0 = verrouillé, 1 = coin haut-gauche tapé, 2 = déverrouillé
-function checkCheatUnlockTap(x, y) {
-  const size = (lastState && lastState.gridSize) || 12;
-  const isTopLeft = x === 0 && y === 0;
-  const isBottomRight = x === size - 1 && y === size - 1;
-  if (cheatUnlockStage === 0) {
-    if (isTopLeft) cheatUnlockStage = 1;
-  } else if (cheatUnlockStage === 1) {
-    if (isBottomRight) { cheatUnlockStage = 2; cheatCodeBuffer = []; vibrate(30); }
-    else if (!isTopLeft) cheatUnlockStage = 0;
+// Avant tout code, il faut taper 3 fois sur son propre pseudo (au-dessus de
+// son jeton) — sinon les glissements suivants ne comptent pour aucun code.
+let cheatUnlockStage = 0; // 0 = verrouillé, 2 = déverrouillé
+let pseudoClickCount = 0;
+let pseudoClickTimer = null;
+function handleOwnPseudoClick() {
+  pseudoClickCount++;
+  clearTimeout(pseudoClickTimer);
+  pseudoClickTimer = setTimeout(() => { pseudoClickCount = 0; }, 1200);
+  if (pseudoClickCount >= 3) {
+    pseudoClickCount = 0;
+    clearTimeout(pseudoClickTimer);
+    cheatUnlockStage = 2;
+    cheatCodeBuffer = [];
+    vibrate(30);
   }
 }
 
 function onCellClick(x, y) {
   if (dragMoved) { dragMoved = false; return; } // c'était un glissement, pas un tap de ciblage
   if (targetingAttackId) { onTargetClick(x, y); return; }
-  checkCheatUnlockTap(x, y);
 }
 
 const SWIPE_THRESHOLD_PX = 22;
