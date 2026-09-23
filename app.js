@@ -1722,12 +1722,7 @@ function populateSettingsFromLiveState(prefix) {
 }
 
 document.getElementById("btn-toggle-end-settings").addEventListener("click", () => {
-  const form = document.getElementById("end-settings-form");
-  const btn = document.getElementById("btn-toggle-end-settings");
-  const nowVisible = form.style.display === "none";
-  if (nowVisible) populateSettingsFromLiveState("end-");
-  form.style.display = nowVisible ? "block" : "none";
-  btn.textContent = nowVisible ? "⚙️ Masquer les paramètres" : "⚙️ Modifier les paramètres";
+  ws.send(JSON.stringify({ type: "backToLobby" }));
 });
 document.getElementById("btn-restart").addEventListener("click", () => {
   const { mode, config } = gatherFullConfig("end-");
