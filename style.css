@@ -178,6 +178,86 @@ html, body {
 .btn-secondary:active { background: var(--line); }
 
 .divider { text-align: center; color: var(--text-dim); font-size: 13px; margin: 18px 0; position: relative; }
+
+/* ================= MODE SOLO ================= */
+.solo-game-card {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px;
+  padding: 14px; margin-top: 10px; cursor: pointer; text-align: left;
+}
+.solo-game-icon { font-size: 32px; flex-shrink: 0; }
+.solo-game-text { display: flex; flex-direction: column; gap: 2px; }
+.solo-game-label { font-weight: 700; font-size: 15px; }
+.solo-game-desc { font-size: 12px; color: var(--text-dim); }
+
+.battle-screen { max-width: 420px; margin: 0 auto; padding: 20px 16px; }
+.battle-top { text-align: center; margin-bottom: 14px; }
+.battle-enemy-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+.battle-enemy-sprite { font-size: 64px; line-height: 1; margin-bottom: 8px; }
+.battle-enemy-hpbar-wrap {
+  width: 160px; height: 10px; margin: 0 auto; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 5px; overflow: hidden;
+}
+.battle-enemy-hpfill { height: 100%; width: 100%; background: #ef4444; transition: width .25s ease; }
+
+.battle-dialogue {
+  background: var(--panel); border: 2px solid var(--line); border-radius: 10px;
+  padding: 14px 16px; font-size: 14px; line-height: 1.5; min-height: 48px; margin-bottom: 14px;
+}
+
+.battle-arena-wrap { display: flex; justify-content: center; margin-bottom: 14px; }
+.battle-arena {
+  position: relative; width: 260px; height: 160px;
+  background: #0a0c11; border: 3px solid #fff; border-radius: 6px;
+  overflow: hidden; touch-action: none;
+}
+.battle-heart {
+  position: absolute; width: 16px; height: 16px; margin: -8px 0 0 -8px;
+  font-size: 14px; line-height: 16px; text-align: center; z-index: 2;
+  filter: drop-shadow(0 0 3px rgba(239,68,68,.8));
+  transition: filter .15s ease;
+}
+.battle-heart.hit-flash { filter: drop-shadow(0 0 8px #fff) brightness(3); }
+.bullet { position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 3px; }
+.bullet-bubble { background: #38bdf8; border-radius: 50%; box-shadow: 0 0 4px rgba(56,189,248,.8); }
+.bullet-claw { background: #f97316; width: 14px; height: 7px; margin: -3.5px 0 0 -7px; border-radius: 2px; }
+.bullet-jet { background: #22d3ee; border-radius: 2px; box-shadow: 0 0 4px rgba(34,211,238,.8); }
+.bullet-dive { background: #f8fafc; width: 12px; height: 8px; margin: -4px 0 0 -6px; border-radius: 50% 50% 20% 20%; box-shadow: 0 0 4px rgba(248,250,252,.8); }
+
+.solo-survival-timer { font-size: 26px; font-weight: 700; font-family: var(--font-display); color: var(--accent); }
+.solo-survival-arena { width: 300px; height: 220px; margin: 0 auto; }
+
+.battle-act-choices { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+
+.battle-fight-bar-wrap { margin-bottom: 14px; cursor: pointer; }
+.battle-fight-track {
+  position: relative; height: 22px; background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 6px; margin-bottom: 6px; overflow: hidden;
+}
+.battle-fight-target {
+  position: absolute; left: 42%; width: 16%; top: 0; bottom: 0;
+  background: rgba(255,138,61,.35); border-left: 1px solid var(--accent); border-right: 1px solid var(--accent);
+}
+.battle-fight-marker { position: absolute; top: 0; bottom: 0; left: 0; width: 3px; background: #fff; }
+
+.battle-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+.battle-menu-btn {
+  padding: 12px 8px; font-size: 13px; font-weight: 700; letter-spacing: .3px;
+  background: var(--panel-2); color: var(--text); border: 2px solid var(--line); border-radius: 8px; cursor: pointer;
+}
+.battle-menu-btn.battle-fight { border-color: #ef4444; }
+.battle-menu-btn.battle-act { border-color: #facc15; }
+.battle-menu-btn.battle-item { border-color: #4ade80; }
+.battle-menu-btn.battle-mercy { border-color: #60a5fa; }
+
+.battle-bottom { display: flex; align-items: center; gap: 10px; }
+.battle-player-hp-label { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.battle-player-hpbar-wrap {
+  flex: 1; height: 12px; background: var(--panel-2); border: 1px solid var(--line);
+  border-radius: 6px; overflow: hidden;
+}
+.battle-player-hpfill { height: 100%; width: 100%; background: #facc15; transition: width .25s ease; }
+
 .divider::before, .divider::after {
   content: ""; position: absolute; top: 50%; width: 40%; height: 1px; background: var(--line);
 }
@@ -199,7 +279,8 @@ html, body {
 .room-code-actions { display: flex; justify-content: center; margin: -8px 0 12px; }
 .room-code-action-btn { width: auto; padding: 8px 16px; font-size: 13px; }
 .room-qr-wrap { display: flex; flex-direction: column; align-items: center; margin-bottom: 16px; }
-.room-qr-wrap #room-qr { background: #fff; padding: 8px; border-radius: 10px; line-height: 0; }
+.room-qr-wrap #room-qr { background: #fff; padding: 8px; border-radius: 10px; line-height: 0; width: 144px; height: 144px; box-sizing: border-box; overflow: hidden; }
+.room-qr-wrap #room-qr canvas, .room-qr-wrap #room-qr img { width: 128px !important; height: 128px !important; display: block; }
 
 .player-list { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .player-list li { display: flex; align-items: center; gap: 10px; background: var(--panel-2); padding: 8px 12px; border-radius: 8px; }
@@ -290,7 +371,7 @@ html, body {
 .cell.tile-teleport { background: #241b3d; }
 .cell.tile-teleport::after {
   content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-  width: 60%; height: 60%; border-radius: 50%;
+  width: 60%; height: 60%; border-radius: 12%;
   background: radial-gradient(circle, #c084fc 0%, #7c3aed 55%, transparent 75%);
   animation: portal-spin 2.2s linear infinite;
 }
@@ -301,7 +382,7 @@ html, body {
 }
 .cell.tile-rod::before {
   content: ""; position: absolute; left: 50%; top: 12%; transform: translateX(-50%);
-  width: 22%; height: 22%; border-radius: 50%; background: #fde047;
+  width: 22%; height: 22%; border-radius: 15%; background: #fde047;
   box-shadow: 0 0 8px 2px rgba(253,224,71,.8); animation: rod-pulse 1s ease-in-out infinite alternate;
 }
 @keyframes rod-pulse { from { opacity: .6; } to { opacity: 1; } }
@@ -309,12 +390,12 @@ html, body {
 /* ---- Carte Jardin : buisson / mur cassable ---- */
 .cell.tile-bush::after {
   content: ""; position: absolute; left: 50%; top: 58%; transform: translate(-50%, -50%);
-  width: 70%; height: 55%; border-radius: 50% 50% 45% 45%;
+  width: 70%; height: 55%; border-radius: 18%;
   background: radial-gradient(circle at 35% 35%, #4ade80, #16803d 75%);
 }
 .cell.tile-bush::before {
   content: ""; position: absolute; left: 32%; top: 30%;
-  width: 30%; height: 30%; border-radius: 50%;
+  width: 30%; height: 30%; border-radius: 18%;
   background: radial-gradient(circle at 35% 35%, #4ade80, #15803d 75%);
 }
 .cell.tile-breakable { background: #4a3624; }
@@ -369,8 +450,8 @@ html, body {
   position: relative;
   aspect-ratio: 1 / 1;
 }
-.cell.walkable::after {
-  content: ""; position: absolute; inset: 4px;
+.walkable-marker {
+  position: absolute; inset: 4px; pointer-events: none;
   border: 1.5px dashed var(--accent-dim); border-radius: 4px; opacity: .6;
 }
 .cell.targetable { background: var(--panel); }
@@ -728,6 +809,18 @@ html, body {
 .ios-steps { text-align: left; color: var(--text); font-size: 14px; line-height: 1.7; padding-left: 20px; margin: 14px 0; }
 .ios-steps li { margin-bottom: 6px; }
 .ios-share-icon { display: inline-block; }
+
+.map-editor-palette {
+  display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  padding: 2px 2px 6px; scrollbar-width: none;
+}
+.map-editor-palette::-webkit-scrollbar { display: none; }
+.me-brush {
+  flex-shrink: 0; width: 42px; height: 42px; font-size: 19px;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--panel-2); border: 2px solid var(--line); border-radius: 8px; cursor: pointer;
+}
+.me-brush.selected { border-color: var(--accent); background: var(--accent-dim); }
 
 .map-editor-grid {
   display: grid; grid-template-columns: repeat(12, 1fr); gap: 1px;

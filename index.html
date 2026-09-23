@@ -60,6 +60,86 @@
   </div>
 </section>
 
+<!-- ===== ECRAN SOLO : HUB DES MINI-JEUX ===== -->
+<section id="screen-solo-hub" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">Mode Solo</h2>
+    <p class="hint">Des mini-jeux à un joueur, sans connexion. D'autres arriveront au fil du temps.</p>
+    <div id="solo-games-list"></div>
+    <button type="button" id="btn-solo-hub-back" class="btn btn-secondary" style="margin-top:10px">Retour</button>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : COMBAT (façon Undertale) ===== -->
+<section id="screen-solo-battle" class="screen">
+  <div class="battle-screen">
+    <div class="battle-top">
+      <div id="battle-enemy-name" class="battle-enemy-name"></div>
+      <div id="battle-enemy-sprite" class="battle-enemy-sprite">🦀</div>
+      <div class="battle-enemy-hpbar-wrap"><div id="battle-enemy-hpfill" class="battle-enemy-hpfill"></div></div>
+    </div>
+
+    <div id="battle-dialogue" class="battle-dialogue"></div>
+
+    <div id="battle-arena-wrap" class="battle-arena-wrap" style="display:none">
+      <div id="battle-arena" class="battle-arena">
+        <div id="battle-heart" class="battle-heart">❤️</div>
+      </div>
+    </div>
+
+    <div id="battle-act-choices" class="battle-act-choices" style="display:none"></div>
+
+    <div id="battle-fight-bar-wrap" class="battle-fight-bar-wrap" style="display:none">
+      <div class="battle-fight-track">
+        <div class="battle-fight-target"></div>
+        <div id="battle-fight-marker" class="battle-fight-marker"></div>
+      </div>
+      <p class="hint" style="font-size:12px">Tape pour arrêter la barre au centre !</p>
+    </div>
+
+    <div id="battle-menu" class="battle-menu">
+      <button type="button" id="btn-battle-fight" class="battle-menu-btn battle-fight">COMBATTRE</button>
+      <button type="button" id="btn-battle-act" class="battle-menu-btn battle-act">ACTION</button>
+      <button type="button" id="btn-battle-item" class="battle-menu-btn battle-item">OBJET</button>
+      <button type="button" id="btn-battle-mercy" class="battle-menu-btn battle-mercy">GRÂCE</button>
+    </div>
+
+    <div class="battle-bottom">
+      <div id="battle-player-hp-label" class="battle-player-hp-label"></div>
+      <div class="battle-player-hpbar-wrap"><div id="battle-player-hpfill" class="battle-player-hpfill"></div></div>
+    </div>
+    <button type="button" id="btn-battle-quit" class="btn btn-secondary" style="margin-top:10px">Abandonner</button>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : TEMPÊTE EN MER (survie) ===== -->
+<section id="screen-solo-survival" class="screen">
+  <div class="battle-screen">
+    <div class="battle-top">
+      <div class="battle-enemy-name">🌊 Tempête en mer</div>
+      <div id="survival-timer" class="solo-survival-timer">0.0s</div>
+      <p class="hint" style="font-size:12px;margin-top:2px">Meilleur score : <span id="survival-best">0.0s</span></p>
+    </div>
+    <div class="battle-arena-wrap">
+      <div id="survival-arena" class="battle-arena solo-survival-arena">
+        <div id="survival-heart" class="battle-heart">❤️</div>
+      </div>
+    </div>
+    <p class="hint" style="font-size:12px;text-align:center">3 coups et c'est le naufrage. Survis le plus longtemps possible !</p>
+    <button type="button" id="btn-survival-quit" class="btn btn-secondary" style="margin-top:10px">Abandonner</button>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : FIN DE MINI-JEU ===== -->
+<section id="screen-solo-end" class="screen">
+  <div class="card">
+    <h2 id="solo-end-title" class="lobby-title">?</h2>
+    <p id="solo-end-text" class="hint"></p>
+    <button type="button" id="btn-solo-retry" class="btn btn-primary">Réessayer</button>
+    <button type="button" id="btn-solo-end-home" class="btn btn-secondary" style="margin-top:8px">Retour à l'accueil</button>
+  </div>
+</section>
+
 <!-- ===== ECRAN LOBBY ===== -->
 <section id="screen-lobby" class="screen">
   <div class="card">
@@ -69,6 +149,7 @@
     <p class="hint">Tape le code pour le partager avec tes amis.</p>
     <div class="room-code-actions">
       <button type="button" id="btn-copy-code" class="btn btn-secondary room-code-action-btn">📋 Copier le code</button>
+      <button type="button" id="btn-toggle-qr" class="btn btn-secondary room-code-action-btn">📱 QR Code</button>
     </div>
     <div id="room-qr-wrap" class="room-qr-wrap" style="display:none">
       <div id="room-qr"></div>
@@ -461,6 +542,17 @@
   </div>
 </div>
 
+<div id="mode-choice-modal" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:340px">
+    <h2 class="lobby-title" style="font-size:19px">Comment veux-tu jouer ?</h2>
+    <button type="button" id="btn-choose-multiplayer" class="btn btn-primary" style="margin-top:10px">🎮 Multijoueur</button>
+    <p class="hint" style="font-size:12px;margin:4px 0 14px">Affronte tes amis en ligne, à plusieurs.</p>
+    <button type="button" id="btn-choose-solo" class="btn btn-secondary">👤 Solo</button>
+    <p class="hint" style="font-size:12px;margin:4px 0 14px">Des mini-jeux à un joueur, sans connexion.</p>
+    <button type="button" id="btn-close-mode-choice" class="btn btn-secondary">Annuler</button>
+  </div>
+</div>
+
 <div id="general-settings-modal" class="ios-install-modal" style="display:none">
   <div class="card" style="max-width:380px">
     <h2 class="lobby-title" style="font-size:18px">⚙️ Paramètres généraux</h2>
@@ -535,7 +627,9 @@
 <div id="map-editor-modal" class="ios-install-modal" style="display:none">
   <div class="card" style="max-width:380px">
     <h2 class="lobby-title" style="font-size:18px">Éditeur de carte</h2>
-    <p class="hint" style="font-size:12px">Tape une case pour faire défiler : vide → mur → tonneau → boue → soin → téléport → cassable → paratonnerre → buisson → vide.</p>
+    <p class="hint" style="font-size:12px">Choisis un pinceau, puis tape les cases à peindre.</p>
+    <div id="map-editor-palette" class="map-editor-palette"></div>
+    <p id="map-editor-brush-desc" class="hint" style="font-size:12px;text-align:left;margin:2px 0 10px"></p>
     <div id="map-editor-grid" class="map-editor-grid"></div>
     <p id="map-editor-counts" class="hint" style="font-size:12px"></p>
     <p id="map-editor-error" class="error" style="font-size:12px"></p>

@@ -1,6 +1,6 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
-// (ex: "https://capnaval.onrender.com")
+// (ex: "https://capnaval-backend.onrender.com")
 const BACKEND_URL = "https://capnaval-backend.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
@@ -274,9 +274,19 @@ document.getElementById("btn-confirm-map").addEventListener("click", closeMapMod
 
 // ---------- Éditeur de carte personnalisée (enregistré en local sur l'appareil) ----------
 const CUSTOM_MAP_KEY = "capnaval_custom_map";
+const EDITOR_BRUSHES = [
+  { type: "empty",        icon: "🧹", label: "Gomme",        desc: "Efface la case : elle redevient vide et praticable." },
+  { type: "wall",         icon: "🧱", label: "Mur",           desc: "Bloque totalement le passage et les attaques à distance." },
+  { type: "barrel",       icon: "🛢️", label: "Tonneau",      desc: "Explose au contact d'une attaque, dégâts en chaîne aux alentours." },
+  { type: "mud",          icon: "🟤", label: "Boue",          desc: "Ralentit fortement quiconque marche dessus." },
+  { type: "heal",         icon: "💚", label: "Soin",          desc: "Soigne progressivement qui reste dessus, tant qu'il n'est pas au maximum." },
+  { type: "teleport",     icon: "🌀", label: "Téléport",      desc: "Envoie instantanément vers une autre case de téléport au hasard (recharge de 5s)." },
+  { type: "breakable",    icon: "🟫", label: "Cassable",      desc: "Un mur qui encaisse les dégâts (30 PV) avant de céder et devenir praticable." },
+  { type: "lightningRod", icon: "⚡", label: "Paratonnerre",  desc: "Déclenche une mini-explosion si la Chaîne d'éclairs passe à proximité." },
+  { type: "bush",         icon: "🌿", label: "Buisson",       desc: "Cache le joueur qui s'y trouve aux yeux des autres (toujours visible pour lui-même)." },
+];
 const CUSTOM_MAP_TYPES = ["wall", "barrel", "mud", "heal", "teleport", "breakable", "lightningRod", "bush"];
 const CUSTOM_MAP_KEY_BY_TYPE = { wall: "walls", barrel: "barrels", mud: "mud", heal: "heal", teleport: "teleport", breakable: "breakable", lightningRod: "lightningRod", bush: "bush" };
-const CUSTOM_MAP_CYCLE = ["empty", ...CUSTOM_MAP_TYPES];
 function emptyCustomMap() { return { walls: [], barrels: [], mud: [], heal: [], teleport: [], breakable: [], lightningRod: [], bush: [] }; }
 
 function loadCustomMap() {
@@ -294,12 +304,33 @@ function saveCustomMapToStorage(data) {
 }
 
 let editingMap = emptyCustomMap();
+let selectedBrush = "wall";
 
 function cellTypeInEditor(x, y) {
   for (const type of CUSTOM_MAP_TYPES) {
     if (editingMap[CUSTOM_MAP_KEY_BY_TYPE[type]].some(c => c.x === x && c.y === y)) return type;
   }
   return "empty";
+}
+
+function buildEditorPalette() {
+  const palette = document.getElementById("map-editor-palette");
+  palette.innerHTML = EDITOR_BRUSHES.map(b =>
+    `<button type="button" class="me-brush${b.type === selectedBrush ? " selected" : ""}" data-type="${b.type}" title="${escapeHtml(b.label)}">${b.icon}</button>`
+  ).join("");
+  palette.querySelectorAll(".me-brush").forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectedBrush = btn.dataset.type;
+      palette.querySelectorAll(".me-brush").forEach(b => b.classList.toggle("selected", b === btn));
+      updateEditorBrushDesc();
+    });
+  });
+  updateEditorBrushDesc();
+}
+function updateEditorBrushDesc() {
+  const b = EDITOR_BRUSHES.find(x => x.type === selectedBrush);
+  const el = document.getElementById("map-editor-brush-desc");
+  if (el && b) el.textContent = `${b.icon} ${b.label} — ${b.desc}`;
 }
 
 function buildEditorGrid() {
@@ -312,22 +343,20 @@ function buildEditorGrid() {
       cell.dataset.x = x; cell.dataset.y = y;
       const t = cellTypeInEditor(x, y);
       if (t !== "empty") cell.classList.add("me-" + t);
-      cell.addEventListener("click", () => cycleEditorCell(x, y));
+      cell.addEventListener("click", () => paintEditorCell(x, y));
       container.appendChild(cell);
     }
   }
 }
 
-function cycleEditorCell(x, y) {
-  const current = cellTypeInEditor(x, y);
-  const next = CUSTOM_MAP_CYCLE[(CUSTOM_MAP_CYCLE.indexOf(current) + 1) % CUSTOM_MAP_CYCLE.length];
+function paintEditorCell(x, y) {
   CUSTOM_MAP_TYPES.forEach(type => {
     const key = CUSTOM_MAP_KEY_BY_TYPE[type];
     editingMap[key] = editingMap[key].filter(c => !(c.x === x && c.y === y));
   });
-  if (next !== "empty") editingMap[CUSTOM_MAP_KEY_BY_TYPE[next]].push({ x, y });
+  if (selectedBrush !== "empty") editingMap[CUSTOM_MAP_KEY_BY_TYPE[selectedBrush]].push({ x, y });
   const cell = document.querySelector(`.me-cell[data-x="${x}"][data-y="${y}"]`);
-  if (cell) cell.className = "me-cell" + (next !== "empty" ? " me-" + next : "");
+  if (cell) cell.className = "me-cell" + (selectedBrush !== "empty" ? " me-" + selectedBrush : "");
   updateEditorCounts();
 }
 
@@ -346,6 +375,7 @@ function openMapEditor() {
   const saved = loadCustomMap();
   editingMap = emptyCustomMap();
   Object.keys(editingMap).forEach(k => { editingMap[k] = saved[k].slice(); });
+  buildEditorPalette();
   buildEditorGrid();
   updateEditorCounts();
   document.getElementById("map-editor-modal").style.display = "flex";
@@ -509,6 +539,411 @@ function showScreen(id) {
   document.getElementById(id).classList.add("active");
 }
 
+// ================= MODE SOLO : MINI-JEUX =================
+// Système autonome, sans serveur — vit entièrement dans le navigateur.
+// D'autres mini-jeux viendront s'ajouter à SOLO_GAMES au fil du temps.
+const SOLO_GAMES = [
+  { id: "crab", kind: "battle", enemy: "crab", icon: "🦀", label: "Le Crabe Bougon", desc: "Un combat façon dialogue : esquive ses attaques, combats-le ou tente la grâce." },
+  { id: "gull", kind: "battle", enemy: "gull", icon: "🐦", label: "La Mouette Voleuse", desc: "Un second combat, plus rapide et plus agile que le crabe." },
+  { id: "storm", kind: "survival", icon: "🌊", label: "Tempête en mer", desc: "Survis le plus longtemps possible dans une mer déchaînée. Meilleur score enregistré." },
+];
+let soloRetryHandler = null;
+
+function openSoloHub() {
+  const list = document.getElementById("solo-games-list");
+  list.innerHTML = SOLO_GAMES.map(g => `
+    <button type="button" class="solo-game-card" data-id="${g.id}">
+      <span class="solo-game-icon">${g.icon}</span>
+      <span class="solo-game-text"><span class="solo-game-label">${escapeHtml(g.label)}</span><span class="solo-game-desc">${escapeHtml(g.desc)}</span></span>
+    </button>`).join("");
+  list.querySelectorAll(".solo-game-card").forEach(btn => {
+    const g = SOLO_GAMES.find(x => x.id === btn.dataset.id);
+    btn.addEventListener("click", () => {
+      if (g.kind === "battle") startSoloBattle(g.enemy);
+      else if (g.kind === "survival") startSurvivalGame();
+    });
+  });
+  showScreen("screen-solo-hub");
+}
+document.getElementById("btn-solo-hub-back").addEventListener("click", () => showScreen("screen-home"));
+
+// ---- Ennemis (contenu original, aucun personnage emprunté) ----
+const SOLO_ENEMIES = {
+  crab: {
+    name: "Le Crabe Bougon", sprite: "🦀", maxHp: 60,
+    intro: "Un crabe bougon bloque le ponton en claquant des pinces. Il n'a pas l'air commode.",
+    actLabels: ["Observer", "Discuter"],
+    actTexts: ["Tu observes le crabe. Il a l'air fatigué d'être toujours seul sur son rocher.", "Tu discutes avec le crabe. Il baisse doucement ses pinces."],
+    fightDefeatText: "Coup décisif ! {dmg} dégâts. Le Crabe Bougon s'effondre !",
+    spareText: "Le Crabe Bougon baisse ses pinces et s'éloigne en marchant de travers.",
+    notReadyText: "Le Crabe Bougon n'est pas encore prêt à se calmer...",
+    winText: "Le Crabe Bougon est vaincu. Le passage est libre.",
+    mercyWinText: "Tu as épargné le Crabe Bougon. Il te laisse passer, presque reconnaissant.",
+    loseText: "Le Crabe Bougon a eu raison de toi. Tu peux retenter ta chance.",
+    itemText: "un biscuit de mer",
+    patterns: ["bubbles", "claws", "jets"],
+  },
+  gull: {
+    name: "La Mouette Voleuse", sprite: "🐦", maxHp: 45,
+    intro: "Une mouette voleuse fond sur toi en poussant des cris perçants, à l'affût de tes provisions.",
+    actLabels: ["Observer", "Partager"],
+    actTexts: ["Tu observes la mouette. Elle louche clairement sur ton sac.", "Tu lui donnes une miette. Elle penche la tête, presque apaisée."],
+    fightDefeatText: "Touchée en plein vol ! {dmg} dégâts. La Mouette Voleuse s'enfuit en piqué !",
+    spareText: "La Mouette Voleuse repart avec une miette, satisfaite.",
+    notReadyText: "La Mouette Voleuse tourne encore autour de toi, méfiante...",
+    winText: "La Mouette Voleuse est repoussée. Le ciel est dégagé.",
+    mercyWinText: "Tu as laissé la Mouette Voleuse partir avec sa miette. Elle s'envole, satisfaite.",
+    loseText: "La Mouette Voleuse a eu raison de toi à coups de bec. Tu peux retenter ta chance.",
+    itemText: "un biscuit de mer",
+    patterns: ["dive", "bubbles", "jets"],
+  },
+};
+
+let solo = null;
+
+function startSoloBattle(enemyId) {
+  const enemy = SOLO_ENEMIES[enemyId] || SOLO_ENEMIES.crab;
+  solo = { enemy, enemyHp: enemy.maxHp, enemyMaxHp: enemy.maxHp, playerHp: 20, playerMaxHp: 20,
+    acted: 0, spareReady: false, items: 2, turn: 0, invuln: false, ended: false };
+  document.getElementById("battle-enemy-name").textContent = enemy.name;
+  document.getElementById("battle-enemy-sprite").textContent = enemy.sprite;
+  setBattleDialogue(enemy.intro);
+  updateBattleBars();
+  showBattleMenu();
+  wireArenaControls();
+  soloRetryHandler = () => startSoloBattle(enemyId);
+  showScreen("screen-solo-battle");
+}
+document.getElementById("btn-solo-retry").addEventListener("click", () => { if (soloRetryHandler) soloRetryHandler(); });
+document.getElementById("btn-solo-end-home").addEventListener("click", () => showScreen("screen-home"));
+document.getElementById("btn-battle-quit").addEventListener("click", () => {
+  if (dodgeTimer) clearInterval(dodgeTimer);
+  showScreen("screen-home");
+});
+
+function updateBattleBars() {
+  document.getElementById("battle-enemy-hpfill").style.width = Math.max(0, solo.enemyHp / solo.enemyMaxHp * 100) + "%";
+  document.getElementById("battle-player-hp-label").textContent = `PV  ${Math.max(0, solo.playerHp)} / ${solo.playerMaxHp}`;
+  document.getElementById("battle-player-hpfill").style.width = Math.max(0, solo.playerHp / solo.playerMaxHp * 100) + "%";
+}
+function setBattleDialogue(text) { document.getElementById("battle-dialogue").textContent = text; }
+function showBattleMenu() {
+  document.getElementById("battle-menu").style.display = "grid";
+  document.getElementById("battle-fight-bar-wrap").style.display = "none";
+  document.getElementById("battle-act-choices").style.display = "none";
+  document.getElementById("battle-arena-wrap").style.display = "none";
+}
+
+// ---- COMBATTRE : barre de rythme, plus on tape près du centre, plus ça fait mal ----
+let fightBarAnim = null;
+document.getElementById("btn-battle-fight").addEventListener("click", startFightBar);
+function startFightBar() {
+  document.getElementById("battle-menu").style.display = "none";
+  const wrap = document.getElementById("battle-fight-bar-wrap");
+  wrap.style.display = "block";
+  const marker = document.getElementById("battle-fight-marker");
+  let pos = 0, dir = 1;
+  wrap.dataset.armed = "1";
+  if (fightBarAnim) clearInterval(fightBarAnim);
+  fightBarAnim = setInterval(() => {
+    pos += dir * 2.4;
+    if (pos >= 100) { pos = 100; dir = -1; }
+    if (pos <= 0) { pos = 0; dir = 1; }
+    marker.style.left = pos + "%";
+  }, 16);
+  const onTap = () => {
+    if (wrap.dataset.armed !== "1") return;
+    wrap.dataset.armed = "0";
+    clearInterval(fightBarAnim);
+    const finalPos = parseFloat(marker.style.left) || 0;
+    const accuracy = Math.max(0, 1 - Math.abs(finalPos - 50) / 50);
+    const dmg = Math.round(4 + accuracy * 14);
+    solo.enemyHp = Math.max(0, solo.enemyHp - dmg);
+    updateBattleBars();
+    wrap.style.display = "none";
+    wrap.removeEventListener("click", onTap);
+    if (solo.enemyHp <= 0) { setBattleDialogue(solo.enemy.fightDefeatText.replace("{dmg}", dmg)); soloWin(false); return; }
+    setBattleDialogue(accuracy > 0.8 ? `Coup parfait ! ${dmg} dégâts !` : `Tu infliges ${dmg} dégâts.`);
+    startDodgePhase();
+  };
+  wrap.addEventListener("click", onTap);
+}
+
+// ---- ACTION : texte à choix, débloque la GRÂCE après quelques échanges ----
+document.getElementById("btn-battle-act").addEventListener("click", showActChoices);
+function showActChoices() {
+  document.getElementById("battle-menu").style.display = "none";
+  const box = document.getElementById("battle-act-choices");
+  box.style.display = "flex";
+  const i = solo.acted === 0 ? 0 : 1;
+  const label = solo.enemy.actLabels[i], text = solo.enemy.actTexts[i];
+  box.innerHTML = `<button type="button" class="battle-menu-btn">${escapeHtml(label)}</button>`;
+  box.querySelector("button").addEventListener("click", () => {
+    solo.acted++;
+    setBattleDialogue(text);
+    box.style.display = "none";
+    if (solo.acted >= 2) solo.spareReady = true;
+    startDodgePhase();
+  });
+}
+
+// ---- OBJET : soigne, réserve limitée ----
+document.getElementById("btn-battle-item").addEventListener("click", useItem);
+function useItem() {
+  if (solo.items <= 0) { setBattleDialogue("Tu n'as plus de biscuits de mer."); startDodgePhase(); return; }
+  solo.items--;
+  const heal = 8;
+  solo.playerHp = Math.min(solo.playerMaxHp, solo.playerHp + heal);
+  updateBattleBars();
+  setBattleDialogue(`Tu manges ${solo.enemy.itemText}. +${heal} PV ! (${solo.items} restant${solo.items > 1 ? "s" : ""})`);
+  startDodgePhase();
+}
+
+// ---- GRÂCE : possible après 2 actions, ou si l'ennemi est déjà très affaibli ----
+document.getElementById("btn-battle-mercy").addEventListener("click", trySpare);
+function trySpare() {
+  if (solo.spareReady || solo.enemyHp <= solo.enemyMaxHp * 0.25) {
+    setBattleDialogue(solo.enemy.spareText);
+    soloWin(true);
+    return;
+  }
+  setBattleDialogue(solo.enemy.notReadyText);
+  startDodgePhase();
+}
+
+function soloWin(peaceful) {
+  solo.ended = true;
+  document.getElementById("solo-end-title").textContent = peaceful ? "Grâce accordée !" : "Victoire !";
+  document.getElementById("solo-end-text").textContent = peaceful ? solo.enemy.mercyWinText : solo.enemy.winText;
+  showScreen("screen-solo-end");
+}
+function soloLose() {
+  solo.ended = true;
+  document.getElementById("solo-end-title").textContent = "K.O....";
+  document.getElementById("solo-end-text").textContent = solo.enemy.loseText;
+  showScreen("screen-solo-end");
+}
+
+// ---- Phase d'esquive (combats) : bullet-hell dans une petite arène, cœur déplaçable au doigt ----
+const ARENA_W = 260, ARENA_H = 160;
+let dodgeTimer = null, dodgeBullets = [], dodgeTicksLeft = 0, dodgeSpawnCountdown = 0, dodgePattern = "bubbles";
+let heartX = ARENA_W / 2, heartY = ARENA_H / 2, heartDragging = false;
+
+function updateHeartPos() {
+  const heart = document.getElementById("battle-heart");
+  heart.style.left = heartX + "px";
+  heart.style.top = heartY + "px";
+}
+function wireArenaControls() {
+  const arena = document.getElementById("battle-arena");
+  const move = (clientX, clientY) => {
+    const rect = arena.getBoundingClientRect();
+    heartX = Math.max(8, Math.min(ARENA_W - 8, clientX - rect.left));
+    heartY = Math.max(8, Math.min(ARENA_H - 8, clientY - rect.top));
+    updateHeartPos();
+  };
+  arena.ontouchstart = (e) => { e.preventDefault(); const t = e.touches[0]; move(t.clientX, t.clientY); };
+  arena.ontouchmove = (e) => { e.preventDefault(); const t = e.touches[0]; move(t.clientX, t.clientY); };
+  arena.onmousedown = (e) => { heartDragging = true; move(e.clientX, e.clientY); };
+  arena.onmousemove = (e) => { if (heartDragging) move(e.clientX, e.clientY); };
+  window.addEventListener("mouseup", () => { heartDragging = false; });
+}
+
+function startDodgePhase() {
+  document.getElementById("battle-menu").style.display = "none";
+  document.getElementById("battle-arena-wrap").style.display = "block";
+  const arena = document.getElementById("battle-arena");
+  arena.querySelectorAll(".bullet").forEach(b => b.remove());
+  heartX = ARENA_W / 2; heartY = ARENA_H / 2;
+  updateHeartPos();
+  dodgeBullets = [];
+  solo.turn++;
+  const patterns = solo.enemy.patterns;
+  dodgePattern = patterns[solo.turn % patterns.length];
+  dodgeTicksLeft = 90; // 90 x 50ms ≈ 4.5s
+  dodgeSpawnCountdown = 10; // courte pause avant le premier tir, le temps de s'écarter du centre
+  if (dodgeTimer) clearInterval(dodgeTimer);
+  dodgeTimer = setInterval(dodgeTick, 50);
+}
+function dodgeTick() {
+  if (!solo || solo.ended) { clearInterval(dodgeTimer); return; }
+  dodgeSpawnCountdown--;
+  if (dodgeSpawnCountdown <= 0) {
+    spawnBullet(dodgePattern);
+    dodgeSpawnCountdown = dodgePattern === "claws" ? 11 : dodgePattern === "dive" ? 13 : 5;
+  }
+  stepBullets();
+  dodgeTicksLeft--;
+  if (dodgeTicksLeft <= 0) { clearInterval(dodgeTimer); endDodgePhase(); }
+}
+function spawnBullet(pattern) {
+  const arena = document.getElementById("battle-arena");
+  dodgeBullets.push(makeArenaBullet(arena, ARENA_W, ARENA_H, pattern));
+}
+// Fabrique un projectile pour un motif donné, dans une arène de taille donnée
+// (réutilisé par les combats ET par le jeu de survie).
+function makeArenaBullet(arena, w, h, pattern) {
+  if (pattern === "bubbles") {
+    const x = 10 + Math.random() * (w - 20);
+    return makeBullet(arena, x, -10, 0, 1.6, "bubble");
+  } else if (pattern === "claws") {
+    const fromLeft = Math.random() < 0.5;
+    const y = 15 + Math.random() * (h - 30);
+    return makeBullet(arena, fromLeft ? -12 : w + 12, y, fromLeft ? 2.4 : -2.4, 0, "claw");
+  } else if (pattern === "dive") {
+    const fromLeftTop = Math.random() < 0.5;
+    return makeBullet(arena, fromLeftTop ? -10 : w + 10, -10, fromLeftTop ? 2.6 : -2.6, 2.0, "dive");
+  } else { // jets
+    const angle = (Math.random() * 2 - 1) * 0.6;
+    const speed = 2.1;
+    return makeBullet(arena, w / 2, h / 2, Math.sin(angle) * speed, -Math.cos(angle) * speed, "jet");
+  }
+}
+function makeBullet(arena, x, y, vx, vy, kind) {
+  const el = document.createElement("div");
+  el.className = "bullet bullet-" + kind;
+  el.style.left = x + "px"; el.style.top = y + "px";
+  arena.appendChild(el);
+  return { x, y, vx, vy, el };
+}
+function stepBullets() {
+  for (const b of dodgeBullets.slice()) {
+    b.x += b.vx; b.y += b.vy;
+    b.el.style.left = b.x + "px"; b.el.style.top = b.y + "px";
+    if (b.x < -20 || b.x > ARENA_W + 20 || b.y < -20 || b.y > ARENA_H + 20) {
+      b.el.remove();
+      dodgeBullets = dodgeBullets.filter(bb => bb !== b);
+      continue;
+    }
+    if (!solo.invuln && Math.hypot(b.x - heartX, b.y - heartY) < 11) hitPlayer();
+  }
+}
+function hitPlayer() {
+  solo.playerHp -= 4;
+  updateBattleBars();
+  solo.invuln = true;
+  const heart = document.getElementById("battle-heart");
+  heart.classList.add("hit-flash");
+  setTimeout(() => { solo.invuln = false; heart.classList.remove("hit-flash"); }, 500);
+  if (solo.playerHp <= 0) { clearInterval(dodgeTimer); soloLose(); }
+}
+function endDodgePhase() {
+  document.getElementById("battle-arena").querySelectorAll(".bullet").forEach(b => b.remove());
+  document.getElementById("battle-arena-wrap").style.display = "none";
+  if (solo && !solo.ended) {
+    document.getElementById("battle-menu").style.display = "grid";
+    setBattleDialogue(`${solo.enemy.name} reprend son souffle...`);
+  }
+}
+
+// ---- Tempête en mer : jeu de survie chronométré, meilleur score enregistré ----
+const SURVIVAL_W = 300, SURVIVAL_H = 220, SURVIVAL_MAX_HITS = 3;
+const SURVIVAL_BEST_KEY = "capnaval_survival_best";
+let survivalTimer = null, survivalBullets = [], survivalStartAt = 0, survivalSpawnCountdown = 0, survivalRunning = false;
+let survivalHeartX = SURVIVAL_W / 2, survivalHeartY = SURVIVAL_H / 2, survivalDragging = false, survivalInvuln = false, survivalHits = 0;
+
+function loadSurvivalBest() { try { return parseFloat(localStorage.getItem(SURVIVAL_BEST_KEY) || "0"); } catch (e) { return 0; } }
+function saveSurvivalBest(v) { try { localStorage.setItem(SURVIVAL_BEST_KEY, v.toFixed(1)); } catch (e) { /* ignore */ } }
+
+function startSurvivalGame() {
+  const arena = document.getElementById("survival-arena");
+  arena.querySelectorAll(".bullet").forEach(b => b.remove());
+  survivalHeartX = SURVIVAL_W / 2; survivalHeartY = SURVIVAL_H / 2;
+  updateSurvivalHeartPos();
+  survivalBullets = [];
+  survivalHits = 0;
+  survivalInvuln = false;
+  document.getElementById("survival-best").textContent = loadSurvivalBest().toFixed(1) + "s";
+  document.getElementById("survival-timer").textContent = "0.0s";
+  wireSurvivalControls();
+  survivalStartAt = performance.now();
+  survivalSpawnCountdown = 20; // court répit avant le premier projectile
+  survivalRunning = true;
+  soloRetryHandler = startSurvivalGame;
+  if (survivalTimer) clearInterval(survivalTimer);
+  survivalTimer = setInterval(survivalTick, 50);
+  showScreen("screen-solo-survival");
+}
+document.getElementById("btn-survival-quit").addEventListener("click", () => {
+  survivalRunning = false;
+  if (survivalTimer) clearInterval(survivalTimer);
+  showScreen("screen-home");
+});
+
+function updateSurvivalHeartPos() {
+  const heart = document.getElementById("survival-heart");
+  heart.style.left = survivalHeartX + "px";
+  heart.style.top = survivalHeartY + "px";
+}
+function wireSurvivalControls() {
+  const arena = document.getElementById("survival-arena");
+  const move = (clientX, clientY) => {
+    const rect = arena.getBoundingClientRect();
+    survivalHeartX = Math.max(8, Math.min(SURVIVAL_W - 8, clientX - rect.left));
+    survivalHeartY = Math.max(8, Math.min(SURVIVAL_H - 8, clientY - rect.top));
+    updateSurvivalHeartPos();
+  };
+  arena.ontouchstart = (e) => { e.preventDefault(); const t = e.touches[0]; move(t.clientX, t.clientY); };
+  arena.ontouchmove = (e) => { e.preventDefault(); const t = e.touches[0]; move(t.clientX, t.clientY); };
+  arena.onmousedown = (e) => { survivalDragging = true; move(e.clientX, e.clientY); };
+  arena.onmousemove = (e) => { if (survivalDragging) move(e.clientX, e.clientY); };
+  window.addEventListener("mouseup", () => { survivalDragging = false; });
+}
+
+function survivalTick() {
+  if (!survivalRunning) { clearInterval(survivalTimer); return; }
+  const elapsed = (performance.now() - survivalStartAt) / 1000;
+  document.getElementById("survival-timer").textContent = elapsed.toFixed(1) + "s";
+  survivalSpawnCountdown--;
+  if (survivalSpawnCountdown <= 0) {
+    const patterns = ["bubbles", "claws", "dive", "jets"];
+    spawnSurvivalBullet(patterns[Math.floor(Math.random() * patterns.length)], elapsed);
+    survivalSpawnCountdown = Math.max(5, 16 - Math.floor(elapsed / 2)); // le rythme s'accélère peu à peu
+  }
+  stepSurvivalBullets();
+}
+function spawnSurvivalBullet(pattern, elapsed) {
+  const arena = document.getElementById("survival-arena");
+  const b = makeArenaBullet(arena, SURVIVAL_W, SURVIVAL_H, pattern);
+  const speedMult = 1 + Math.min(1, elapsed / 40); // accélère légèrement plus la partie dure
+  b.vx *= speedMult; b.vy *= speedMult;
+  survivalBullets.push(b);
+}
+function stepSurvivalBullets() {
+  for (const b of survivalBullets.slice()) {
+    b.x += b.vx; b.y += b.vy;
+    b.el.style.left = b.x + "px"; b.el.style.top = b.y + "px";
+    if (b.x < -20 || b.x > SURVIVAL_W + 20 || b.y < -20 || b.y > SURVIVAL_H + 20) {
+      b.el.remove();
+      survivalBullets = survivalBullets.filter(bb => bb !== b);
+      continue;
+    }
+    if (!survivalInvuln && Math.hypot(b.x - survivalHeartX, b.y - survivalHeartY) < 11) survivalHit();
+  }
+}
+function survivalHit() {
+  survivalHits++;
+  survivalInvuln = true;
+  const heart = document.getElementById("survival-heart");
+  heart.classList.add("hit-flash");
+  vibrate(40);
+  setTimeout(() => { survivalInvuln = false; heart.classList.remove("hit-flash"); }, 600);
+  if (survivalHits >= SURVIVAL_MAX_HITS) endSurvivalGame();
+}
+function endSurvivalGame() {
+  survivalRunning = false;
+  clearInterval(survivalTimer);
+  const elapsed = (performance.now() - survivalStartAt) / 1000;
+  const best = loadSurvivalBest();
+  const isRecord = elapsed > best;
+  if (isRecord) saveSurvivalBest(elapsed);
+  document.getElementById("solo-end-title").textContent = isRecord ? "Nouveau record !" : "Chaviré !";
+  document.getElementById("solo-end-text").textContent = isRecord
+    ? `Tu as survécu ${elapsed.toFixed(1)} secondes dans la tempête — un nouveau record !`
+    : `Tu as survécu ${elapsed.toFixed(1)} secondes dans la tempête (record : ${best.toFixed(1)}s).`;
+  showScreen("screen-solo-end");
+}
+
 // ---------- Pseudo mémorisé ----------
 const PSEUDO_KEY = "capnaval_pseudo";
 (function prefillPseudo() {
@@ -544,7 +979,7 @@ function shareRoomCode() {
   const link = roomShareLink();
   const text = `Hey ! Rejoins ma partie de CapNaval sur ${link} !`;
   if (navigator.share) {
-    navigator.share({ text, url: link }).catch(() => { /* annulé ou indisponible, sans gravité */ });
+    navigator.share({ text }).catch(() => { /* annulé ou indisponible, sans gravité */ });
     return;
   }
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -573,6 +1008,10 @@ document.getElementById("btn-copy-code").addEventListener("click", () => {
     flash();
   }
 });
+document.getElementById("btn-toggle-qr").addEventListener("click", () => {
+  const wrap = document.getElementById("room-qr-wrap");
+  wrap.style.display = wrap.style.display === "none" ? "flex" : "none";
+});
 
 // ---------- QR code du lien de partie (facultatif : dégradation silencieuse si indisponible) ----------
 function renderRoomQR(retriesLeft) {
@@ -587,7 +1026,6 @@ function renderRoomQR(retriesLeft) {
   el.innerHTML = "";
   try {
     new QRCode(el, { text: roomShareLink(), width: 128, height: 128, colorDark: "#10131a", colorLight: "#ffffff" });
-    wrap.style.display = "block";
   } catch (e) { /* pas grave, le code texte + le partage restent disponibles */ }
 }
 
@@ -747,7 +1185,20 @@ function runLoadingLog(el, messages, stepMs) {
 }
 
 // ---------- Accueil ----------
-document.getElementById("btn-create").addEventListener("click", async () => {
+document.getElementById("btn-create").addEventListener("click", () => {
+  const pseudo = document.getElementById("input-pseudo").value.trim();
+  if (!pseudo) return setHomeError("Entre un pseudo.");
+  document.getElementById("mode-choice-modal").style.display = "flex";
+});
+document.getElementById("btn-close-mode-choice").addEventListener("click", () => {
+  document.getElementById("mode-choice-modal").style.display = "none";
+});
+document.getElementById("btn-choose-solo").addEventListener("click", () => {
+  document.getElementById("mode-choice-modal").style.display = "none";
+  openSoloHub();
+});
+document.getElementById("btn-choose-multiplayer").addEventListener("click", async () => {
+  document.getElementById("mode-choice-modal").style.display = "none";
   const pseudo = document.getElementById("input-pseudo").value.trim();
   if (!pseudo) return setHomeError("Entre un pseudo.");
   saveLastPseudo(pseudo);
@@ -1882,11 +2333,14 @@ function renderBoard() {
   const me = lastState.players.find(p => p.id === myId);
 
   // cases marchables (adjacentes à moi) — visibles même en train de viser une attaque
+  // Un vrai élément enfant, pas un pseudo-élément ::after : les cases spéciales
+  // (téléport, buisson...) utilisent déjà ::after/::before, un pseudo-élément
+  // partagé entrerait en collision et donnerait des rendus imprévisibles.
   if (me && me.alive && generalSettings.showAdjacentCells) {
     [[1,0],[-1,0],[0,1],[0,-1]].forEach(([dx,dy]) => {
       const x = me.x+dx, y = me.y+dy;
       const c = board.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
-      if (c) c.classList.add("walkable");
+      if (c) { const marker = document.createElement("span"); marker.className = "walkable-marker"; c.appendChild(marker); }
     });
   }
 
