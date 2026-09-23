@@ -1,7 +1,7 @@
 // ===== CONFIG =====
 // Remplace par l'URL de ton service Render une fois déployé
 // (ex: "https://capnaval.onrender.com")
-const BACKEND_URL = "https://capnaval-backend.onrender.com";
+const BACKEND_URL = "https://capnaval.onrender.com";
 
 // Métadonnées des attaques côté client (doit correspondre à ATTACKS dans le backend)
 const ATTACKS_META = {
@@ -139,7 +139,7 @@ function wheelSegmentAt(state) {
   return Math.floor(effectiveLocal / seg) % state.order.length;
 }
 
-lfunction syncMapFieldDisplays(mapId) {
+function syncMapFieldDisplays(mapId) {
   const label = (MAPS_META[mapId] && MAPS_META[mapId].label) || mapId || "—";
   const desc = (MAPS_META[mapId] && MAPS_META[mapId].desc) || "";
   const labelEl1 = document.getElementById("map-field-label");
