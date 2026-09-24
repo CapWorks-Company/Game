@@ -740,7 +740,7 @@ function soloLose() {
 
 // ---- Phase d'esquive (combats) : bullet-hell dans une petite arène, cœur déplaçable au doigt ----
 const ARENA_W = 260, ARENA_H = 160;
-let dodgeTimer = null, dodgeBullets = [], dodgeTicksLeft = 0, dodgeSpawnCountdown = 0, dodgePattern = "bubbles";
+let dodgeTimer = null, dodgeBullets = [], dodgeTicksLeft = 0, dodgeElapsedTicks = 0, dodgeSpawnCountdown = 0, dodgePattern = "bubbles";
 let heartX = ARENA_W / 2, heartY = ARENA_H / 2;
 let battleJoyX = 0, battleJoyY = 0;
 const HEART_SPEED = 3.4; // pixels déplacés par tick (50ms) à pleine poussée du joystick
@@ -790,13 +790,19 @@ function startDodgePhase() {
   solo.turn++;
   const patterns = solo.enemy.patterns;
   dodgePattern = patterns[solo.turn % patterns.length];
-  dodgeTicksLeft = 90; // 90 x 50ms ≈ 4.5s
+  dodgeTicksLeft = 600; // 600 x 50ms = 30s de combat continu avant que le boss ne s'essouffle
+  dodgeElapsedTicks = 0;
   dodgeSpawnCountdown = 10; // courte pause avant le premier tir, le temps de s'écarter du centre
   if (dodgeTimer) clearInterval(dodgeTimer);
   dodgeTimer = setInterval(dodgeTick, 50);
 }
 function dodgeTick() {
   if (!solo || solo.ended) { clearInterval(dodgeTimer); return; }
+  dodgeElapsedTicks++;
+  if (dodgeElapsedTicks % 90 === 0) { // change de motif toutes les ~4,5s, sans jamais rendre la main au menu
+    solo.turn++;
+    dodgePattern = solo.enemy.patterns[solo.turn % solo.enemy.patterns.length];
+  }
   if (battleJoyX || battleJoyY) {
     heartX = Math.max(8, Math.min(ARENA_W - 8, heartX + battleJoyX * HEART_SPEED));
     heartY = Math.max(8, Math.min(ARENA_H - 8, heartY + battleJoyY * HEART_SPEED));
@@ -828,10 +834,11 @@ function makeArenaBullet(arena, w, h, pattern) {
   } else if (pattern === "dive") {
     const fromLeftTop = Math.random() < 0.5;
     return makeBullet(arena, fromLeftTop ? -10 : w + 10, -10, fromLeftTop ? 2.6 : -2.6, 2.0, "dive");
-  } else { // jets
-    const angle = (Math.random() * 2 - 1) * 0.6;
-    const speed = 2.1;
-    return makeBullet(arena, w / 2, h / 2, Math.sin(angle) * speed, -Math.cos(angle) * speed, "jet");
+  } else { // jets : partent du haut (l'ennemi), jamais du centre où le cœur se repose
+    const x = 20 + Math.random() * (w - 40);
+    const angle = (Math.random() * 2 - 1) * 0.35;
+    const speed = 2.3;
+    return makeBullet(arena, x, -8, Math.sin(angle) * speed, Math.cos(angle) * speed + 1.4, "jet");
   }
 }
 function makeBullet(arena, x, y, vx, vy, kind) {
@@ -866,8 +873,12 @@ function endDodgePhase() {
   document.getElementById("battle-arena").querySelectorAll(".bullet").forEach(b => b.remove());
   document.getElementById("battle-arena-wrap").style.display = "none";
   if (solo && !solo.ended) {
-    document.getElementById("battle-menu").style.display = "grid";
     setBattleDialogue(`${solo.enemy.name} reprend son souffle...`);
+    const enemyAtPause = solo.enemy;
+    setTimeout(() => {
+      if (!solo || solo.ended || solo.enemy !== enemyAtPause) return; // partie quittée/relancée entre-temps
+      document.getElementById("battle-menu").style.display = "grid";
+    }, 1100);
   }
 }
 
