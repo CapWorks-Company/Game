@@ -42,6 +42,7 @@
     <button id="btn-show-tutorial" class="btn btn-secondary" style="margin-top:6px">❓ Comment jouer</button>
 
     <button id="btn-install" class="fab-install" style="display:none" aria-label="Installer l'app" title="Installer l'app">📲</button>
+    <button id="btn-debug" class="fab-debug" aria-label="Debug" title="Debug">🐞</button>
 
     <div class="divider"><span>ou</span></div>
 
@@ -115,24 +116,74 @@
   </div>
 </section>
 
-<!-- ===== ECRAN SOLO : TEMPÊTE EN MER (survie) ===== -->
-<section id="screen-solo-survival" class="screen">
-  <div class="battle-screen">
-    <div class="battle-top">
-      <div class="battle-enemy-name">🌊 Tempête en mer</div>
-      <div id="survival-timer" class="solo-survival-timer">0.0s</div>
-      <p class="hint" style="font-size:12px;margin-top:2px">Meilleur score : <span id="survival-best">0.0s</span></p>
+<!-- ===== ECRAN SOLO : TRI DES TUBES (ball sort) ===== -->
+<section id="screen-solo-tubes" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🧪 Tri des Tubes</h2>
+    <p class="hint" style="text-align:center">Coups : <span id="tubes-moves">0</span></p>
+    <div id="tubes-wrap" class="tubes-wrap"></div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche un tube pour choisir une bille, puis un autre tube pour la verser.</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-tubes-restart" class="btn btn-secondary">Nouvelle grille</button>
+      <button type="button" id="btn-tubes-quit" class="btn btn-secondary">Retour</button>
     </div>
-    <div class="battle-arena-wrap">
-      <div id="survival-arena" class="battle-arena solo-survival-arena">
-        <div id="survival-heart" class="battle-heart">❤️</div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : 2048 ===== -->
+<section id="screen-solo-2048" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🔢 2048</h2>
+    <p class="hint" style="text-align:center">Score : <span id="game2048-score">0</span></p>
+    <div id="game2048-grid" class="game2048-grid"></div>
+    <div id="game2048-dpad" class="mini-dpad">
+      <button type="button" class="mini-dpad-btn mini-dpad-up" data-dir="up">▲</button>
+      <div class="mini-dpad-row">
+        <button type="button" class="mini-dpad-btn" data-dir="left">◀</button>
+        <button type="button" class="mini-dpad-btn" data-dir="right">▶</button>
       </div>
-      <div class="joystick-wrap">
-        <div id="survival-joystick-base" class="joystick-base"><div id="survival-joystick-knob" class="joystick-knob"></div></div>
-      </div>
+      <button type="button" class="mini-dpad-btn mini-dpad-down" data-dir="down">▼</button>
     </div>
-    <p class="hint" style="font-size:12px;text-align:center">3 coups et c'est le naufrage. Survis le plus longtemps possible !</p>
-    <button type="button" id="btn-survival-quit" class="btn btn-secondary" style="margin-top:10px">Abandonner</button>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:6px">Glisse ou utilise les flèches pour fusionner les tuiles.</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-2048-restart" class="btn btn-secondary">Recommencer</button>
+      <button type="button" id="btn-2048-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : MEMOIRE ===== -->
+<section id="screen-solo-memory" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🃏 Mémoire</h2>
+    <p class="hint" style="text-align:center">Coups : <span id="memory-moves">0</span></p>
+    <div id="memory-grid" class="memory-grid"></div>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-memory-restart" class="btn btn-secondary">Nouvelle partie</button>
+      <button type="button" id="btn-memory-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : SERPENT DES MERS ===== -->
+<section id="screen-solo-snake" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🐍 Serpent des Mers</h2>
+    <p class="hint" style="text-align:center">Score : <span id="snake-score">0</span></p>
+    <div id="snake-grid" class="snake-grid"></div>
+    <div id="snake-dpad" class="mini-dpad">
+      <button type="button" class="mini-dpad-btn mini-dpad-up" data-dir="up">▲</button>
+      <div class="mini-dpad-row">
+        <button type="button" class="mini-dpad-btn" data-dir="left">◀</button>
+        <button type="button" class="mini-dpad-btn" data-dir="right">▶</button>
+      </div>
+      <button type="button" class="mini-dpad-btn mini-dpad-down" data-dir="down">▼</button>
+    </div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:6px">Glisse sur la grille ou utilise les flèches. Mange les crevettes, évite les murs et ta propre queue !</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-snake-restart" class="btn btn-secondary">Recommencer</button>
+      <button type="button" id="btn-snake-quit" class="btn btn-secondary">Retour</button>
+    </div>
   </div>
 </section>
 
@@ -654,6 +705,33 @@
     <div id="gs-emoji-grid" class="avatar-emoji-grid"></div>
 
     <button id="btn-close-general-settings" class="btn btn-primary" style="margin-top:12px">Fermer</button>
+  </div>
+</div>
+
+<div id="debug-panel-modal" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:380px">
+    <h2 class="lobby-title" style="font-size:18px">🐞 Debug</h2>
+    <p class="hint" style="font-size:12px">Outils techniques. À utiliser en cas de bug ou d'affichage bizarre.</p>
+
+    <button type="button" id="btn-debug-reset-site" class="btn btn-secondary" style="margin-top:10px">🗑️ Réinitialiser les données du site (cache, réglages, pseudo...)</button>
+    <button type="button" id="btn-debug-reset-minigames" class="btn btn-secondary" style="margin-top:8px">🎮 Réinitialiser la progression des mini-jeux</button>
+    <button type="button" id="btn-debug-force-update" class="btn btn-secondary" style="margin-top:8px">🔄 Forcer la mise à jour de l'app (vider le cache)</button>
+    <button type="button" id="btn-debug-copy-info" class="btn btn-secondary" style="margin-top:8px">📋 Copier les infos de debug</button>
+
+    <p id="debug-panel-msg" class="hint" style="font-size:12px;margin-top:10px;min-height:16px"></p>
+
+    <button type="button" id="btn-close-debug-panel" class="btn btn-primary" style="margin-top:6px">Fermer</button>
+  </div>
+</div>
+
+<div id="debug-reset-confirm-panel" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:380px">
+    <h2 class="lobby-title" style="font-size:18px">⚠️ Confirmer</h2>
+    <p class="hint" style="font-size:14px; color:var(--text)">Toutes les données locales de CapNaval (pseudo, réglages, cartes perso, cache...) vont être effacées et la page va se recharger. Continuer ?</p>
+    <div style="display:flex; gap:8px; margin-top:12px">
+      <button type="button" id="btn-debug-reset-cancel" class="btn btn-secondary" style="flex:1">Annuler</button>
+      <button type="button" id="btn-debug-reset-confirm" class="btn btn-primary" style="flex:1">Réinitialiser</button>
+    </div>
   </div>
 </div>
 

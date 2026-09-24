@@ -544,8 +544,10 @@ function showScreen(id) {
 // D'autres mini-jeux viendront s'ajouter à SOLO_GAMES au fil du temps.
 const SOLO_GAMES = [
   { id: "crab", kind: "battle", enemy: "crab", icon: "🦀", label: "Le Crabe Bougon", desc: "Un combat façon dialogue : esquive ses attaques, combats-le ou tente la grâce." },
-  { id: "gull", kind: "battle", enemy: "gull", icon: "🐦", label: "La Mouette Voleuse", desc: "Un second combat, plus rapide et plus agile que le crabe." },
-  { id: "storm", kind: "survival", icon: "🌊", label: "Tempête en mer", desc: "Survis le plus longtemps possible dans une mer déchaînée. Meilleur score enregistré." },
+  { id: "tubes", kind: "tubes", icon: "🧪", label: "Tri des Tubes", desc: "Déplace les billes de couleur pour regrouper chaque couleur dans un seul tube." },
+  { id: "2048", kind: "2048", icon: "🔢", label: "2048", desc: "Glisse les tuiles pour fusionner les nombres et atteindre 2048." },
+  { id: "memory", kind: "memory", icon: "🃏", label: "Mémoire", desc: "Retourne les cartes deux par deux et retrouve toutes les paires." },
+  { id: "snake", kind: "snake", icon: "🐍", label: "Serpent des Mers", desc: "Guide le serpent, mange les crevettes, évite de te mordre la queue." },
 ];
 let soloRetryHandler = null;
 
@@ -578,7 +580,10 @@ function openSoloHub() {
     const g = SOLO_GAMES.find(x => x.id === btn.dataset.id);
     btn.addEventListener("click", () => {
       if (g.kind === "battle") startSoloBattle(g.enemy);
-      else if (g.kind === "survival") startSurvivalGame();
+      else if (g.kind === "tubes") startTubesGame();
+      else if (g.kind === "2048") start2048Game();
+      else if (g.kind === "memory") startMemoryGame();
+      else if (g.kind === "snake") startSnakeGame();
     });
   });
   showScreen("screen-solo-hub");
@@ -600,20 +605,6 @@ const SOLO_ENEMIES = {
     loseText: "Le Crabe Bougon a eu raison de toi. Tu peux retenter ta chance.",
     itemText: "un biscuit de mer",
     patterns: ["bubbles", "claws", "jets"],
-  },
-  gull: {
-    name: "La Mouette Voleuse", sprite: "🐦", maxHp: 45,
-    intro: "Une mouette voleuse fond sur toi en poussant des cris perçants, à l'affût de tes provisions.",
-    actLabels: ["Observer", "Partager"],
-    actTexts: ["Tu observes la mouette. Elle louche clairement sur ton sac.", "Tu lui donnes une miette. Elle penche la tête, presque apaisée."],
-    fightDefeatText: "Touchée en plein vol ! {dmg} dégâts. La Mouette Voleuse s'enfuit en piqué !",
-    spareText: "La Mouette Voleuse repart avec une miette, satisfaite.",
-    notReadyText: "La Mouette Voleuse tourne encore autour de toi, méfiante...",
-    winText: "La Mouette Voleuse est repoussée. Le ciel est dégagé.",
-    mercyWinText: "Tu as laissé la Mouette Voleuse partir avec sa miette. Elle s'envole, satisfaite.",
-    loseText: "La Mouette Voleuse a eu raison de toi à coups de bec. Tu peux retenter ta chance.",
-    itemText: "un biscuit de mer",
-    patterns: ["dive", "bubbles", "jets"],
   },
 };
 
@@ -882,105 +873,368 @@ function endDodgePhase() {
   }
 }
 
-// ---- Tempête en mer : jeu de survie chronométré, meilleur score enregistré ----
-const SURVIVAL_W = 300, SURVIVAL_H = 220, SURVIVAL_MAX_HITS = 3;
-const SURVIVAL_BEST_KEY = "capnaval_survival_best";
-let survivalTimer = null, survivalBullets = [], survivalStartAt = 0, survivalSpawnCountdown = 0, survivalRunning = false;
-let survivalHeartX = SURVIVAL_W / 2, survivalHeartY = SURVIVAL_H / 2, survivalInvuln = false, survivalHits = 0;
+// ---- Tri des Tubes : puzzle façon "Ball Sort", regrouper chaque couleur dans un tube ----
+const TUBES_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#06b6d4"];
+const TUBES_CAPACITY = 4;
+let tubesState = null; // { tubes: [[color,...], ...], selected: idx|null, moves: 0, colorCount }
 
-function loadSurvivalBest() { try { return parseFloat(localStorage.getItem(SURVIVAL_BEST_KEY) || "0"); } catch (e) { return 0; } }
-function saveSurvivalBest(v) { try { localStorage.setItem(SURVIVAL_BEST_KEY, v.toFixed(1)); } catch (e) { /* ignore */ } }
-
-function startSurvivalGame() {
-  const arena = document.getElementById("survival-arena");
-  arena.querySelectorAll(".bullet").forEach(b => b.remove());
-  survivalHeartX = SURVIVAL_W / 2; survivalHeartY = SURVIVAL_H / 2;
-  updateSurvivalHeartPos();
-  survivalBullets = [];
-  survivalHits = 0;
-  survivalInvuln = false;
-  document.getElementById("survival-best").textContent = loadSurvivalBest().toFixed(1) + "s";
-  document.getElementById("survival-timer").textContent = "0.0s";
-  wireSurvivalControls();
-  survivalStartAt = performance.now();
-  survivalSpawnCountdown = 20; // court répit avant le premier projectile
-  survivalRunning = true;
-  soloRetryHandler = startSurvivalGame;
-  if (survivalTimer) clearInterval(survivalTimer);
-  survivalTimer = setInterval(survivalTick, 50);
-  showScreen("screen-solo-survival");
+function tubesWinsCount() { try { return parseInt(localStorage.getItem("capnaval_tubes_wins") || "0", 10); } catch (e) { return 0; } }
+function tubesIncrementWins() { try { localStorage.setItem("capnaval_tubes_wins", String(tubesWinsCount() + 1)); } catch (e) { /* ignore */ } }
+function tubesColorCountForLevel() {
+  // Un peu plus de couleurs au fil des victoires, pour rester "addictif" sans jamais bloquer trop tôt
+  return Math.min(TUBES_COLORS.length, 4 + Math.floor(tubesWinsCount() / 2));
 }
-document.getElementById("btn-survival-quit").addEventListener("click", () => {
-  survivalRunning = false;
-  if (survivalTimer) clearInterval(survivalTimer);
+function generateTubesPuzzle(colorCount) {
+  const balls = [];
+  for (let c = 0; c < colorCount; c++) for (let i = 0; i < TUBES_CAPACITY; i++) balls.push(c);
+  for (let i = balls.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [balls[i], balls[j]] = [balls[j], balls[i]]; }
+  const tubes = [];
+  for (let c = 0; c < colorCount; c++) tubes.push(balls.splice(0, TUBES_CAPACITY));
+  tubes.push([]); tubes.push([]); // deux tubes vides pour manœuvrer
+  return tubes;
+}
+function tubesIsSolved(tubes) {
+  return tubes.every(t => t.length === 0 || (t.length === TUBES_CAPACITY && t.every(b => b === t[0])));
+}
+function startTubesGame() {
+  const colorCount = tubesColorCountForLevel();
+  let tubes;
+  do { tubes = generateTubesPuzzle(colorCount); } while (tubesIsSolved(tubes));
+  tubesState = { tubes, selected: null, moves: 0, colorCount };
+  soloRetryHandler = startTubesGame;
+  renderTubes();
+  showScreen("screen-solo-tubes");
+}
+document.getElementById("btn-tubes-quit").addEventListener("click", () => showScreen("screen-home"));
+document.getElementById("btn-tubes-restart").addEventListener("click", () => startTubesGame());
+
+function renderTubes() {
+  document.getElementById("tubes-moves").textContent = String(tubesState.moves);
+  const wrap = document.getElementById("tubes-wrap");
+  wrap.innerHTML = tubesState.tubes.map((tube, i) => `
+    <button type="button" class="tube ${tubesState.selected === i ? "tube-selected" : ""}" data-idx="${i}">
+      <div class="tube-balls">
+        ${tube.slice().reverse().map(c => `<div class="tube-ball" style="background:${TUBES_COLORS[c]}"></div>`).join("")}
+      </div>
+    </button>`).join("");
+  wrap.querySelectorAll(".tube").forEach(el => {
+    el.addEventListener("click", () => onTubeTap(parseInt(el.dataset.idx, 10)));
+  });
+}
+function onTubeTap(idx) {
+  if (tubesState.selected === null) {
+    if (tubesState.tubes[idx].length === 0) return;
+    tubesState.selected = idx;
+    renderTubes();
+    return;
+  }
+  if (tubesState.selected === idx) { tubesState.selected = null; renderTubes(); return; }
+  const from = tubesState.tubes[tubesState.selected], to = tubesState.tubes[idx];
+  const fromTop = from[from.length - 1];
+  const canPour = from.length > 0 && to.length < TUBES_CAPACITY && (to.length === 0 || to[to.length - 1] === fromTop);
+  if (canPour) {
+    let moved = 0;
+    while (from.length > 0 && from[from.length - 1] === fromTop && to.length < TUBES_CAPACITY) { to.push(from.pop()); moved++; }
+    if (moved > 0) tubesState.moves++;
+    tubesState.selected = null;
+    renderTubes();
+    vibrate(15);
+    if (tubesIsSolved(tubesState.tubes)) {
+      tubesIncrementWins();
+      setTimeout(() => showSoloEnd("win", "Tubes triés !", `Bravo, tous les tubes sont triés en ${tubesState.moves} coups !`), 350);
+    }
+  } else {
+    tubesState.selected = tubesState.tubes[idx].length > 0 ? idx : null;
+    renderTubes();
+  }
+}
+
+// ---- 2048 : glisse les tuiles pour fusionner les nombres ----
+const GAME2048_SIZE = 4;
+let game2048Grid = null, game2048Score = 0, game2048Ended = false, game2048Wired = false;
+
+function start2048Game() {
+  game2048Grid = Array.from({ length: GAME2048_SIZE }, () => Array(GAME2048_SIZE).fill(0));
+  game2048Score = 0;
+  game2048Ended = false;
+  add2048Tile(); add2048Tile();
+  soloRetryHandler = start2048Game;
+  render2048();
+  wire2048Controls();
+  showScreen("screen-solo-2048");
+}
+document.getElementById("btn-2048-quit").addEventListener("click", () => showScreen("screen-home"));
+document.getElementById("btn-2048-restart").addEventListener("click", () => start2048Game());
+
+function add2048Tile() {
+  const empties = [];
+  for (let r = 0; r < GAME2048_SIZE; r++) for (let c = 0; c < GAME2048_SIZE; c++) if (!game2048Grid[r][c]) empties.push([r, c]);
+  if (!empties.length) return;
+  const [r, c] = empties[Math.floor(Math.random() * empties.length)];
+  game2048Grid[r][c] = Math.random() < 0.9 ? 2 : 4;
+}
+function render2048() {
+  document.getElementById("game2048-score").textContent = String(game2048Score);
+  const grid = document.getElementById("game2048-grid");
+  grid.innerHTML = "";
+  for (let r = 0; r < GAME2048_SIZE; r++) for (let c = 0; c < GAME2048_SIZE; c++) {
+    const v = game2048Grid[r][c];
+    const cell = document.createElement("div");
+    cell.className = "game2048-cell" + (v ? ` game2048-tile game2048-tile-${v <= 2048 ? v : "sup"}` : "");
+    if (v) cell.textContent = String(v);
+    grid.appendChild(cell);
+  }
+}
+function slideLine2048(line) {
+  const vals = line.filter(v => v !== 0);
+  let gained = 0;
+  for (let i = 0; i < vals.length - 1; i++) {
+    if (vals[i] === vals[i + 1]) { vals[i] *= 2; gained += vals[i]; vals.splice(i + 1, 1); }
+  }
+  while (vals.length < GAME2048_SIZE) vals.push(0);
+  return { vals, gained };
+}
+function move2048(dir) {
+  if (game2048Ended) return;
+  let moved = false, gained = 0;
+  const g = game2048Grid, n = GAME2048_SIZE;
+  const reverse = dir === "right" || dir === "down";
+  const getLine = (i) => {
+    const line = [];
+    for (let j = 0; j < n; j++) line.push(dir === "left" || dir === "right" ? g[i][j] : g[j][i]);
+    return reverse ? line.reverse() : line;
+  };
+  const setLine = (i, vals) => {
+    const line = reverse ? vals.slice().reverse() : vals;
+    for (let j = 0; j < n; j++) {
+      const v = line[j];
+      if (dir === "left" || dir === "right") { if (g[i][j] !== v) moved = true; g[i][j] = v; }
+      else { if (g[j][i] !== v) moved = true; g[j][i] = v; }
+    }
+  };
+  for (let i = 0; i < n; i++) {
+    const { vals, gained: g2 } = slideLine2048(getLine(i));
+    gained += g2;
+    setLine(i, vals);
+  }
+  if (moved) {
+    game2048Score += gained;
+    add2048Tile();
+    render2048();
+    vibrate(10);
+    if (has2048Won() && !game2048Ended) {
+      game2048Ended = true;
+      setTimeout(() => showSoloEnd("win", "2048 !", `Tu as atteint 2048 avec un score de ${game2048Score} !`), 250);
+    } else if (!has2048MovesLeft()) {
+      game2048Ended = true;
+      setTimeout(() => showSoloEnd("lose", "Plus de coups possibles", `Partie terminée, score final : ${game2048Score}.`), 250);
+    }
+  }
+}
+function has2048Won() { return game2048Grid.some(row => row.some(v => v >= 2048)); }
+function has2048MovesLeft() {
+  const g = game2048Grid, n = GAME2048_SIZE;
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    if (!g[r][c]) return true;
+    if (c < n - 1 && g[r][c] === g[r][c + 1]) return true;
+    if (r < n - 1 && g[r][c] === g[r + 1][c]) return true;
+  }
+  return false;
+}
+function wire2048Controls() {
+  if (game2048Wired) return;
+  game2048Wired = true;
+  const arena = document.getElementById("game2048-grid");
+  let sx = 0, sy = 0;
+  arena.addEventListener("touchstart", (e) => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
+  arena.addEventListener("touchend", (e) => {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 24) return;
+    if (Math.abs(dx) > Math.abs(dy)) move2048(dx > 0 ? "right" : "left");
+    else move2048(dy > 0 ? "down" : "up");
+  }, { passive: true });
+  window.addEventListener("keydown", (e) => {
+    if (!document.getElementById("screen-solo-2048").classList.contains("active")) return;
+    if (e.key === "ArrowLeft") move2048("left");
+    else if (e.key === "ArrowRight") move2048("right");
+    else if (e.key === "ArrowUp") move2048("up");
+    else if (e.key === "ArrowDown") move2048("down");
+  });
+  document.querySelectorAll("#game2048-dpad button").forEach(btn => {
+    btn.addEventListener("click", () => move2048(btn.dataset.dir));
+  });
+}
+
+// ---- Mémoire : retrouver les paires de cartes ----
+const MEMORY_ICONS = ["🦀", "⚓", "🐚", "🌊", "⛵", "🐟", "🦑", "🏝️"];
+let memoryState = null; // { cards: [{icon, matched, flipped}], firstIdx, lock, matches, moves }
+
+function startMemoryGame() {
+  const icons = MEMORY_ICONS.slice();
+  const deck = icons.concat(icons).map(icon => ({ icon, matched: false, flipped: false }));
+  for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+  memoryState = { cards: deck, firstIdx: null, lock: false, matches: 0, moves: 0 };
+  soloRetryHandler = startMemoryGame;
+  renderMemory();
+  showScreen("screen-solo-memory");
+}
+document.getElementById("btn-memory-quit").addEventListener("click", () => showScreen("screen-home"));
+document.getElementById("btn-memory-restart").addEventListener("click", () => startMemoryGame());
+
+function renderMemory() {
+  document.getElementById("memory-moves").textContent = String(memoryState.moves);
+  const grid = document.getElementById("memory-grid");
+  grid.innerHTML = memoryState.cards.map((card, i) => `
+    <button type="button" class="memory-card ${card.flipped || card.matched ? "memory-card-flipped" : ""} ${card.matched ? "memory-card-matched" : ""}" data-idx="${i}">
+      <span class="memory-card-face memory-card-back">?</span>
+      <span class="memory-card-face memory-card-front">${card.icon}</span>
+    </button>`).join("");
+  grid.querySelectorAll(".memory-card").forEach(el => {
+    el.addEventListener("click", () => onMemoryTap(parseInt(el.dataset.idx, 10)));
+  });
+}
+function onMemoryTap(idx) {
+  if (memoryState.lock) return;
+  const card = memoryState.cards[idx];
+  if (card.flipped || card.matched) return;
+  card.flipped = true;
+  if (memoryState.firstIdx === null) {
+    memoryState.firstIdx = idx;
+    renderMemory();
+    return;
+  }
+  memoryState.moves++;
+  const first = memoryState.cards[memoryState.firstIdx];
+  renderMemory();
+  if (first.icon === card.icon) {
+    first.matched = true; card.matched = true;
+    memoryState.matches++;
+    memoryState.firstIdx = null;
+    vibrate(15);
+    renderMemory();
+    if (memoryState.matches === MEMORY_ICONS.length) {
+      setTimeout(() => showSoloEnd("win", "Toutes les paires trouvées !", `Bravo, mémoire retrouvée en ${memoryState.moves} coups !`), 350);
+    }
+  } else {
+    memoryState.lock = true;
+    setTimeout(() => {
+      first.flipped = false; card.flipped = false;
+      memoryState.firstIdx = null;
+      memoryState.lock = false;
+      renderMemory();
+    }, 700);
+  }
+}
+
+// ---- Serpent des Mers : snake classique sur grille, contrôles tactiles ----
+const SNAKE_SIZE = 13;
+let snakeState = null, snakeTimer = null, snakeWired = false;
+
+function startSnakeGame() {
+  const mid = Math.floor(SNAKE_SIZE / 2);
+  snakeState = {
+    body: [[mid, mid], [mid - 1, mid], [mid - 2, mid]],
+    dir: "right", nextDir: "right",
+    food: null, score: 0, ended: false, speedMs: 220,
+  };
+  placeSnakeFood();
+  soloRetryHandler = startSnakeGame;
+  renderSnake();
+  wireSnakeControls();
+  if (snakeTimer) clearInterval(snakeTimer);
+  snakeTimer = setInterval(snakeTick, snakeState.speedMs);
+  showScreen("screen-solo-snake");
+}
+document.getElementById("btn-snake-quit").addEventListener("click", () => {
+  if (snakeTimer) clearInterval(snakeTimer);
   showScreen("screen-home");
 });
+document.getElementById("btn-snake-restart").addEventListener("click", () => startSnakeGame());
 
-function updateSurvivalHeartPos() {
-  const heart = document.getElementById("survival-heart");
-  heart.style.left = survivalHeartX + "px";
-  heart.style.top = survivalHeartY + "px";
+function placeSnakeFood() {
+  let pos;
+  do { pos = [Math.floor(Math.random() * SNAKE_SIZE), Math.floor(Math.random() * SNAKE_SIZE)]; }
+  while (snakeState.body.some(b => b[0] === pos[0] && b[1] === pos[1]));
+  snakeState.food = pos;
 }
-let survivalJoyX = 0, survivalJoyY = 0;
-function wireSurvivalControls() {
-  wireJoystick("survival-joystick-base", "survival-joystick-knob", (x, y) => { survivalJoyX = x; survivalJoyY = y; });
-}
-
-function survivalTick() {
-  if (!survivalRunning) { clearInterval(survivalTimer); return; }
-  if (survivalJoyX || survivalJoyY) {
-    survivalHeartX = Math.max(8, Math.min(SURVIVAL_W - 8, survivalHeartX + survivalJoyX * HEART_SPEED));
-    survivalHeartY = Math.max(8, Math.min(SURVIVAL_H - 8, survivalHeartY + survivalJoyY * HEART_SPEED));
-    updateSurvivalHeartPos();
-  }
-  const elapsed = (performance.now() - survivalStartAt) / 1000;
-  document.getElementById("survival-timer").textContent = elapsed.toFixed(1) + "s";
-  survivalSpawnCountdown--;
-  if (survivalSpawnCountdown <= 0) {
-    const patterns = ["bubbles", "claws", "dive", "jets"];
-    spawnSurvivalBullet(patterns[Math.floor(Math.random() * patterns.length)], elapsed);
-    survivalSpawnCountdown = Math.max(5, 16 - Math.floor(elapsed / 2)); // le rythme s'accélère peu à peu
-  }
-  stepSurvivalBullets();
-}
-function spawnSurvivalBullet(pattern, elapsed) {
-  const arena = document.getElementById("survival-arena");
-  const b = makeArenaBullet(arena, SURVIVAL_W, SURVIVAL_H, pattern);
-  const speedMult = 1 + Math.min(1, elapsed / 40); // accélère légèrement plus la partie dure
-  b.vx *= speedMult; b.vy *= speedMult;
-  survivalBullets.push(b);
-}
-function stepSurvivalBullets() {
-  for (const b of survivalBullets.slice()) {
-    b.x += b.vx; b.y += b.vy;
-    b.el.style.left = b.x + "px"; b.el.style.top = b.y + "px";
-    if (b.x < -20 || b.x > SURVIVAL_W + 20 || b.y < -20 || b.y > SURVIVAL_H + 20) {
-      b.el.remove();
-      survivalBullets = survivalBullets.filter(bb => bb !== b);
-      continue;
+function renderSnake() {
+  document.getElementById("snake-score").textContent = String(snakeState.score);
+  const grid = document.getElementById("snake-grid");
+  grid.innerHTML = "";
+  const occupied = new Map();
+  snakeState.body.forEach((b, i) => occupied.set(b[0] + "," + b[1], i === 0 ? "head" : "body"));
+  for (let r = 0; r < SNAKE_SIZE; r++) {
+    for (let c = 0; c < SNAKE_SIZE; c++) {
+      const cell = document.createElement("div");
+      const key = c + "," + r;
+      let cls = "snake-cell";
+      let isFood = false;
+      if (occupied.has(key)) cls += occupied.get(key) === "head" ? " snake-head" : " snake-body";
+      else if (snakeState.food && snakeState.food[0] === c && snakeState.food[1] === r) { cls += " snake-food"; isFood = true; }
+      cell.className = cls;
+      if (isFood) cell.textContent = "🦐";
+      grid.appendChild(cell);
     }
-    if (!survivalInvuln && Math.hypot(b.x - survivalHeartX, b.y - survivalHeartY) < 11) survivalHit();
   }
 }
-function survivalHit() {
-  survivalHits++;
-  survivalInvuln = true;
-  const heart = document.getElementById("survival-heart");
-  heart.classList.add("hit-flash");
-  vibrate(40);
-  setTimeout(() => { survivalInvuln = false; heart.classList.remove("hit-flash"); }, 600);
-  if (survivalHits >= SURVIVAL_MAX_HITS) endSurvivalGame();
+function snakeTick() {
+  if (snakeState.ended) return;
+  const opposite = { up: "down", down: "up", left: "right", right: "left" };
+  if (snakeState.nextDir !== opposite[snakeState.dir]) snakeState.dir = snakeState.nextDir;
+  const head = snakeState.body[0];
+  let [x, y] = head;
+  if (snakeState.dir === "up") y--; else if (snakeState.dir === "down") y++;
+  else if (snakeState.dir === "left") x--; else if (snakeState.dir === "right") x++;
+  if (x < 0 || y < 0 || x >= SNAKE_SIZE || y >= SNAKE_SIZE || snakeState.body.some(b => b[0] === x && b[1] === y)) {
+    endSnakeGame();
+    return;
+  }
+  snakeState.body.unshift([x, y]);
+  if (snakeState.food && x === snakeState.food[0] && y === snakeState.food[1]) {
+    snakeState.score++;
+    vibrate(15);
+    placeSnakeFood();
+    if (snakeState.score % 5 === 0 && snakeState.speedMs > 90) {
+      snakeState.speedMs -= 12;
+      clearInterval(snakeTimer);
+      snakeTimer = setInterval(snakeTick, snakeState.speedMs);
+    }
+  } else {
+    snakeState.body.pop();
+  }
+  renderSnake();
 }
-function endSurvivalGame() {
-  survivalRunning = false;
-  clearInterval(survivalTimer);
-  const elapsed = (performance.now() - survivalStartAt) / 1000;
-  const best = loadSurvivalBest();
-  const isRecord = elapsed > best;
-  if (isRecord) saveSurvivalBest(elapsed);
-  showSoloEnd(isRecord ? "win" : "lose", isRecord ? "Nouveau record !" : "Chaviré !",
-    isRecord ? `Tu as survécu ${elapsed.toFixed(1)} secondes dans la tempête — un nouveau record !`
-             : `Tu as survécu ${elapsed.toFixed(1)} secondes dans la tempête (record : ${best.toFixed(1)}s).`);
+function endSnakeGame() {
+  snakeState.ended = true;
+  clearInterval(snakeTimer);
+  vibrate([30, 30, 60]);
+  showSoloEnd("lose", "Échoué !", `Ton serpent s'est échoué avec un score de ${snakeState.score} crevettes mangées.`);
+}
+function wireSnakeControls() {
+  if (snakeWired) return;
+  snakeWired = true;
+  const setDir = (d) => { if (snakeState && !snakeState.ended) snakeState.nextDir = d; };
+  document.querySelectorAll("#snake-dpad button").forEach(btn => {
+    btn.addEventListener("click", () => setDir(btn.dataset.dir));
+  });
+  window.addEventListener("keydown", (e) => {
+    if (!document.getElementById("screen-solo-snake").classList.contains("active")) return;
+    if (e.key === "ArrowLeft") setDir("left");
+    else if (e.key === "ArrowRight") setDir("right");
+    else if (e.key === "ArrowUp") setDir("up");
+    else if (e.key === "ArrowDown") setDir("down");
+  });
+  const grid = document.getElementById("snake-grid");
+  let sx = 0, sy = 0;
+  grid.addEventListener("touchstart", (e) => { const t = e.touches[0]; sx = t.clientX; sy = t.clientY; }, { passive: true });
+  grid.addEventListener("touchend", (e) => {
+    const t = e.changedTouches[0];
+    const dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 20) return;
+    if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? "right" : "left");
+    else setDir(dy > 0 ? "down" : "up");
+  }, { passive: true });
 }
 
 // ================= MODE DUO : combat de fusées EN LIGNE, chacun sur son appareil =================
@@ -1344,6 +1598,96 @@ Object.keys(GS_TOGGLE_KEYS).forEach(id => {
     applyGeneralSettingsToDOM();
     if (lastState && lastState.status === "playing") renderBoard(); // reflète le changement tout de suite en partie
   });
+});
+
+// ---------- Panneau Debug (bas à gauche de l'accueil) ----------
+function setDebugMsg(text) {
+  const el = document.getElementById("debug-panel-msg");
+  if (el) el.textContent = text || "";
+}
+document.getElementById("btn-debug").addEventListener("click", () => {
+  setDebugMsg("");
+  document.getElementById("debug-panel-modal").style.display = "flex";
+});
+document.getElementById("btn-close-debug-panel").addEventListener("click", () => {
+  document.getElementById("debug-panel-modal").style.display = "none";
+});
+
+async function clearAllCaches() {
+  try {
+    if (window.caches && caches.keys) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch (e) { /* ignore */ }
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+  } catch (e) { /* ignore */ }
+}
+
+document.getElementById("btn-debug-reset-site").addEventListener("click", () => {
+  document.getElementById("debug-panel-modal").style.display = "none";
+  document.getElementById("debug-reset-confirm-panel").style.display = "flex";
+});
+document.getElementById("btn-debug-reset-cancel").addEventListener("click", () => {
+  document.getElementById("debug-reset-confirm-panel").style.display = "none";
+  document.getElementById("debug-panel-modal").style.display = "flex";
+});
+document.getElementById("btn-debug-reset-confirm").addEventListener("click", async () => {
+  const btn = document.getElementById("btn-debug-reset-confirm");
+  btn.disabled = true; btn.textContent = "Réinitialisation...";
+  try { localStorage.clear(); } catch (e) { /* ignore */ }
+  try { sessionStorage.clear(); } catch (e) { /* ignore */ }
+  await clearAllCaches();
+  window.location.reload();
+});
+
+document.getElementById("btn-debug-reset-minigames").addEventListener("click", () => {
+  try {
+    localStorage.removeItem("capnaval_tubes_wins");
+    localStorage.removeItem("capnaval_survival_best"); // clé héritée d'un ancien mini-jeu retiré
+  } catch (e) { /* ignore */ }
+  setDebugMsg("Progression des mini-jeux réinitialisée.");
+});
+
+document.getElementById("btn-debug-force-update").addEventListener("click", async () => {
+  setDebugMsg("Mise à jour en cours...");
+  await clearAllCaches();
+  window.location.reload();
+});
+
+document.getElementById("btn-debug-copy-info").addEventListener("click", async () => {
+  let clientId = "?";
+  try { clientId = localStorage.getItem(CLIENT_ID_KEY) || "?"; } catch (e) { /* ignore */ }
+  const info = [
+    `CapNaval debug info`,
+    `Date: ${new Date().toISOString()}`,
+    `Backend: ${BACKEND_URL}`,
+    `Client ID: ${clientId}`,
+    `URL: ${window.location.href}`,
+    `User-Agent: ${navigator.userAgent}`,
+    `Écran: ${window.innerWidth}x${window.innerHeight} (DPR ${window.devicePixelRatio || 1})`,
+    `Standalone (PWA): ${window.matchMedia && window.matchMedia("(display-mode: standalone)").matches}`,
+  ].join("\n");
+  try {
+    await navigator.clipboard.writeText(info);
+    setDebugMsg("Infos copiées dans le presse-papier.");
+  } catch (e) {
+    // Repli si l'API Clipboard est indisponible (contexte non sécurisé, permissions...)
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = info; ta.style.position = "fixed"; ta.style.opacity = "0";
+      document.body.appendChild(ta); ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setDebugMsg("Infos copiées dans le presse-papier.");
+    } catch (e2) {
+      setDebugMsg("Impossible de copier automatiquement : " + info.split("\n")[0]);
+    }
+  }
 });
 
 // Palette daltonien (Okabe-Ito) : remplace les couleurs serveur uniquement à l'affichage,
