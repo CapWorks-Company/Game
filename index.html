@@ -85,6 +85,9 @@
       <div id="battle-arena" class="battle-arena">
         <div id="battle-heart" class="battle-heart">❤️</div>
       </div>
+      <div class="joystick-wrap">
+        <div id="battle-joystick-base" class="joystick-base"><div id="battle-joystick-knob" class="joystick-knob"></div></div>
+      </div>
     </div>
 
     <div id="battle-act-choices" class="battle-act-choices" style="display:none"></div>
@@ -124,18 +127,56 @@
       <div id="survival-arena" class="battle-arena solo-survival-arena">
         <div id="survival-heart" class="battle-heart">❤️</div>
       </div>
+      <div class="joystick-wrap">
+        <div id="survival-joystick-base" class="joystick-base"><div id="survival-joystick-knob" class="joystick-knob"></div></div>
+      </div>
     </div>
     <p class="hint" style="font-size:12px;text-align:center">3 coups et c'est le naufrage. Survis le plus longtemps possible !</p>
     <button type="button" id="btn-survival-quit" class="btn btn-secondary" style="margin-top:10px">Abandonner</button>
   </div>
 </section>
 
+<!-- ===== ECRAN DUO : COMBAT DE FUSÉES EN LIGNE ===== -->
+<section id="screen-duo-battle" class="screen">
+  <div class="battle-screen">
+    <div class="duo-hp-row">
+      <span id="duo-opp-label" class="duo-hp-label" style="color:#60a5fa">🚀 Adversaire</span>
+      <div class="duo-hp-bar-wrap"><div id="duo-p2-hpfill" class="duo-hp-fill"></div></div>
+      <span id="duo-p2-hp" class="duo-hp-num">30</span>
+    </div>
+    <div class="duo-energy-bar-wrap" style="max-width:200px;margin:2px auto 0"><div id="duo-p2-energy-fill" class="duo-energy-fill"></div></div>
+
+    <div id="duo-arena" class="duo-arena">
+      <div id="duo-rocket-p2" class="duo-rocket">🚀</div>
+      <div id="duo-rocket-p1" class="duo-rocket duo-rocket-p1">🚀</div>
+    </div>
+
+    <div class="duo-move-row" data-player="1">
+      <button type="button" class="duo-move-btn" data-dir="-1">◀</button>
+      <button type="button" class="duo-move-btn" data-dir="1">▶</button>
+    </div>
+    <div class="duo-hp-row">
+      <span id="duo-me-label" class="duo-hp-label" style="color:#f87171">🚀 Toi</span>
+      <div class="duo-hp-bar-wrap"><div id="duo-p1-hpfill" class="duo-hp-fill"></div></div>
+      <span id="duo-p1-hp" class="duo-hp-num">30</span>
+    </div>
+
+    <p class="hint" style="font-size:11px;margin:10px 0 2px">L'énergie se recharge tout seule — attends pour sortir les grosses armes.</p>
+    <div class="duo-energy-bar-wrap"><div id="duo-p1-energy-fill" class="duo-energy-fill"></div></div>
+    <div id="duo-p1-weapons" class="duo-weapons-row"></div>
+
+    <button type="button" id="btn-duo-quit" class="btn btn-secondary" style="margin-top:12px">Abandonner</button>
+  </div>
+</section>
+
 <!-- ===== ECRAN SOLO : FIN DE MINI-JEU ===== -->
 <section id="screen-solo-end" class="screen">
-  <div class="card">
-    <h2 id="solo-end-title" class="lobby-title">?</h2>
+  <div id="confetti-layer-solo" class="confetti-layer"></div>
+  <div class="card solo-end-card" id="solo-end-card">
+    <div id="solo-end-icon" class="solo-end-icon">🏆</div>
+    <h2 id="solo-end-title" class="lobby-title solo-end-title">?</h2>
     <p id="solo-end-text" class="hint"></p>
-    <button type="button" id="btn-solo-retry" class="btn btn-primary">Réessayer</button>
+    <button type="button" id="btn-solo-retry" class="btn btn-primary">🔁 Réessayer</button>
     <button type="button" id="btn-solo-end-home" class="btn btn-secondary" style="margin-top:8px">Retour à l'accueil</button>
   </div>
 </section>
@@ -547,11 +588,36 @@
     <h2 class="lobby-title" style="font-size:19px">Comment veux-tu jouer ?</h2>
     <button type="button" id="btn-choose-multiplayer" class="btn btn-primary" style="margin-top:10px">🎮 Multijoueur</button>
     <p class="hint" style="font-size:12px;margin:4px 0 14px">Affronte tes amis en ligne, à plusieurs.</p>
+    <button type="button" id="btn-choose-duo" class="btn btn-secondary">🕹️ Duo</button>
+    <p class="hint" style="font-size:12px;margin:4px 0 14px">2 joueurs sur le même écran, chacun de son côté.</p>
     <button type="button" id="btn-choose-solo" class="btn btn-secondary">👤 Solo</button>
     <p class="hint" style="font-size:12px;margin:4px 0 14px">Des mini-jeux à un joueur, sans connexion.</p>
     <button type="button" id="btn-close-mode-choice" class="btn btn-secondary">Annuler</button>
   </div>
 </div>
+
+<div id="duo-choice-modal" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:340px">
+    <h2 class="lobby-title" style="font-size:19px">🕹️ Duo en ligne</h2>
+    <p class="hint" style="font-size:12px">Chacun sur son propre appareil, connectés ensemble.</p>
+    <button type="button" id="btn-duo-create" class="btn btn-primary" style="margin-top:8px">Créer un duel</button>
+    <div class="divider" style="margin:14px 0"><span>ou</span></div>
+    <input type="text" id="duo-join-code" maxlength="5" placeholder="Code du duel" style="text-transform:uppercase; width:100%; padding:12px; margin-bottom:10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--text); font-size:16px; text-align:center; box-sizing:border-box">
+    <button type="button" id="btn-duo-join" class="btn btn-secondary">Rejoindre</button>
+    <button type="button" id="btn-close-duo-choice" class="btn btn-secondary" style="margin-top:10px">Annuler</button>
+  </div>
+</div>
+
+<!-- ===== ECRAN DUO : SALLE D'ATTENTE (en ligne) ===== -->
+<section id="screen-duo-wait" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">Duel en attente</h2>
+    <p class="hint">Partage ce code avec ton adversaire</p>
+    <p id="duo-wait-code" class="room-code" style="cursor:default">------</p>
+    <p class="hint" id="duo-wait-status">En attente qu'il/elle rejoigne...</p>
+    <button type="button" id="btn-duo-wait-cancel" class="btn btn-secondary">Annuler</button>
+  </div>
+</section>
 
 <div id="general-settings-modal" class="ios-install-modal" style="display:none">
   <div class="card" style="max-width:380px">

@@ -549,6 +549,24 @@ const SOLO_GAMES = [
 ];
 let soloRetryHandler = null;
 
+// Panel de fin partagé par tous les mini-jeux (solo et duo) : icône, mise en
+// valeur colorée selon le résultat, confettis en cas de victoire.
+function showSoloEnd(outcome, title, text) {
+  const card = document.getElementById("solo-end-card");
+  const icon = document.getElementById("solo-end-icon");
+  const titleEl = document.getElementById("solo-end-title");
+  card.classList.remove("outcome-win", "outcome-lose");
+  titleEl.classList.remove("outcome-win", "outcome-lose");
+  if (outcome === "win") { card.classList.add("outcome-win"); titleEl.classList.add("outcome-win"); icon.textContent = "🏆"; }
+  else if (outcome === "lose") { card.classList.add("outcome-lose"); titleEl.classList.add("outcome-lose"); icon.textContent = "💥"; }
+  else { icon.textContent = "🔌"; }
+  icon.style.animation = "none"; void icon.offsetWidth; icon.style.animation = "";
+  titleEl.textContent = title;
+  document.getElementById("solo-end-text").textContent = text;
+  showScreen("screen-solo-end");
+  if (outcome === "win") { vibrate([40, 30, 40, 30, 90]); spawnConfetti("confetti-layer-solo"); }
+}
+
 function openSoloHub() {
   const list = document.getElementById("solo-games-list");
   list.innerHTML = SOLO_GAMES.map(g => `
@@ -713,21 +731,19 @@ function trySpare() {
 
 function soloWin(peaceful) {
   solo.ended = true;
-  document.getElementById("solo-end-title").textContent = peaceful ? "Grâce accordée !" : "Victoire !";
-  document.getElementById("solo-end-text").textContent = peaceful ? solo.enemy.mercyWinText : solo.enemy.winText;
-  showScreen("screen-solo-end");
+  showSoloEnd("win", peaceful ? "Grâce accordée !" : "Victoire !", peaceful ? solo.enemy.mercyWinText : solo.enemy.winText);
 }
 function soloLose() {
   solo.ended = true;
-  document.getElementById("solo-end-title").textContent = "K.O....";
-  document.getElementById("solo-end-text").textContent = solo.enemy.loseText;
-  showScreen("screen-solo-end");
+  showSoloEnd("lose", "K.O....", solo.enemy.loseText);
 }
 
 // ---- Phase d'esquive (combats) : bullet-hell dans une petite arène, cœur déplaçable au doigt ----
 const ARENA_W = 260, ARENA_H = 160;
 let dodgeTimer = null, dodgeBullets = [], dodgeTicksLeft = 0, dodgeSpawnCountdown = 0, dodgePattern = "bubbles";
-let heartX = ARENA_W / 2, heartY = ARENA_H / 2, heartDragging = false;
+let heartX = ARENA_W / 2, heartY = ARENA_H / 2;
+let battleJoyX = 0, battleJoyY = 0;
+const HEART_SPEED = 3.4; // pixels déplacés par tick (50ms) à pleine poussée du joystick
 
 function updateHeartPos() {
   const heart = document.getElementById("battle-heart");
@@ -735,18 +751,32 @@ function updateHeartPos() {
   heart.style.top = heartY + "px";
 }
 function wireArenaControls() {
-  const arena = document.getElementById("battle-arena");
-  const move = (clientX, clientY) => {
-    const rect = arena.getBoundingClientRect();
-    heartX = Math.max(8, Math.min(ARENA_W - 8, clientX - rect.left));
-    heartY = Math.max(8, Math.min(ARENA_H - 8, clientY - rect.top));
-    updateHeartPos();
+  wireJoystick("battle-joystick-base", "battle-joystick-knob", (x, y) => { battleJoyX = x; battleJoyY = y; });
+}
+
+// ---- Joystick virtuel générique : renvoie un vecteur (-1..1, -1..1) selon
+// à quel point on l'écarte de son centre, jusqu'à relâchement. ----
+function wireJoystick(baseId, knobId, onMove) {
+  const base = document.getElementById(baseId);
+  const knob = document.getElementById(knobId);
+  const maxDist = 32;
+  let active = false;
+  const update = (clientX, clientY) => {
+    const rect = base.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    let dx = clientX - cx, dy = clientY - cy;
+    const dist = Math.hypot(dx, dy);
+    if (dist > maxDist) { dx = dx / dist * maxDist; dy = dy / dist * maxDist; }
+    knob.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+    onMove(dx / maxDist, dy / maxDist);
   };
-  arena.ontouchstart = (e) => { e.preventDefault(); const t = e.touches[0]; move(t.clientX, t.clientY); };
-  arena.ontouchmove = (e) => { e.preventDefault(); const t = e.touches[0]; move(t.clientX, t.clientY); };
-  arena.onmousedown = (e) => { heartDragging = true; move(e.clientX, e.clientY); };
-  arena.onmousemove = (e) => { if (heartDragging) move(e.clientX, e.clientY); };
-  window.addEventListener("mouseup", () => { heartDragging = false; });
+  const reset = () => { active = false; knob.style.transform = "translate(-50%, -50%)"; onMove(0, 0); };
+  base.ontouchstart = (e) => { e.preventDefault(); active = true; const t = e.touches[0]; update(t.clientX, t.clientY); };
+  base.ontouchmove = (e) => { e.preventDefault(); if (active) { const t = e.touches[0]; update(t.clientX, t.clientY); } };
+  base.ontouchend = (e) => { e.preventDefault(); reset(); };
+  base.onmousedown = (e) => { active = true; update(e.clientX, e.clientY); };
+  window.addEventListener("mousemove", (e) => { if (active) update(e.clientX, e.clientY); });
+  window.addEventListener("mouseup", () => { if (active) reset(); });
 }
 
 function startDodgePhase() {
@@ -767,6 +797,11 @@ function startDodgePhase() {
 }
 function dodgeTick() {
   if (!solo || solo.ended) { clearInterval(dodgeTimer); return; }
+  if (battleJoyX || battleJoyY) {
+    heartX = Math.max(8, Math.min(ARENA_W - 8, heartX + battleJoyX * HEART_SPEED));
+    heartY = Math.max(8, Math.min(ARENA_H - 8, heartY + battleJoyY * HEART_SPEED));
+    updateHeartPos();
+  }
   dodgeSpawnCountdown--;
   if (dodgeSpawnCountdown <= 0) {
     spawnBullet(dodgePattern);
@@ -840,7 +875,7 @@ function endDodgePhase() {
 const SURVIVAL_W = 300, SURVIVAL_H = 220, SURVIVAL_MAX_HITS = 3;
 const SURVIVAL_BEST_KEY = "capnaval_survival_best";
 let survivalTimer = null, survivalBullets = [], survivalStartAt = 0, survivalSpawnCountdown = 0, survivalRunning = false;
-let survivalHeartX = SURVIVAL_W / 2, survivalHeartY = SURVIVAL_H / 2, survivalDragging = false, survivalInvuln = false, survivalHits = 0;
+let survivalHeartX = SURVIVAL_W / 2, survivalHeartY = SURVIVAL_H / 2, survivalInvuln = false, survivalHits = 0;
 
 function loadSurvivalBest() { try { return parseFloat(localStorage.getItem(SURVIVAL_BEST_KEY) || "0"); } catch (e) { return 0; } }
 function saveSurvivalBest(v) { try { localStorage.setItem(SURVIVAL_BEST_KEY, v.toFixed(1)); } catch (e) { /* ignore */ } }
@@ -875,23 +910,18 @@ function updateSurvivalHeartPos() {
   heart.style.left = survivalHeartX + "px";
   heart.style.top = survivalHeartY + "px";
 }
+let survivalJoyX = 0, survivalJoyY = 0;
 function wireSurvivalControls() {
-  const arena = document.getElementById("survival-arena");
-  const move = (clientX, clientY) => {
-    const rect = arena.getBoundingClientRect();
-    survivalHeartX = Math.max(8, Math.min(SURVIVAL_W - 8, clientX - rect.left));
-    survivalHeartY = Math.max(8, Math.min(SURVIVAL_H - 8, clientY - rect.top));
-    updateSurvivalHeartPos();
-  };
-  arena.ontouchstart = (e) => { e.preventDefault(); const t = e.touches[0]; move(t.clientX, t.clientY); };
-  arena.ontouchmove = (e) => { e.preventDefault(); const t = e.touches[0]; move(t.clientX, t.clientY); };
-  arena.onmousedown = (e) => { survivalDragging = true; move(e.clientX, e.clientY); };
-  arena.onmousemove = (e) => { if (survivalDragging) move(e.clientX, e.clientY); };
-  window.addEventListener("mouseup", () => { survivalDragging = false; });
+  wireJoystick("survival-joystick-base", "survival-joystick-knob", (x, y) => { survivalJoyX = x; survivalJoyY = y; });
 }
 
 function survivalTick() {
   if (!survivalRunning) { clearInterval(survivalTimer); return; }
+  if (survivalJoyX || survivalJoyY) {
+    survivalHeartX = Math.max(8, Math.min(SURVIVAL_W - 8, survivalHeartX + survivalJoyX * HEART_SPEED));
+    survivalHeartY = Math.max(8, Math.min(SURVIVAL_H - 8, survivalHeartY + survivalJoyY * HEART_SPEED));
+    updateSurvivalHeartPos();
+  }
   const elapsed = (performance.now() - survivalStartAt) / 1000;
   document.getElementById("survival-timer").textContent = elapsed.toFixed(1) + "s";
   survivalSpawnCountdown--;
@@ -937,12 +967,156 @@ function endSurvivalGame() {
   const best = loadSurvivalBest();
   const isRecord = elapsed > best;
   if (isRecord) saveSurvivalBest(elapsed);
-  document.getElementById("solo-end-title").textContent = isRecord ? "Nouveau record !" : "Chaviré !";
-  document.getElementById("solo-end-text").textContent = isRecord
-    ? `Tu as survécu ${elapsed.toFixed(1)} secondes dans la tempête — un nouveau record !`
-    : `Tu as survécu ${elapsed.toFixed(1)} secondes dans la tempête (record : ${best.toFixed(1)}s).`;
-  showScreen("screen-solo-end");
+  showSoloEnd(isRecord ? "win" : "lose", isRecord ? "Nouveau record !" : "Chaviré !",
+    isRecord ? `Tu as survécu ${elapsed.toFixed(1)} secondes dans la tempête — un nouveau record !`
+             : `Tu as survécu ${elapsed.toFixed(1)} secondes dans la tempête (record : ${best.toFixed(1)}s).`);
 }
+
+// ================= MODE DUO : combat de fusées EN LIGNE, chacun sur son appareil =================
+const DUO_ARENA_W = 320, DUO_ARENA_H = 320;
+const DUO_WEAPONS = [
+  { id: "water", icon: "💦", label: "Jet d'eau", cost: 1 },
+  { id: "missile", icon: "☄️", label: "Missile", cost: 3 },
+  { id: "laser", icon: "🔴", label: "Rayon laser", cost: 5 },
+  { id: "bomb", icon: "💣", label: "Grosse bombe", cost: 8 },
+  { id: "nova", icon: "💥", label: "Frappe totale", cost: 12 },
+];
+const DUO_MAX_ENERGY = 12;
+let duoWs = null, myDuoNum = null, duo = null, duoMyMoveDir = 0;
+
+document.getElementById("btn-choose-duo").addEventListener("click", () => {
+  document.getElementById("mode-choice-modal").style.display = "none";
+  document.getElementById("duo-choice-modal").style.display = "flex";
+});
+document.getElementById("btn-close-duo-choice").addEventListener("click", () => {
+  document.getElementById("duo-choice-modal").style.display = "none";
+});
+document.getElementById("btn-duo-create").addEventListener("click", async () => {
+  const pseudo = document.getElementById("input-pseudo").value.trim() || "Joueur";
+  document.getElementById("duo-choice-modal").style.display = "none";
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/duo-create`, { method: "POST" });
+    const data = await res.json();
+    connectDuo(data.code, pseudo);
+  } catch (e) {
+    alert("Impossible de joindre le serveur. Vérifie ta connexion.");
+  }
+});
+document.getElementById("btn-duo-join").addEventListener("click", () => {
+  const code = document.getElementById("duo-join-code").value.trim().toUpperCase();
+  if (!code) return;
+  const pseudo = document.getElementById("input-pseudo").value.trim() || "Joueur";
+  document.getElementById("duo-choice-modal").style.display = "none";
+  connectDuo(code, pseudo);
+});
+document.getElementById("btn-duo-wait-cancel").addEventListener("click", () => {
+  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  showScreen("screen-home");
+});
+document.getElementById("btn-duo-quit").addEventListener("click", () => {
+  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  showScreen("screen-home");
+});
+
+function connectDuo(code, pseudo) {
+  document.getElementById("duo-wait-code").textContent = code;
+  document.getElementById("duo-wait-status").textContent = "Connexion au serveur...";
+  showScreen("screen-duo-wait");
+  myDuoNum = null;
+  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?duo=1&code=${code}&pseudo=${encodeURIComponent(pseudo)}`;
+  try { duoWs = new WebSocket(wsUrl); } catch (e) { document.getElementById("duo-wait-status").textContent = "Connexion impossible."; return; }
+  duoWs.onopen = () => { document.getElementById("duo-wait-status").textContent = "En attente qu'il/elle rejoigne..."; };
+  duoWs.onmessage = (ev) => {
+    let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    onDuoMessage(msg);
+  };
+  duoWs.onerror = () => { document.getElementById("duo-wait-status").textContent = "Erreur de connexion au serveur."; };
+  duoWs.onclose = () => {
+    if (document.querySelector(".screen.active").id === "screen-duo-battle") {
+      showSoloEnd("neutral", "Connexion perdue", "La connexion avec ton adversaire a été coupée.");
+      soloRetryHandler = null;
+    }
+  };
+}
+function onDuoMessage(msg) {
+  if (msg.type === "error") { alert(msg.message); showScreen("screen-home"); return; }
+  if (msg.type === "duoWelcome") { myDuoNum = msg.num; return; }
+  if (msg.type === "duoState") {
+    duo = msg;
+    if (msg.status === "waiting") { showScreen("screen-duo-wait"); return; }
+    if (msg.status === "playing") { renderDuoBattle(); return; }
+    if (msg.status === "ended") { renderDuoEnd(); return; }
+  }
+}
+
+function sendDuo(payload) { if (duoWs && duoWs.readyState === 1) duoWs.send(JSON.stringify(payload)); }
+
+let duoWeaponsBuilt = false;
+function renderDuoBattle() {
+  if (!duo || myDuoNum === null) return;
+  if (document.querySelector(".screen.active").id !== "screen-duo-battle") {
+    showScreen("screen-duo-battle");
+    wireDuoMoveButtons();
+  }
+  if (!duoWeaponsBuilt) { buildDuoWeaponButtons(); duoWeaponsBuilt = true; }
+
+  const me = duo.players.find(p => p.num === myDuoNum) || { hp: 0, maxHp: 30, x: DUO_ARENA_W / 2, energy: 0 };
+  const opp = duo.players.find(p => p.num !== myDuoNum);
+  const flip = myDuoNum === 2; // pour toujours me voir en bas, l'adversaire en haut
+
+  document.getElementById("duo-opp-label").textContent = opp ? `🚀 ${opp.pseudo}` : "🚀 Adversaire";
+  document.getElementById("duo-p1-hp").textContent = Math.max(0, Math.round(me.hp));
+  document.getElementById("duo-p2-hp").textContent = opp ? Math.max(0, Math.round(opp.hp)) : "?";
+  document.getElementById("duo-p1-hpfill").style.width = Math.max(0, me.hp / me.maxHp * 100) + "%";
+  document.getElementById("duo-p2-hpfill").style.width = opp ? Math.max(0, opp.hp / opp.maxHp * 100) + "%" : "0%";
+  document.getElementById("duo-p1-energy-fill").style.width = (me.energy / DUO_MAX_ENERGY * 100) + "%";
+  document.getElementById("duo-p2-energy-fill").style.width = opp ? (opp.energy / DUO_MAX_ENERGY * 100) + "%" : "0%";
+  document.getElementById("duo-rocket-p1").style.left = me.x + "px";
+  document.getElementById("duo-rocket-p2").style.left = (opp ? opp.x : DUO_ARENA_W / 2) + "px";
+
+  document.querySelectorAll(".duo-weapon-btn").forEach(btn => {
+    const w = DUO_WEAPONS.find(x => x.id === btn.dataset.weapon);
+    btn.classList.toggle("disabled", me.energy < w.cost);
+  });
+
+  const arena = document.getElementById("duo-arena");
+  arena.querySelectorAll(".duo-projectile").forEach(el => el.remove());
+  (duo.projectiles || []).forEach(pr => {
+    const w = DUO_WEAPONS.find(x => x.id === pr.weaponId);
+    const el = document.createElement("div");
+    const mine = pr.owner === myDuoNum; // mes tirs montent toujours vers le haut de mon écran
+    el.className = "duo-projectile " + (mine ? "duo-projectile-up" : "duo-projectile-down");
+    el.textContent = w ? w.icon : "•";
+    el.style.left = pr.x + "px";
+    el.style.top = (flip ? DUO_ARENA_H - pr.y : pr.y) + "px";
+    arena.appendChild(el);
+  });
+}
+function buildDuoWeaponButtons() {
+  const container = document.getElementById("duo-p1-weapons");
+  container.innerHTML = DUO_WEAPONS.map(w =>
+    `<button type="button" class="duo-weapon-btn" data-weapon="${w.id}" title="${escapeHtml(w.label)} — coût ${w.cost}">${w.icon}<span class="duo-weapon-cost">${w.cost}</span></button>`
+  ).join("");
+  container.querySelectorAll(".duo-weapon-btn").forEach(btn => {
+    btn.addEventListener("click", () => sendDuo({ type: "duoFire", weapon: btn.dataset.weapon }));
+  });
+}
+function wireDuoMoveButtons() {
+  document.querySelectorAll('.duo-move-row[data-player="1"] .duo-move-btn').forEach(btn => {
+    const dir = parseInt(btn.dataset.dir, 10);
+    const start = (e) => { e.preventDefault(); sendDuo({ type: "duoMove", dir }); };
+    const stop = (e) => { if (e) e.preventDefault(); sendDuo({ type: "duoMove", dir: 0 }); };
+    btn.ontouchstart = start; btn.ontouchend = stop; btn.ontouchcancel = stop;
+    btn.onmousedown = start; btn.onmouseup = stop; btn.onmouseleave = stop;
+  });
+}
+function renderDuoEnd() {
+  const won = duo.winner === myDuoNum;
+  showSoloEnd(won ? "win" : "lose", won ? "Victoire !" : "Défaite...",
+    won ? "La fusée de ton adversaire est réduite en miettes. GG !" : "Ta fusée est réduite en miettes. Une revanche ?");
+  soloRetryHandler = () => sendDuo({ type: "duoRestart" });
+}
+
 
 // ---------- Pseudo mémorisé ----------
 const PSEUDO_KEY = "capnaval_pseudo";
@@ -2794,8 +2968,8 @@ function sfxFanfare() {
   notes.forEach((freq, i) => setTimeout(() => playTone(freq, 0.28, "triangle", 0.16), i * 130));
 }
 
-function spawnConfetti() {
-  const layer = document.getElementById("confetti-layer");
+function spawnConfetti(layerId) {
+  const layer = document.getElementById(layerId || "confetti-layer");
   if (!layer) return;
   const colors = ["#ff8a3d", "#4ade80", "#60a5fa", "#facc15", "#a855f7", "#ef4444"];
   const count = 60;
