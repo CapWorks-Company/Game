@@ -982,10 +982,15 @@ async function onTubeTap(idx) {
     tubesState.selected = null;
     renderTubes();
     const wrap = document.getElementById("tubes-wrap");
-    const fromRect = wrap.children[fromIdx].getBoundingClientRect();
+    const fromTubeEl = wrap.children[fromIdx];
+    const fromRect = fromTubeEl.getBoundingClientRect();
     const toRect = wrap.children[idx].getBoundingClientRect();
     let n = 0;
     for (let i = from.length - 1; i >= 0 && from[i] === fromTop && (to.length + n) < TUBES_CAPACITY; i--) n++;
+    // Cache tout de suite les billes réelles qui vont voler : sans ça elles restent visibles
+    // dans le tube de départ pendant tout le vol du clone (doublon visuel le temps de l'anim).
+    const ballEls = fromTubeEl.querySelectorAll(".tube-ball");
+    for (let i = ballEls.length - n; i < ballEls.length; i++) { if (ballEls[i]) ballEls[i].style.visibility = "hidden"; }
     const color = TUBES_COLORS[fromTop];
     const flights = [];
     for (let i = 0; i < n; i++) {
