@@ -192,34 +192,78 @@
   </div>
 </section>
 
-<!-- ===== ECRAN DUO : COMBAT DE FUSÉES EN LIGNE ===== -->
+<!-- ===== ECRAN SOLO : TAQUIN ===== -->
+<section id="screen-solo-taquin" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🔢 Taquin</h2>
+    <p class="hint" style="text-align:center">Coups : <span id="taquin-moves">0</span></p>
+    <div id="taquin-grid" class="taquin-grid"></div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche une case voisine du trou pour la faire glisser. Reforme l'ordre 1 à 15 !</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-taquin-restart" class="btn btn-secondary">Nouvelle grille</button>
+      <button type="button" id="btn-taquin-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : MORPION CONTRE IA ===== -->
+<section id="screen-solo-morpion" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">❌⭕ Morpion contre IA</h2>
+    <p id="morpion-status" class="morpion-status">À toi de jouer (❌)</p>
+    <div id="morpion-grid" class="morpion-grid"></div>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-morpion-restart" class="btn btn-secondary">Nouvelle partie</button>
+      <button type="button" id="btn-morpion-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : FLAPPY BIRD ===== -->
+<section id="screen-solo-flappy" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🐦 Envol Marin</h2>
+    <p class="hint" style="text-align:center">Score : <span id="flappy-score">0</span></p>
+    <div class="flappy-wrap">
+      <canvas id="flappy-canvas" width="300" height="400"></canvas>
+      <div id="flappy-hint" class="flappy-tap-hint">Touche l'écran pour voler !</div>
+    </div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche l'écran ou appuie sur Espace pour battre des ailes et éviter les récifs.</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-flappy-restart" class="btn btn-secondary">Recommencer</button>
+      <button type="button" id="btn-flappy-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN DUO : PLACEMENT DES NAVIRES (Bataille Navale en ligne) ===== -->
+<section id="screen-duo-place" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">⚓ Place ta flotte</h2>
+    <p id="duo-place-hint" class="bs-place-hint">Touche un navire ci-dessous, puis une case de la grille pour le poser.</p>
+    <div id="duo-place-grid" class="bs-grid"></div>
+    <div id="duo-ship-palette" class="bs-ship-palette"></div>
+    <div class="bs-place-toolbar">
+      <button type="button" id="btn-duo-place-rotate" class="btn btn-secondary">↻ Tourner</button>
+      <button type="button" id="btn-duo-place-random" class="btn btn-secondary">🎲 Aléatoire</button>
+    </div>
+    <button type="button" id="btn-duo-place-ready" class="btn btn-primary" disabled>Prêt !</button>
+    <button type="button" id="btn-duo-place-quit" class="btn btn-secondary" style="margin-top:8px">Abandonner</button>
+  </div>
+</section>
+
+<!-- ===== ECRAN DUO : BATAILLE NAVALE EN LIGNE ===== -->
 <section id="screen-duo-battle" class="screen">
   <div class="battle-screen">
-    <div class="duo-hp-row">
-      <span id="duo-opp-label" class="duo-hp-label" style="color:#60a5fa">🚀 Adversaire</span>
-      <div class="duo-hp-bar-wrap"><div id="duo-p2-hpfill" class="duo-hp-fill"></div></div>
-      <span id="duo-p2-hp" class="duo-hp-num">30</span>
-    </div>
-    <div class="duo-energy-bar-wrap" style="max-width:200px;margin:2px auto 0"><div id="duo-p2-energy-fill" class="duo-energy-fill"></div></div>
+    <div id="duo-turn-banner" class="bs-turn-banner">C'est ton tour</div>
 
-    <div id="duo-arena" class="duo-arena">
-      <div id="duo-rocket-p2" class="duo-rocket">🚀</div>
-      <div id="duo-rocket-p1" class="duo-rocket duo-rocket-p1">🚀</div>
-    </div>
+    <p class="bs-section-label">🌊 Eaux ennemies — touche pour tirer</p>
+    <p id="duo-opp-fleet-count" class="bs-fleet-count">🚢 5 / 5 navires adverses</p>
+    <div id="duo-enemy-grid" class="bs-grid"></div>
 
-    <div class="duo-move-row" data-player="1">
-      <button type="button" class="duo-move-btn" data-dir="-1">◀</button>
-      <button type="button" class="duo-move-btn" data-dir="1">▶</button>
-    </div>
-    <div class="duo-hp-row">
-      <span id="duo-me-label" class="duo-hp-label" style="color:#f87171">🚀 Toi</span>
-      <div class="duo-hp-bar-wrap"><div id="duo-p1-hpfill" class="duo-hp-fill"></div></div>
-      <span id="duo-p1-hp" class="duo-hp-num">30</span>
-    </div>
-
-    <p class="hint" style="font-size:11px;margin:10px 0 2px">L'énergie se recharge tout seule — attends pour sortir les grosses armes.</p>
-    <div class="duo-energy-bar-wrap"><div id="duo-p1-energy-fill" class="duo-energy-fill"></div></div>
-    <div id="duo-p1-weapons" class="duo-weapons-row"></div>
+    <p class="bs-section-label">⚓ Ta flotte</p>
+    <p id="duo-my-fleet-count" class="bs-fleet-count">🚢 5 / 5 de tes navires</p>
+    <div id="duo-my-grid" class="bs-grid"></div>
 
     <button type="button" id="btn-duo-quit" class="btn btn-secondary" style="margin-top:12px">Abandonner</button>
   </div>

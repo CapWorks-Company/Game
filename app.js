@@ -548,6 +548,9 @@ const SOLO_GAMES = [
   { id: "2048", kind: "2048", icon: "🔢", label: "2048", desc: "Glisse les tuiles pour fusionner les nombres et atteindre 2048." },
   { id: "memory", kind: "memory", icon: "🃏", label: "Mémoire", desc: "Retourne les cartes deux par deux et retrouve toutes les paires." },
   { id: "snake", kind: "snake", icon: "🐍", label: "Serpent des Mers", desc: "Guide le serpent, mange les crevettes, évite de te mordre la queue." },
+  { id: "taquin", kind: "taquin", icon: "🔢", label: "Taquin", desc: "Fais glisser les cases pour reformer l'ordre de 1 à 15." },
+  { id: "morpion", kind: "morpion", icon: "❌⭕", label: "Morpion contre IA", desc: "Affronte une IA maligne dans un morpion classique." },
+  { id: "flappy", kind: "flappy", icon: "🐦", label: "Envol Marin", desc: "Touche l'écran pour voler entre les récifs sans les toucher." },
 ];
 let soloRetryHandler = null;
 
@@ -561,6 +564,7 @@ function showSoloEnd(outcome, title, text) {
   titleEl.classList.remove("outcome-win", "outcome-lose");
   if (outcome === "win") { card.classList.add("outcome-win"); titleEl.classList.add("outcome-win"); icon.textContent = "🏆"; }
   else if (outcome === "lose") { card.classList.add("outcome-lose"); titleEl.classList.add("outcome-lose"); icon.textContent = "💥"; }
+  else if (outcome === "draw") { icon.textContent = "🤝"; }
   else { icon.textContent = "🔌"; }
   icon.style.animation = "none"; void icon.offsetWidth; icon.style.animation = "";
   titleEl.textContent = title;
@@ -584,6 +588,9 @@ function openSoloHub() {
       else if (g.kind === "2048") start2048Game();
       else if (g.kind === "memory") startMemoryGame();
       else if (g.kind === "snake") startSnakeGame();
+      else if (g.kind === "taquin") startTaquinGame();
+      else if (g.kind === "morpion") startMorpionGame();
+      else if (g.kind === "flappy") startFlappyGame();
     });
   });
   showScreen("screen-solo-hub");
@@ -1428,17 +1435,325 @@ function wireSnakeControls() {
   }, { passive: true });
 }
 
-// ================= MODE DUO : combat de fusées EN LIGNE, chacun sur son appareil =================
-const DUO_ARENA_W = 320, DUO_ARENA_H = 320;
-const DUO_WEAPONS = [
-  { id: "water", icon: "💦", label: "Jet d'eau", cost: 1 },
-  { id: "missile", icon: "☄️", label: "Missile", cost: 3 },
-  { id: "laser", icon: "🔴", label: "Rayon laser", cost: 5 },
-  { id: "bomb", icon: "💣", label: "Grosse bombe", cost: 8 },
-  { id: "nova", icon: "💥", label: "Frappe totale", cost: 12 },
+// ---- Taquin (15-puzzle classique, mélange toujours solvable) ----
+const TAQUIN_SIZE = 4;
+let taquinState = null;
+
+function startTaquinGame() {
+  const n = TAQUIN_SIZE * TAQUIN_SIZE;
+  const tiles = Array.from({ length: n - 1 }, (_, i) => i + 1);
+  tiles.push(0); // 0 = case vide
+  // Mélange en partant de l'état résolu via des mouvements valides aléatoires : garantit que la grille reste solvable.
+  let emptyIdx = n - 1;
+  for (let i = 0; i < 400; i++) {
+    const neighbors = taquinNeighbors(emptyIdx);
+    const swapWith = neighbors[Math.floor(Math.random() * neighbors.length)];
+    [tiles[emptyIdx], tiles[swapWith]] = [tiles[swapWith], tiles[emptyIdx]];
+    emptyIdx = swapWith;
+  }
+  taquinState = { tiles, moves: 0, ended: false };
+  soloRetryHandler = startTaquinGame;
+  buildTaquinGrid();
+  showScreen("screen-solo-taquin");
+}
+document.getElementById("btn-taquin-quit").addEventListener("click", () => showScreen("screen-home"));
+document.getElementById("btn-taquin-restart").addEventListener("click", () => startTaquinGame());
+
+function taquinNeighbors(idx) {
+  const r = Math.floor(idx / TAQUIN_SIZE), c = idx % TAQUIN_SIZE;
+  const out = [];
+  if (r > 0) out.push(idx - TAQUIN_SIZE);
+  if (r < TAQUIN_SIZE - 1) out.push(idx + TAQUIN_SIZE);
+  if (c > 0) out.push(idx - 1);
+  if (c < TAQUIN_SIZE - 1) out.push(idx + 1);
+  return out;
+}
+function taquinIsSolved(tiles) {
+  return tiles.every((v, i) => (i === tiles.length - 1 ? v === 0 : v === i + 1));
+}
+function buildTaquinGrid() {
+  document.getElementById("taquin-moves").textContent = "0";
+  const grid = document.getElementById("taquin-grid");
+  grid.innerHTML = "";
+  const pct = 100 / TAQUIN_SIZE;
+  taquinState.tiles.forEach((val, idx) => {
+    if (val === 0) return;
+    const el = document.createElement("div");
+    el.className = "taquin-tile";
+    el.textContent = String(val);
+    el.style.width = `calc(${pct}% - 4px)`;
+    el.style.height = `calc(${pct}% - 4px)`;
+    el.style.margin = "2px";
+    positionTaquinTile(el, idx);
+    el.addEventListener("click", () => onTaquinTileTap(val));
+    grid.appendChild(el);
+  });
+}
+function positionTaquinTile(el, idx) {
+  const r = Math.floor(idx / TAQUIN_SIZE), c = idx % TAQUIN_SIZE;
+  el.style.transform = `translate(${c * 100}%, ${r * 100}%)`;
+}
+function renderTaquinPositions() {
+  const grid = document.getElementById("taquin-grid");
+  grid.querySelectorAll(".taquin-tile").forEach(el => {
+    const val = parseInt(el.textContent, 10);
+    positionTaquinTile(el, taquinState.tiles.indexOf(val));
+  });
+  if (taquinIsSolved(taquinState.tiles)) {
+    grid.querySelectorAll(".taquin-tile").forEach(el => el.classList.add("taquin-tile-solved"));
+  }
+}
+function onTaquinTileTap(val) {
+  if (taquinState.ended) return;
+  const idx = taquinState.tiles.indexOf(val);
+  const emptyIdx = taquinState.tiles.indexOf(0);
+  if (!taquinNeighbors(idx).includes(emptyIdx)) return;
+  [taquinState.tiles[idx], taquinState.tiles[emptyIdx]] = [taquinState.tiles[emptyIdx], taquinState.tiles[idx]];
+  taquinState.moves++;
+  document.getElementById("taquin-moves").textContent = String(taquinState.moves);
+  vibrate(10);
+  renderTaquinPositions();
+  if (taquinIsSolved(taquinState.tiles)) {
+    taquinState.ended = true;
+    vibrate([40, 30, 40, 30, 90]);
+    setTimeout(() => showSoloEnd("win", "Taquin résolu !", `Bravo, tu as reformé la grille en ${taquinState.moves} coups !`), 300);
+  }
+}
+
+// ---- Morpion contre IA (minimax imbattable, choix aléatoire parmi les coups optimaux) ----
+let morpionState = null;
+const MORPION_LINES = [
+  [0, 1, 2], [3, 4, 5], [6, 7, 8],
+  [0, 3, 6], [1, 4, 7], [2, 5, 8],
+  [0, 4, 8], [2, 4, 6],
 ];
-const DUO_MAX_ENERGY = 12;
-let duoWs = null, myDuoNum = null, duo = null, duoMyMoveDir = 0;
+
+function startMorpionGame() {
+  morpionState = { board: Array(9).fill(null), ended: false, turn: "X" };
+  soloRetryHandler = startMorpionGame;
+  setMorpionStatus("À toi de jouer (❌)");
+  renderMorpion();
+  showScreen("screen-solo-morpion");
+}
+document.getElementById("btn-morpion-quit").addEventListener("click", () => showScreen("screen-home"));
+document.getElementById("btn-morpion-restart").addEventListener("click", () => startMorpionGame());
+
+function setMorpionStatus(text) { document.getElementById("morpion-status").textContent = text; }
+function morpionResult(board) {
+  for (const line of MORPION_LINES) {
+    const [a, b, c] = line;
+    if (board[a] && board[a] === board[b] && board[b] === board[c]) return { player: board[a], line };
+  }
+  if (board.every(v => v)) return { player: "draw", line: null };
+  return null;
+}
+function renderMorpion() {
+  const grid = document.getElementById("morpion-grid");
+  grid.innerHTML = "";
+  const result = morpionResult(morpionState.board);
+  morpionState.board.forEach((v, idx) => {
+    const cell = document.createElement("div");
+    let cls = "morpion-cell";
+    if (v === "X") cls += " morpion-cell-x"; else if (v === "O") cls += " morpion-cell-o";
+    if (result && result.line && result.line.includes(idx)) cls += " morpion-cell-win";
+    cell.className = cls;
+    if (v) cell.innerHTML = `<span class="morpion-cell-mark">${v === "X" ? "❌" : "⭕"}</span>`;
+    cell.addEventListener("click", () => onMorpionCellTap(idx));
+    grid.appendChild(cell);
+  });
+}
+function onMorpionCellTap(idx) {
+  if (morpionState.ended || morpionState.turn !== "X" || morpionState.board[idx]) return;
+  morpionState.board[idx] = "X";
+  renderMorpion();
+  const result = morpionResult(morpionState.board);
+  if (result) { finishMorpion(result); return; }
+  morpionState.turn = "O";
+  setMorpionStatus("L'IA réfléchit...");
+  setTimeout(morpionAiMove, 380);
+}
+function morpionAiMove() {
+  if (morpionState.ended) return;
+  const board = morpionState.board;
+  const best = morpionBestMoves(board);
+  const move = best[Math.floor(Math.random() * best.length)];
+  board[move] = "O";
+  renderMorpion();
+  const result = morpionResult(board);
+  if (result) { finishMorpion(result); return; }
+  morpionState.turn = "X";
+  setMorpionStatus("À toi de jouer (❌)");
+}
+// Minimax complet : le morpion se résout instantanément (au plus 9 cases), l'IA (O) joue donc toujours optimalement.
+function morpionScore(board, depth) {
+  const result = morpionResult(board);
+  if (!result) return null;
+  if (result.player === "draw") return 0;
+  return result.player === "O" ? (10 - depth) : (depth - 10);
+}
+function morpionMinimax(board, isAiTurn, depth) {
+  const term = morpionScore(board, depth);
+  if (term !== null) return term;
+  const player = isAiTurn ? "O" : "X";
+  const scores = [];
+  for (let i = 0; i < 9; i++) {
+    if (board[i]) continue;
+    board[i] = player;
+    scores.push(morpionMinimax(board, !isAiTurn, depth + 1));
+    board[i] = null;
+  }
+  return isAiTurn ? Math.max(...scores) : Math.min(...scores);
+}
+function morpionBestMoves(board) {
+  let bestScore = -Infinity;
+  const scored = [];
+  for (let i = 0; i < 9; i++) {
+    if (board[i]) continue;
+    board[i] = "O";
+    const score = morpionMinimax(board, false, 1);
+    board[i] = null;
+    scored.push({ i, score });
+    if (score > bestScore) bestScore = score;
+  }
+  return scored.filter(s => s.score === bestScore).map(s => s.i);
+}
+function finishMorpion(result) {
+  morpionState.ended = true;
+  if (result.player === "draw") {
+    setMorpionStatus("Match nul !");
+    vibrate(20);
+    setTimeout(() => showSoloEnd("draw", "Match nul !", "Personne ne l'emporte cette fois, l'IA n'a rien laissé passer."), 400);
+  } else if (result.player === "X") {
+    setMorpionStatus("Tu as gagné !");
+    vibrate([40, 30, 40, 30, 90]);
+    setTimeout(() => showSoloEnd("win", "Victoire !", "Tu as réussi à déjouer l'IA, bien joué !"), 400);
+  } else {
+    setMorpionStatus("L'IA a gagné...");
+    vibrate([30, 30, 60]);
+    setTimeout(() => showSoloEnd("lose", "Défaite...", "L'IA a aligné trois symboles avant toi. Retente ta chance !"), 400);
+  }
+}
+
+// ---- Envol Marin (Flappy Bird) : tape l'écran pour voler entre les récifs ----
+let flappyState = null, flappyRaf = null, flappyWired = false;
+const FLAPPY_W = 300, FLAPPY_H = 400;
+const FLAPPY_GRAVITY = 0.32, FLAPPY_FLAP = -6.2, FLAPPY_PIPE_W = 46, FLAPPY_GAP = 118, FLAPPY_SPEED = 2.2, FLAPPY_PIPE_GAP_DIST = 190;
+const FLAPPY_BIRD_X = 70, FLAPPY_BIRD_R = 11;
+
+function startFlappyGame() {
+  flappyState = { birdY: FLAPPY_H / 2, birdV: 0, pipes: [], score: 0, ended: false, started: false, lastSpawnX: FLAPPY_W };
+  soloRetryHandler = startFlappyGame;
+  document.getElementById("flappy-score").textContent = "0";
+  document.getElementById("flappy-hint").style.display = "flex";
+  wireFlappyControls();
+  showScreen("screen-solo-flappy");
+  drawFlappy();
+  if (flappyRaf) cancelAnimationFrame(flappyRaf);
+  flappyRaf = requestAnimationFrame(flappyLoop);
+}
+document.getElementById("btn-flappy-quit").addEventListener("click", () => {
+  if (flappyRaf) cancelAnimationFrame(flappyRaf);
+  showScreen("screen-home");
+});
+document.getElementById("btn-flappy-restart").addEventListener("click", () => startFlappyGame());
+
+function flappyFlap() {
+  if (!flappyState || flappyState.ended) return;
+  if (!flappyState.started) {
+    flappyState.started = true;
+    document.getElementById("flappy-hint").style.display = "none";
+  }
+  flappyState.birdV = FLAPPY_FLAP;
+  vibrate(12);
+}
+function wireFlappyControls() {
+  if (flappyWired) return;
+  flappyWired = true;
+  const canvas = document.getElementById("flappy-canvas");
+  canvas.addEventListener("pointerdown", (e) => { e.preventDefault(); flappyFlap(); });
+  window.addEventListener("keydown", (e) => {
+    if (!document.getElementById("screen-solo-flappy").classList.contains("active")) return;
+    if (e.code === "Space" || e.key === " ") { e.preventDefault(); flappyFlap(); }
+  });
+}
+function flappySpawnPipe() {
+  const minGapY = 50, maxGapY = FLAPPY_H - 90 - FLAPPY_GAP;
+  const gapY = minGapY + Math.random() * (maxGapY - minGapY);
+  flappyState.pipes.push({ x: FLAPPY_W, gapY, passed: false });
+}
+function flappyLoop() {
+  if (!flappyState || flappyState.ended) return;
+  if (flappyState.started) {
+    flappyState.birdV += FLAPPY_GRAVITY;
+    flappyState.birdY += flappyState.birdV;
+    flappyState.pipes.forEach(p => { p.x -= FLAPPY_SPEED; });
+    flappyState.lastSpawnX -= FLAPPY_SPEED;
+    if (flappyState.lastSpawnX <= FLAPPY_W - FLAPPY_PIPE_GAP_DIST) {
+      flappySpawnPipe();
+      flappyState.lastSpawnX = FLAPPY_W;
+    }
+    flappyState.pipes = flappyState.pipes.filter(p => p.x > -FLAPPY_PIPE_W - 5);
+    flappyState.pipes.forEach(p => {
+      if (!p.passed && p.x + FLAPPY_PIPE_W < FLAPPY_BIRD_X) {
+        p.passed = true;
+        flappyState.score++;
+        document.getElementById("flappy-score").textContent = String(flappyState.score);
+        vibrate(10);
+      }
+    });
+    if (flappyState.birdY - FLAPPY_BIRD_R < 0 || flappyState.birdY + FLAPPY_BIRD_R > FLAPPY_H - 14) {
+      endFlappy();
+      return;
+    }
+    for (const p of flappyState.pipes) {
+      if (FLAPPY_BIRD_X + FLAPPY_BIRD_R > p.x && FLAPPY_BIRD_X - FLAPPY_BIRD_R < p.x + FLAPPY_PIPE_W) {
+        if (flappyState.birdY - FLAPPY_BIRD_R < p.gapY || flappyState.birdY + FLAPPY_BIRD_R > p.gapY + FLAPPY_GAP) {
+          endFlappy();
+          return;
+        }
+      }
+    }
+  }
+  drawFlappy();
+  flappyRaf = requestAnimationFrame(flappyLoop);
+}
+function drawFlappy() {
+  const canvas = document.getElementById("flappy-canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, FLAPPY_W, FLAPPY_H);
+  ctx.fillStyle = "#5cc4ec";
+  ctx.fillRect(0, 0, FLAPPY_W, FLAPPY_H);
+  flappyState.pipes.forEach(p => {
+    ctx.fillStyle = "#e07856";
+    ctx.fillRect(p.x, 0, FLAPPY_PIPE_W, p.gapY);
+    ctx.fillRect(p.x, p.gapY + FLAPPY_GAP, FLAPPY_PIPE_W, FLAPPY_H - (p.gapY + FLAPPY_GAP));
+    ctx.fillStyle = "#c96040";
+    ctx.fillRect(p.x - 3, p.gapY - 14, FLAPPY_PIPE_W + 6, 14);
+    ctx.fillRect(p.x - 3, p.gapY + FLAPPY_GAP, FLAPPY_PIPE_W + 6, 14);
+  });
+  ctx.fillStyle = "#1f6fa8";
+  ctx.fillRect(0, FLAPPY_H - 14, FLAPPY_W, 14);
+  ctx.save();
+  ctx.translate(FLAPPY_BIRD_X, flappyState.birdY);
+  const angle = Math.max(-0.4, Math.min(0.9, flappyState.birdV * 0.06));
+  ctx.rotate(angle);
+  ctx.font = "28px sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText("🐦", 0, 0);
+  ctx.restore();
+}
+function endFlappy() {
+  flappyState.ended = true;
+  if (flappyRaf) cancelAnimationFrame(flappyRaf);
+  vibrate([30, 30, 60]);
+  setTimeout(() => showSoloEnd("lose", "Splash !", `Tu t'es écrasé avec un score de ${flappyState.score} récifs franchis.`), 250);
+}
+
+// ================= MODE DUO : BATAILLE NAVALE EN LIGNE, chacun sur son appareil =================
+const BS_GRID = 8;
+let duoWs = null, myDuoNum = null, duo = null;
+let bsPlace = null; // état local du placement des navires, avant l'envoi au serveur
 
 document.getElementById("btn-choose-duo").addEventListener("click", () => {
   document.getElementById("mode-choice-modal").style.display = "none";
@@ -1479,6 +1794,8 @@ function connectDuo(code, pseudo) {
   document.getElementById("duo-wait-status").textContent = "Connexion au serveur...";
   showScreen("screen-duo-wait");
   myDuoNum = null;
+  duo = null;
+  bsPlace = null;
   const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?duo=1&code=${code}&pseudo=${encodeURIComponent(pseudo)}`;
   try { duoWs = new WebSocket(wsUrl); } catch (e) { document.getElementById("duo-wait-status").textContent = "Connexion impossible."; return; }
   duoWs.onopen = () => { document.getElementById("duo-wait-status").textContent = "En attente qu'il/elle rejoigne..."; };
@@ -1488,7 +1805,8 @@ function connectDuo(code, pseudo) {
   };
   duoWs.onerror = () => { document.getElementById("duo-wait-status").textContent = "Erreur de connexion au serveur."; };
   duoWs.onclose = () => {
-    if (document.querySelector(".screen.active").id === "screen-duo-battle") {
+    const active = document.querySelector(".screen.active").id;
+    if (active === "screen-duo-battle" || active === "screen-duo-place") {
       showSoloEnd("neutral", "Connexion perdue", "La connexion avec ton adversaire a été coupée.");
       soloRetryHandler = null;
     }
@@ -1497,9 +1815,12 @@ function connectDuo(code, pseudo) {
 function onDuoMessage(msg) {
   if (msg.type === "error") { alert(msg.message); showScreen("screen-home"); return; }
   if (msg.type === "duoWelcome") { myDuoNum = msg.num; return; }
+  if (msg.type === "duoPlaceError") { setDuoPlaceHint(msg.message, true); return; }
   if (msg.type === "duoState") {
+    const prevStatus = duo && duo.status;
     duo = msg;
     if (msg.status === "waiting") { showScreen("screen-duo-wait"); return; }
+    if (msg.status === "placing") { renderDuoPlace(prevStatus); return; }
     if (msg.status === "playing") { renderDuoBattle(); return; }
     if (msg.status === "ended") { renderDuoEnd(); return; }
   }
@@ -1507,69 +1828,228 @@ function onDuoMessage(msg) {
 
 function sendDuo(payload) { if (duoWs && duoWs.readyState === 1) duoWs.send(JSON.stringify(payload)); }
 
-let duoWeaponsBuilt = false;
+// ---- Placement des navires (Bataille Navale) ----
+function initBsPlace() {
+  bsPlace = { ships: duo.shipSizes.map((size, i) => ({ uid: i, size, placed: false, r: null, c: null, dir: 0 })), selectedUid: null, dir: 0 };
+}
+function setDuoPlaceHint(text, isError) {
+  const el = document.getElementById("duo-place-hint");
+  el.textContent = text;
+  el.style.color = isError ? "#f87171" : "";
+  el.dataset.error = isError ? "1" : "";
+  if (isError) setTimeout(() => { if (el.dataset.error === "1") { el.dataset.error = ""; el.style.color = ""; } }, 1800);
+}
+function renderDuoPlace(prevStatus) {
+  if (!duo) return;
+  if (document.querySelector(".screen.active").id !== "screen-duo-place") showScreen("screen-duo-place");
+  if (!bsPlace || prevStatus !== "placing") initBsPlace();
+  const readyBtn = document.getElementById("btn-duo-place-ready");
+  const me = duo.me;
+  if (me && me.ready) {
+    setDuoPlaceHint("En attente que ton adversaire termine son placement...", false);
+    readyBtn.disabled = true; readyBtn.textContent = "En attente...";
+    document.getElementById("duo-ship-palette").innerHTML = "";
+    document.getElementById("btn-duo-place-rotate").disabled = true;
+    document.getElementById("btn-duo-place-random").disabled = true;
+    renderBsPlaceGrid(true);
+    return;
+  }
+  readyBtn.textContent = "Prêt !";
+  document.getElementById("btn-duo-place-rotate").disabled = false;
+  document.getElementById("btn-duo-place-random").disabled = false;
+  renderBsShipPalette();
+  renderBsPlaceGrid(false);
+  const allPlaced = bsPlace.ships.every(s => s.placed);
+  readyBtn.disabled = !allPlaced;
+  if (document.getElementById("duo-place-hint").dataset.error !== "1") {
+    setDuoPlaceHint(allPlaced ? "Tous tes navires sont placés. Appuie sur Prêt !" : "Touche un navire ci-dessous, puis une case de la grille pour le poser.", false);
+  }
+}
+function renderBsShipPalette() {
+  const wrap = document.getElementById("duo-ship-palette");
+  wrap.innerHTML = bsPlace.ships.filter(s => !s.placed).map(s => `
+    <button type="button" class="bs-ship-block ${bsPlace.dir === 1 ? "bs-ship-vertical" : ""} ${bsPlace.selectedUid === s.uid ? "bs-ship-selected" : ""}" data-uid="${s.uid}">
+      ${Array.from({ length: s.size }).map(() => `<div class="bs-ship-cell"></div>`).join("")}
+    </button>`).join("");
+  wrap.querySelectorAll(".bs-ship-block").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const uid = parseInt(btn.dataset.uid, 10);
+      bsPlace.selectedUid = bsPlace.selectedUid === uid ? null : uid;
+      renderBsShipPalette();
+    });
+  });
+}
+// Vérifie qu'un navire de taille/orientation donnée peut être posé en (r,c) : dans la grille, sans chevauchement.
+function bsCanPlace(ships, r, c, size, dir, excludeUid) {
+  const cells = [];
+  for (let i = 0; i < size; i++) {
+    const rr = dir === 1 ? r + i : r;
+    const cc = dir === 0 ? c + i : c;
+    if (rr < 0 || rr >= BS_GRID || cc < 0 || cc >= BS_GRID) return null;
+    cells.push([rr, cc]);
+  }
+  for (const s of ships) {
+    if (!s.placed || s.uid === excludeUid) continue;
+    for (let i = 0; i < s.size; i++) {
+      const rr = s.dir === 1 ? s.r + i : s.r;
+      const cc = s.dir === 0 ? s.c + i : s.c;
+      if (cells.some(([a, b]) => a === rr && b === cc)) return null;
+    }
+  }
+  return cells;
+}
+function renderBsPlaceGrid(readonly) {
+  const grid = document.getElementById("duo-place-grid");
+  grid.innerHTML = "";
+  const occByCell = new Map();
+  bsPlace.ships.forEach(s => {
+    if (!s.placed) return;
+    for (let i = 0; i < s.size; i++) {
+      const rr = s.dir === 1 ? s.r + i : s.r;
+      const cc = s.dir === 0 ? s.c + i : s.c;
+      occByCell.set(rr + "," + cc, s.uid);
+    }
+  });
+  for (let r = 0; r < BS_GRID; r++) {
+    for (let c = 0; c < BS_GRID; c++) {
+      const cell = document.createElement("div");
+      const hasShip = occByCell.has(r + "," + c);
+      cell.className = "bs-cell" + (hasShip ? " bs-cell-ship" : "") + (!readonly ? " bs-cell-clickable" : "");
+      if (!readonly) cell.addEventListener("click", () => onBsPlaceCellTap(r, c, hasShip ? occByCell.get(r + "," + c) : null));
+      grid.appendChild(cell);
+    }
+  }
+}
+function onBsPlaceCellTap(r, c, existingUid) {
+  if (existingUid !== null && existingUid !== undefined) {
+    // Un navire est déjà ici : on le retire pour permettre de le repositionner ailleurs.
+    const ship = bsPlace.ships.find(s => s.uid === existingUid);
+    ship.placed = false; ship.r = null; ship.c = null;
+    bsPlace.selectedUid = existingUid;
+    renderBsShipPalette();
+    renderBsPlaceGrid(false);
+    return;
+  }
+  if (bsPlace.selectedUid === null) return;
+  const ship = bsPlace.ships.find(s => s.uid === bsPlace.selectedUid);
+  const cells = bsCanPlace(bsPlace.ships, r, c, ship.size, bsPlace.dir, ship.uid);
+  if (!cells) {
+    const grid = document.getElementById("duo-place-grid");
+    grid.classList.remove("bs-shake"); void grid.offsetWidth; grid.classList.add("bs-shake");
+    return;
+  }
+  ship.placed = true; ship.r = r; ship.c = c; ship.dir = bsPlace.dir;
+  bsPlace.selectedUid = null;
+  vibrate(15);
+  renderBsShipPalette();
+  renderBsPlaceGrid(false);
+  const allPlaced = bsPlace.ships.every(s => s.placed);
+  document.getElementById("btn-duo-place-ready").disabled = !allPlaced;
+  setDuoPlaceHint(allPlaced ? "Tous tes navires sont placés. Appuie sur Prêt !" : "Touche un navire ci-dessous, puis une case de la grille pour le poser.", false);
+}
+document.getElementById("btn-duo-place-rotate").addEventListener("click", () => {
+  if (!bsPlace) return;
+  bsPlace.dir = bsPlace.dir === 0 ? 1 : 0;
+  renderBsShipPalette();
+});
+document.getElementById("btn-duo-place-random").addEventListener("click", () => {
+  if (!bsPlace || !duo) return;
+  let placedShips = [], attempt = 0;
+  while (placedShips.length === 0 && attempt < 20) {
+    const trial = duo.shipSizes.map((size, i) => ({ uid: i, size, placed: false, r: null, c: null, dir: 0 }));
+    let failed = false;
+    for (const s of trial) {
+      let ok = false;
+      for (let tries = 0; tries < 200 && !ok; tries++) {
+        const dir = Math.random() < 0.5 ? 0 : 1;
+        const r = Math.floor(Math.random() * BS_GRID), c = Math.floor(Math.random() * BS_GRID);
+        if (bsCanPlace(trial, r, c, s.size, dir, s.uid)) { s.placed = true; s.r = r; s.c = c; s.dir = dir; ok = true; }
+      }
+      if (!ok) { failed = true; break; }
+    }
+    if (!failed) placedShips = trial;
+    attempt++;
+  }
+  if (placedShips.length) {
+    bsPlace.ships = placedShips;
+    bsPlace.selectedUid = null;
+    renderBsShipPalette();
+    renderBsPlaceGrid(false);
+    document.getElementById("btn-duo-place-ready").disabled = false;
+    setDuoPlaceHint("Tous tes navires sont placés. Appuie sur Prêt !", false);
+  }
+});
+document.getElementById("btn-duo-place-ready").addEventListener("click", () => {
+  if (!bsPlace || !bsPlace.ships.every(s => s.placed)) return;
+  sendDuo({ type: "duoPlace", ships: bsPlace.ships.map(s => ({ r: s.r, c: s.c, size: s.size, dir: s.dir })) });
+});
+document.getElementById("btn-duo-place-quit").addEventListener("click", () => {
+  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  showScreen("screen-home");
+});
+
+// ---- Bataille (tir tour par tour) ----
+function ensureBsGridCells(gridId) {
+  const grid = document.getElementById(gridId);
+  if (grid.children.length !== BS_GRID * BS_GRID) {
+    grid.innerHTML = "";
+    for (let i = 0; i < BS_GRID * BS_GRID; i++) grid.appendChild(document.createElement("div"));
+  }
+  return grid;
+}
 function renderDuoBattle() {
   if (!duo || myDuoNum === null) return;
-  if (document.querySelector(".screen.active").id !== "screen-duo-battle") {
-    showScreen("screen-duo-battle");
-    wireDuoMoveButtons();
+  if (document.querySelector(".screen.active").id !== "screen-duo-battle") showScreen("screen-duo-battle");
+  const myTurn = duo.turn === myDuoNum && duo.status === "playing";
+  const banner = document.getElementById("duo-turn-banner");
+  banner.textContent = myTurn ? "🎯 À toi de tirer !" : `En attente de ${duo.opponent ? duo.opponent.pseudo : "l'adversaire"}...`;
+  banner.classList.toggle("bs-my-turn", myTurn);
+
+  document.getElementById("duo-opp-fleet-count").textContent =
+    duo.opponent ? `🚢 ${duo.opponent.totalShips - duo.opponent.shipsSunk} / ${duo.opponent.totalShips} navires adverses` : "🚢 navires adverses";
+  document.getElementById("duo-my-fleet-count").textContent =
+    `🚢 ${duo.me.totalShips - duo.me.shipsSunk} / ${duo.me.totalShips} de tes navires`;
+
+  renderBsEnemyGrid(myTurn);
+  renderBsMyGrid();
+}
+function renderBsEnemyGrid(myTurn) {
+  const grid = ensureBsGridCells("duo-enemy-grid");
+  const shots = duo.myShots;
+  const cells = grid.children;
+  for (let r = 0; r < BS_GRID; r++) {
+    for (let c = 0; c < BS_GRID; c++) {
+      const cell = cells[r * BS_GRID + c];
+      const v = shots[r][c];
+      let cls = "bs-cell";
+      if (v === "hit") cls += " bs-cell-hit";
+      else if (v === "miss") cls += " bs-cell-miss";
+      else if (myTurn) cls += " bs-cell-clickable";
+      cell.className = cls; // ré-assigner la même chaîne ne rejoue pas les animations CSS déjà terminées
+      cell.onclick = (!v && myTurn) ? () => sendDuo({ type: "duoFire", r, c }) : null;
+    }
   }
-  if (!duoWeaponsBuilt) { buildDuoWeaponButtons(); duoWeaponsBuilt = true; }
-
-  const me = duo.players.find(p => p.num === myDuoNum) || { hp: 0, maxHp: 30, x: DUO_ARENA_W / 2, energy: 0 };
-  const opp = duo.players.find(p => p.num !== myDuoNum);
-  const flip = myDuoNum === 2; // pour toujours me voir en bas, l'adversaire en haut
-
-  document.getElementById("duo-opp-label").textContent = opp ? `🚀 ${opp.pseudo}` : "🚀 Adversaire";
-  document.getElementById("duo-p1-hp").textContent = Math.max(0, Math.round(me.hp));
-  document.getElementById("duo-p2-hp").textContent = opp ? Math.max(0, Math.round(opp.hp)) : "?";
-  document.getElementById("duo-p1-hpfill").style.width = Math.max(0, me.hp / me.maxHp * 100) + "%";
-  document.getElementById("duo-p2-hpfill").style.width = opp ? Math.max(0, opp.hp / opp.maxHp * 100) + "%" : "0%";
-  document.getElementById("duo-p1-energy-fill").style.width = (me.energy / DUO_MAX_ENERGY * 100) + "%";
-  document.getElementById("duo-p2-energy-fill").style.width = opp ? (opp.energy / DUO_MAX_ENERGY * 100) + "%" : "0%";
-  document.getElementById("duo-rocket-p1").style.left = me.x + "px";
-  document.getElementById("duo-rocket-p2").style.left = (opp ? opp.x : DUO_ARENA_W / 2) + "px";
-
-  document.querySelectorAll(".duo-weapon-btn").forEach(btn => {
-    const w = DUO_WEAPONS.find(x => x.id === btn.dataset.weapon);
-    btn.classList.toggle("disabled", me.energy < w.cost);
-  });
-
-  const arena = document.getElementById("duo-arena");
-  arena.querySelectorAll(".duo-projectile").forEach(el => el.remove());
-  (duo.projectiles || []).forEach(pr => {
-    const w = DUO_WEAPONS.find(x => x.id === pr.weaponId);
-    const el = document.createElement("div");
-    const mine = pr.owner === myDuoNum; // mes tirs montent toujours vers le haut de mon écran
-    el.className = "duo-projectile " + (mine ? "duo-projectile-up" : "duo-projectile-down");
-    el.textContent = w ? w.icon : "•";
-    el.style.left = pr.x + "px";
-    el.style.top = (flip ? DUO_ARENA_H - pr.y : pr.y) + "px";
-    arena.appendChild(el);
-  });
 }
-function buildDuoWeaponButtons() {
-  const container = document.getElementById("duo-p1-weapons");
-  container.innerHTML = DUO_WEAPONS.map(w =>
-    `<button type="button" class="duo-weapon-btn" data-weapon="${w.id}" title="${escapeHtml(w.label)} — coût ${w.cost}">${w.icon}<span class="duo-weapon-cost">${w.cost}</span></button>`
-  ).join("");
-  container.querySelectorAll(".duo-weapon-btn").forEach(btn => {
-    btn.addEventListener("click", () => sendDuo({ type: "duoFire", weapon: btn.dataset.weapon }));
-  });
-}
-function wireDuoMoveButtons() {
-  document.querySelectorAll('.duo-move-row[data-player="1"] .duo-move-btn').forEach(btn => {
-    const dir = parseInt(btn.dataset.dir, 10);
-    const start = (e) => { e.preventDefault(); sendDuo({ type: "duoMove", dir }); };
-    const stop = (e) => { if (e) e.preventDefault(); sendDuo({ type: "duoMove", dir: 0 }); };
-    btn.ontouchstart = start; btn.ontouchend = stop; btn.ontouchcancel = stop;
-    btn.onmousedown = start; btn.onmouseup = stop; btn.onmouseleave = stop;
-  });
+function renderBsMyGrid() {
+  const grid = ensureBsGridCells("duo-my-grid");
+  const board = duo.me.board, received = duo.me.shotsReceived;
+  const cells = grid.children;
+  for (let r = 0; r < BS_GRID; r++) {
+    for (let c = 0; c < BS_GRID; c++) {
+      const cell = cells[r * BS_GRID + c];
+      const shot = received[r][c];
+      let cls = "bs-cell";
+      if (shot === "hit") cls += " bs-cell-hit";
+      else if (shot === "miss") cls += " bs-cell-miss";
+      else if (board[r][c]) cls += " bs-cell-ship";
+      cell.className = cls;
+    }
+  }
 }
 function renderDuoEnd() {
   const won = duo.winner === myDuoNum;
   showSoloEnd(won ? "win" : "lose", won ? "Victoire !" : "Défaite...",
-    won ? "La fusée de ton adversaire est réduite en miettes. GG !" : "Ta fusée est réduite en miettes. Une revanche ?");
+    won ? "Tu as coulé toute la flotte adverse. GG !" : "Ta flotte a été entièrement coulée. Une revanche ?");
   soloRetryHandler = () => sendDuo({ type: "duoRestart" });
 }
 
