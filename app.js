@@ -900,28 +900,72 @@ function startTubesGame() {
   const colorCount = tubesColorCountForLevel();
   let tubes;
   do { tubes = generateTubesPuzzle(colorCount); } while (tubesIsSolved(tubes));
-  tubesState = { tubes, selected: null, moves: 0, colorCount };
+  tubesState = { tubes, selected: null, moves: 0, colorCount, animating: false, justLandedTube: null, justLandedCount: 0 };
   soloRetryHandler = startTubesGame;
-  renderTubes();
+  renderTubes({ deal: true });
   showScreen("screen-solo-tubes");
 }
 document.getElementById("btn-tubes-quit").addEventListener("click", () => showScreen("screen-home"));
 document.getElementById("btn-tubes-restart").addEventListener("click", () => startTubesGame());
 
-function renderTubes() {
+function renderTubes(opts) {
+  const dealAnim = !!(opts && opts.deal);
   document.getElementById("tubes-moves").textContent = String(tubesState.moves);
   const wrap = document.getElementById("tubes-wrap");
-  wrap.innerHTML = tubesState.tubes.map((tube, i) => `
+  wrap.innerHTML = tubesState.tubes.map((tube, i) => {
+    const isLandedTube = tubesState.justLandedTube === i;
+    return `
     <button type="button" class="tube ${tubesState.selected === i ? "tube-selected" : ""}" data-idx="${i}">
       <div class="tube-balls">
-        ${tube.slice().reverse().map(c => `<div class="tube-ball" style="background:${TUBES_COLORS[c]}"></div>`).join("")}
+        ${tube.map((c, slot) => {
+          const isFreshLand = isLandedTube && slot >= tube.length - tubesState.justLandedCount;
+          const animate = dealAnim || isFreshLand;
+          const delay = dealAnim ? (i * 55 + slot * 65) : 0;
+          return `<div class="tube-ball${animate ? " tube-ball-spawn" : ""}" style="background:${TUBES_COLORS[c]}${animate ? `;animation-delay:${delay}ms` : ""}"></div>`;
+        }).join("")}
       </div>
-    </button>`).join("");
+    </button>`;
+  }).join("");
   wrap.querySelectorAll(".tube").forEach(el => {
     el.addEventListener("click", () => onTubeTap(parseInt(el.dataset.idx, 10)));
   });
+  tubesState.justLandedTube = null;
+  tubesState.justLandedCount = 0;
 }
-function onTubeTap(idx) {
+
+// Position (centre, en pixels écran) de l'emplacement d'une bille dans un tube,
+// comptée depuis le fond (slot 0 = tout en bas), à partir du rect du tube.
+function tubeBallSlotPos(tubeRect, slotIndexFromBottom) {
+  const ballH = 28, gap = 4, padBottom = 4;
+  const x = tubeRect.left + tubeRect.width / 2;
+  const y = tubeRect.bottom - padBottom - ballH / 2 - slotIndexFromBottom * (ballH + gap);
+  return { x, y };
+}
+// Anime une bille volante (clone) d'une position écran à une autre, en cloche.
+function flyTubeBall(colorHex, from, to, delay) {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      const el = document.createElement("div");
+      el.className = "tube-flying-ball";
+      el.style.background = colorHex;
+      document.body.appendChild(el);
+      const midX = (from.x + to.x) / 2;
+      const midY = Math.min(from.y, to.y) - 48;
+      const kf = [
+        { left: (from.x - 16) + "px", top: (from.y - 14) + "px", offset: 0 },
+        { left: (midX - 16) + "px", top: (midY - 14) + "px", offset: 0.5 },
+        { left: (to.x - 16) + "px", top: (to.y - 14) + "px", offset: 1 },
+      ];
+      el.style.left = kf[0].left; el.style.top = kf[0].top;
+      if (el.animate) {
+        const anim = el.animate(kf, { duration: 300, easing: "ease-in-out" });
+        anim.onfinish = () => { el.remove(); resolve(); };
+      } else { el.remove(); resolve(); } // repli si Web Animations API indisponible
+    }, delay);
+  });
+}
+async function onTubeTap(idx) {
+  if (!tubesState || tubesState.animating) return;
   if (tubesState.selected === null) {
     if (tubesState.tubes[idx].length === 0) return;
     tubesState.selected = idx;
@@ -929,14 +973,33 @@ function onTubeTap(idx) {
     return;
   }
   if (tubesState.selected === idx) { tubesState.selected = null; renderTubes(); return; }
-  const from = tubesState.tubes[tubesState.selected], to = tubesState.tubes[idx];
+  const fromIdx = tubesState.selected;
+  const from = tubesState.tubes[fromIdx], to = tubesState.tubes[idx];
   const fromTop = from[from.length - 1];
   const canPour = from.length > 0 && to.length < TUBES_CAPACITY && (to.length === 0 || to[to.length - 1] === fromTop);
   if (canPour) {
+    tubesState.animating = true;
+    tubesState.selected = null;
+    renderTubes();
+    const wrap = document.getElementById("tubes-wrap");
+    const fromRect = wrap.children[fromIdx].getBoundingClientRect();
+    const toRect = wrap.children[idx].getBoundingClientRect();
+    let n = 0;
+    for (let i = from.length - 1; i >= 0 && from[i] === fromTop && (to.length + n) < TUBES_CAPACITY; i--) n++;
+    const color = TUBES_COLORS[fromTop];
+    const flights = [];
+    for (let i = 0; i < n; i++) {
+      const srcSlot = from.length - 1 - i;
+      const dstSlot = to.length + i;
+      flights.push(flyTubeBall(color, tubeBallSlotPos(fromRect, srcSlot), tubeBallSlotPos(toRect, dstSlot), i * 90));
+    }
+    await Promise.all(flights);
     let moved = 0;
     while (from.length > 0 && from[from.length - 1] === fromTop && to.length < TUBES_CAPACITY) { to.push(from.pop()); moved++; }
     if (moved > 0) tubesState.moves++;
-    tubesState.selected = null;
+    tubesState.animating = false;
+    tubesState.justLandedTube = idx;
+    tubesState.justLandedCount = moved;
     renderTubes();
     vibrate(15);
     if (tubesIsSolved(tubesState.tubes)) {
@@ -944,100 +1007,177 @@ function onTubeTap(idx) {
       setTimeout(() => showSoloEnd("win", "Tubes triés !", `Bravo, tous les tubes sont triés en ${tubesState.moves} coups !`), 350);
     }
   } else {
+    if (to.length >= TUBES_CAPACITY) {
+      // Tube plein : on secoue pour le feedback, sans re-rendu (qui couperait l'animation),
+      // et on garde la sélection actuelle pour laisser retenter ailleurs.
+      const wrap = document.getElementById("tubes-wrap");
+      const el = wrap.children[idx];
+      el.classList.remove("tube-shake"); void el.offsetWidth; el.classList.add("tube-shake");
+      setTimeout(() => el.classList.remove("tube-shake"), 360);
+      return;
+    }
     tubesState.selected = tubesState.tubes[idx].length > 0 ? idx : null;
     renderTubes();
   }
 }
 
-// ---- 2048 : glisse les tuiles pour fusionner les nombres ----
+// ---- 2048 : glisse les tuiles pour fusionner les nombres (tuiles animées : glissement, fusion, apparition) ----
 const GAME2048_SIZE = 4;
-let game2048Grid = null, game2048Score = 0, game2048Ended = false, game2048Wired = false;
+let game2048Tiles = [], game2048NextId = 1, game2048Score = 0, game2048Ended = false, game2048Wired = false, game2048Busy = false;
 
 function start2048Game() {
-  game2048Grid = Array.from({ length: GAME2048_SIZE }, () => Array(GAME2048_SIZE).fill(0));
+  game2048Tiles = [];
+  game2048NextId = 1;
   game2048Score = 0;
   game2048Ended = false;
-  add2048Tile(); add2048Tile();
+  game2048Busy = false;
   soloRetryHandler = start2048Game;
+  showScreen("screen-solo-2048"); // l'écran doit être visible avant de mesurer la grille pour positionner les tuiles
+  ensure2048Layers();
+  add2048Tile(); add2048Tile();
   render2048();
   wire2048Controls();
-  showScreen("screen-solo-2048");
 }
 document.getElementById("btn-2048-quit").addEventListener("click", () => showScreen("screen-home"));
 document.getElementById("btn-2048-restart").addEventListener("click", () => start2048Game());
 
-function add2048Tile() {
-  const empties = [];
-  for (let r = 0; r < GAME2048_SIZE; r++) for (let c = 0; c < GAME2048_SIZE; c++) if (!game2048Grid[r][c]) empties.push([r, c]);
-  if (!empties.length) return;
-  const [r, c] = empties[Math.floor(Math.random() * empties.length)];
-  game2048Grid[r][c] = Math.random() < 0.9 ? 2 : 4;
-}
-function render2048() {
-  document.getElementById("game2048-score").textContent = String(game2048Score);
+function ensure2048Layers() {
   const grid = document.getElementById("game2048-grid");
+  if (grid.dataset.built) return;
   grid.innerHTML = "";
-  for (let r = 0; r < GAME2048_SIZE; r++) for (let c = 0; c < GAME2048_SIZE; c++) {
-    const v = game2048Grid[r][c];
+  for (let i = 0; i < GAME2048_SIZE * GAME2048_SIZE; i++) {
     const cell = document.createElement("div");
-    cell.className = "game2048-cell" + (v ? ` game2048-tile game2048-tile-${v <= 2048 ? v : "sup"}` : "");
-    if (v) cell.textContent = String(v);
+    cell.className = "game2048-cell";
     grid.appendChild(cell);
   }
+  const layer = document.createElement("div");
+  layer.className = "game2048-tiles";
+  grid.appendChild(layer);
+  grid.dataset.built = "1";
 }
-function slideLine2048(line) {
-  const vals = line.filter(v => v !== 0);
-  let gained = 0;
-  for (let i = 0; i < vals.length - 1; i++) {
-    if (vals[i] === vals[i + 1]) { vals[i] *= 2; gained += vals[i]; vals.splice(i + 1, 1); }
-  }
-  while (vals.length < GAME2048_SIZE) vals.push(0);
-  return { vals, gained };
+function add2048Tile() {
+  const occ = new Set(game2048Tiles.map(t => t.r + "," + t.c));
+  const empties = [];
+  for (let r = 0; r < GAME2048_SIZE; r++) for (let c = 0; c < GAME2048_SIZE; c++) if (!occ.has(r + "," + c)) empties.push([r, c]);
+  if (!empties.length) return null;
+  const [r, c] = empties[Math.floor(Math.random() * empties.length)];
+  const tile = { id: game2048NextId++, r, c, value: Math.random() < 0.9 ? 2 : 4 };
+  game2048Tiles.push(tile);
+  return tile;
+}
+function get2048Geometry() {
+  const grid = document.getElementById("game2048-grid");
+  const cs = getComputedStyle(grid);
+  const pad = parseFloat(cs.paddingLeft) || 8;
+  const gap = 8;
+  const inner = Math.max(0, grid.clientWidth - pad * 2);
+  const cell = (inner - gap * (GAME2048_SIZE - 1)) / GAME2048_SIZE;
+  return { pad, gap, cell: cell || 60 };
+}
+function tileValueClass2048(v) { return "game2048-tile-" + (v <= 2048 ? v : "sup"); }
+function render2048() {
+  document.getElementById("game2048-score").textContent = String(game2048Score);
+  const { pad, gap, cell } = get2048Geometry();
+  const layer = document.querySelector("#game2048-grid .game2048-tiles");
+  if (!layer) return;
+  const existing = new Map();
+  layer.querySelectorAll(".game2048-tile-pos").forEach(el => existing.set(el.dataset.id, el));
+  const seen = new Set();
+  game2048Tiles.forEach(tile => {
+    seen.add(String(tile.id));
+    const x = pad + tile.c * (cell + gap), y = pad + tile.r * (cell + gap);
+    let pos = existing.get(String(tile.id));
+    let inner;
+    if (!pos) {
+      pos = document.createElement("div");
+      pos.className = "game2048-tile-pos";
+      pos.dataset.id = String(tile.id);
+      inner = document.createElement("div");
+      pos.appendChild(inner);
+      layer.appendChild(pos);
+      pos.style.width = cell + "px"; pos.style.height = cell + "px";
+      pos.style.transition = "none";
+      pos.style.transform = `translate(${x}px, ${y}px)`;
+      void pos.offsetWidth;
+      pos.style.transition = "";
+      inner.className = "game2048-tile " + tileValueClass2048(tile.value) + " game2048-tile-spawn";
+    } else {
+      inner = pos.firstElementChild;
+      pos.style.width = cell + "px"; pos.style.height = cell + "px";
+      pos.style.transform = `translate(${x}px, ${y}px)`;
+      inner.className = "game2048-tile " + tileValueClass2048(tile.value) + (tile.justMerged ? " game2048-tile-pop" : "");
+    }
+    inner.textContent = String(tile.value);
+  });
+  existing.forEach((el, id) => { if (!seen.has(id)) el.remove(); }); // sécurité, ne devrait pas arriver
 }
 function move2048(dir) {
-  if (game2048Ended) return;
-  let moved = false, gained = 0;
-  const g = game2048Grid, n = GAME2048_SIZE;
-  const reverse = dir === "right" || dir === "down";
-  const getLine = (i) => {
-    const line = [];
-    for (let j = 0; j < n; j++) line.push(dir === "left" || dir === "right" ? g[i][j] : g[j][i]);
-    return reverse ? line.reverse() : line;
-  };
-  const setLine = (i, vals) => {
-    const line = reverse ? vals.slice().reverse() : vals;
-    for (let j = 0; j < n; j++) {
-      const v = line[j];
-      if (dir === "left" || dir === "right") { if (g[i][j] !== v) moved = true; g[i][j] = v; }
-      else { if (g[j][i] !== v) moved = true; g[j][i] = v; }
+  if (game2048Ended || game2048Busy) return;
+  const n = GAME2048_SIZE;
+  const lines = [];
+  if (dir === "left" || dir === "right") {
+    for (let r = 0; r < n; r++) {
+      const cols = [...Array(n).keys()];
+      if (dir === "right") cols.reverse();
+      lines.push(cols.map(c => ({ r, c })));
     }
-  };
-  for (let i = 0; i < n; i++) {
-    const { vals, gained: g2 } = slideLine2048(getLine(i));
-    gained += g2;
-    setLine(i, vals);
+  } else {
+    for (let c = 0; c < n; c++) {
+      const rows = [...Array(n).keys()];
+      if (dir === "down") rows.reverse();
+      lines.push(rows.map(r => ({ r, c })));
+    }
   }
-  if (moved) {
-    game2048Score += gained;
+  let moved = false, gained = 0;
+  for (const line of lines) {
+    const lineTiles = line.map(pos => game2048Tiles.find(t => t.r === pos.r && t.c === pos.c && !t.vanish)).filter(Boolean);
+    let writeIdx = 0, lastSurvivor = null;
+    for (const tile of lineTiles) {
+      const targetPos = line[writeIdx];
+      if (lastSurvivor && lastSurvivor.value === tile.value && !lastSurvivor.justMerged) {
+        lastSurvivor.value *= 2;
+        lastSurvivor.justMerged = true;
+        gained += lastSurvivor.value;
+        if (tile.r !== lastSurvivor.r || tile.c !== lastSurvivor.c) moved = true;
+        tile.r = lastSurvivor.r; tile.c = lastSurvivor.c;
+        tile.vanish = true;
+      } else {
+        if (tile.r !== targetPos.r || tile.c !== targetPos.c) moved = true;
+        tile.r = targetPos.r; tile.c = targetPos.c;
+        lastSurvivor = tile;
+        writeIdx++;
+      }
+    }
+  }
+  if (!moved) return;
+  game2048Score += gained;
+  game2048Busy = true;
+  render2048(); // anime le glissement + la fusion vers leur position finale
+  vibrate(10);
+  setTimeout(() => {
+    game2048Tiles = game2048Tiles.filter(t => !t.vanish);
+    game2048Tiles.forEach(t => { t.justMerged = false; });
     add2048Tile();
+    game2048Busy = false;
     render2048();
-    vibrate(10);
     if (has2048Won() && !game2048Ended) {
       game2048Ended = true;
-      setTimeout(() => showSoloEnd("win", "2048 !", `Tu as atteint 2048 avec un score de ${game2048Score} !`), 250);
+      setTimeout(() => showSoloEnd("win", "2048 !", `Tu as atteint 2048 avec un score de ${game2048Score} !`), 200);
     } else if (!has2048MovesLeft()) {
       game2048Ended = true;
-      setTimeout(() => showSoloEnd("lose", "Plus de coups possibles", `Partie terminée, score final : ${game2048Score}.`), 250);
+      setTimeout(() => showSoloEnd("lose", "Plus de coups possibles", `Partie terminée, score final : ${game2048Score}.`), 200);
     }
-  }
+  }, 160);
 }
-function has2048Won() { return game2048Grid.some(row => row.some(v => v >= 2048)); }
+function has2048Won() { return game2048Tiles.some(t => t.value >= 2048); }
 function has2048MovesLeft() {
-  const g = game2048Grid, n = GAME2048_SIZE;
-  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
-    if (!g[r][c]) return true;
-    if (c < n - 1 && g[r][c] === g[r][c + 1]) return true;
-    if (r < n - 1 && g[r][c] === g[r + 1][c]) return true;
+  if (game2048Tiles.length < GAME2048_SIZE * GAME2048_SIZE) return true;
+  const grid = {};
+  game2048Tiles.forEach(t => { grid[t.r + "," + t.c] = t.value; });
+  for (let r = 0; r < GAME2048_SIZE; r++) for (let c = 0; c < GAME2048_SIZE; c++) {
+    const v = grid[r + "," + c];
+    if (c < GAME2048_SIZE - 1 && grid[r + "," + (c + 1)] === v) return true;
+    if (r < GAME2048_SIZE - 1 && grid[(r + 1) + "," + c] === v) return true;
   }
   return false;
 }
@@ -1064,29 +1204,64 @@ function wire2048Controls() {
   document.querySelectorAll("#game2048-dpad button").forEach(btn => {
     btn.addEventListener("click", () => move2048(btn.dataset.dir));
   });
+  window.addEventListener("resize", () => {
+    if (game2048Tiles.length && document.getElementById("screen-solo-2048").classList.contains("active")) render2048();
+  });
 }
 
 // ---- Mémoire : retrouver les paires de cartes ----
-const MEMORY_ICONS = ["🦀", "⚓", "🐚", "🌊", "⛵", "🐟", "🦑", "🏝️"];
-let memoryState = null; // { cards: [{icon, matched, flipped}], firstIdx, lock, matches, moves }
+// Grande réserve d'icônes pour pouvoir monter jusqu'à des grilles 8x8 (32 paires) sans répétition.
+const MEMORY_ICON_POOL = [
+  "🦀", "⚓", "🐚", "🌊", "⛵", "🐟", "🦑", "🏝️", "🐠", "🦞", "🐬", "🦈",
+  "🎣", "🧜", "🪝", "🛟", "🚤", "🏖️", "🐙", "🦭", "🐳", "🪸", "🧭", "🗺️",
+  "💎", "🔱", "🥥", "🍍", "🦩", "🐡", "⭐", "🌞",
+];
+const MEMORY_SIZE_KEY = "capnaval_memory_size";
+let memoryState = null; // { size, cards: [{icon, matched, flipped}], firstIdx, lock, matches, moves, totalPairs }
 
-function startMemoryGame() {
-  const icons = MEMORY_ICONS.slice();
+function loadMemorySize() {
+  try { const v = parseInt(localStorage.getItem(MEMORY_SIZE_KEY) || "4", 10); return [4, 6, 8].includes(v) ? v : 4; } catch (e) { return 4; }
+}
+function saveMemorySize(v) { try { localStorage.setItem(MEMORY_SIZE_KEY, String(v)); } catch (e) { /* ignore */ } }
+
+function startMemoryGame(size) {
+  const s = size || loadMemorySize();
+  saveMemorySize(s);
+  const totalPairs = (s * s) / 2;
+  const pool = MEMORY_ICON_POOL.slice();
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const icons = [];
+  for (let i = 0; i < totalPairs; i++) icons.push(pool[i % pool.length]); // boucle si jamais totalPairs > pool.length
   const deck = icons.concat(icons).map(icon => ({ icon, matched: false, flipped: false }));
   for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
-  memoryState = { cards: deck, firstIdx: null, lock: false, matches: 0, moves: 0 };
-  soloRetryHandler = startMemoryGame;
-  renderMemory();
+  memoryState = { size: s, cards: deck, firstIdx: null, lock: false, matches: 0, moves: 0, totalPairs };
+  soloRetryHandler = () => startMemoryGame(s);
+  updateMemorySizeButtons();
+  renderMemory({ deal: true });
   showScreen("screen-solo-memory");
 }
 document.getElementById("btn-memory-quit").addEventListener("click", () => showScreen("screen-home"));
-document.getElementById("btn-memory-restart").addEventListener("click", () => startMemoryGame());
+document.getElementById("btn-memory-restart").addEventListener("click", () => startMemoryGame(memoryState && memoryState.size));
 
-function renderMemory() {
+function updateMemorySizeButtons() {
+  document.querySelectorAll("#memory-size-row button").forEach(btn => {
+    btn.classList.toggle("memory-size-active", parseInt(btn.dataset.size, 10) === (memoryState ? memoryState.size : loadMemorySize()));
+  });
+}
+document.querySelectorAll("#memory-size-row button").forEach(btn => {
+  btn.addEventListener("click", () => startMemoryGame(parseInt(btn.dataset.size, 10)));
+});
+
+function renderMemory(opts) {
+  const dealAnim = !!(opts && opts.deal);
   document.getElementById("memory-moves").textContent = String(memoryState.moves);
   const grid = document.getElementById("memory-grid");
+  grid.style.setProperty("--memory-cols", String(memoryState.size));
+  grid.classList.toggle("memory-grid-dense", memoryState.size >= 8);
+  grid.classList.toggle("memory-grid-mid", memoryState.size === 6);
   grid.innerHTML = memoryState.cards.map((card, i) => `
-    <button type="button" class="memory-card ${card.flipped || card.matched ? "memory-card-flipped" : ""} ${card.matched ? "memory-card-matched" : ""}" data-idx="${i}">
+    <button type="button" class="memory-card ${card.flipped || card.matched ? "memory-card-flipped" : ""} ${card.matched ? "memory-card-matched" : ""} ${dealAnim ? "memory-card-deal" : ""}"
+      data-idx="${i}" style="${dealAnim ? `animation-delay:${(i % memoryState.size) * 30 + Math.floor(i / memoryState.size) * 30}ms` : ""}">
       <span class="memory-card-face memory-card-back">?</span>
       <span class="memory-card-face memory-card-front">${card.icon}</span>
     </button>`).join("");
@@ -1113,17 +1288,28 @@ function onMemoryTap(idx) {
     memoryState.firstIdx = null;
     vibrate(15);
     renderMemory();
-    if (memoryState.matches === MEMORY_ICONS.length) {
+    // petit pouls de victoire sur les deux cartes qui viennent de matcher
+    const grid = document.getElementById("memory-grid");
+    [idx, memoryState.cards.indexOf(first)].forEach(i => {
+      const el = grid.querySelector(`.memory-card[data-idx="${i}"]`);
+      if (el) { el.classList.add("memory-card-match-pulse"); setTimeout(() => el.classList.remove("memory-card-match-pulse"), 420); }
+    });
+    if (memoryState.matches === memoryState.totalPairs) {
       setTimeout(() => showSoloEnd("win", "Toutes les paires trouvées !", `Bravo, mémoire retrouvée en ${memoryState.moves} coups !`), 350);
     }
   } else {
     memoryState.lock = true;
+    const grid = document.getElementById("memory-grid");
+    [idx, memoryState.firstIdx].forEach(i => {
+      const el = grid.querySelector(`.memory-card[data-idx="${i}"]`);
+      if (el) el.classList.add("memory-card-shake");
+    });
     setTimeout(() => {
       first.flipped = false; card.flipped = false;
       memoryState.firstIdx = null;
       memoryState.lock = false;
       renderMemory();
-    }, 700);
+    }, 750);
   }
 }
 
