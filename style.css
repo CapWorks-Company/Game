@@ -1279,6 +1279,86 @@ html, body {
   100% { transform: translate(-50%, -260%) scale(1); opacity: 0; }
 }
 
+/* ================= EFFETS PARTAGÉS (FX réutilisés par plusieurs mini-jeux) ================= */
+.fx-shake { animation: fx-shake-anim .45s ease; }
+@keyframes fx-shake-anim {
+  10%, 90% { transform: translate(-1px, -1px); }
+  20%, 80% { transform: translate(2px, 2px); }
+  30%, 50%, 70% { transform: translate(-5px, 3px); }
+  40%, 60% { transform: translate(5px, -3px); }
+}
+.fx-flash-red, .fx-flash-green {
+  position: absolute; inset: 0; pointer-events: none; z-index: 20; animation: fx-flash-anim .5s ease-out forwards;
+}
+.fx-flash-red { background: radial-gradient(circle, rgba(239,68,68,.75), rgba(239,68,68,.25)); }
+.fx-flash-green { background: radial-gradient(circle, rgba(74,222,128,.7), rgba(74,222,128,.2)); }
+@keyframes fx-flash-anim { 0% { opacity: 1; } 100% { opacity: 0; } }
+.fx-pop { animation: fx-pop-anim .28s cubic-bezier(.34,1.56,.64,1); }
+@keyframes fx-pop-anim { 0% { transform: scale(.35); opacity: .3; } 60% { transform: scale(1.2); } 100% { transform: scale(1); } }
+
+/* ---- Sudoku : pose de chiffre / erreur ---- */
+.sudoku-cell.sudoku-pop { animation: sudoku-pop-anim .25s cubic-bezier(.34,1.56,.64,1); }
+@keyframes sudoku-pop-anim { 0% { transform: scale(.4); opacity: .3; } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+.sudoku-cell.sudoku-error-shake { animation: sudoku-error-anim .35s ease; }
+@keyframes sudoku-error-anim {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); background: rgba(239,68,68,.35); }
+  75% { transform: translateX(4px); background: rgba(239,68,68,.35); }
+}
+
+/* ---- Puissance 4 : cellules de la ligne gagnante ---- */
+.c4-cell.c4-win-cell { animation: c4-win-pulse .7s ease-in-out infinite; }
+@keyframes c4-win-pulse {
+  0%, 100% { box-shadow: 0 0 0 rgba(255,255,255,0); transform: scale(1); }
+  50% { box-shadow: 0 0 16px rgba(255,255,255,.85); transform: scale(1.08); }
+}
+
+/* ---- Pierre-Feuille-Ciseaux : résultat de manche ---- */
+.rps-result.rps-result-win { animation: fx-flash-green-soft .6s ease-out; }
+.rps-result.rps-result-lose { animation: fx-flash-red-soft .6s ease-out; }
+@keyframes fx-flash-green-soft { 0% { background: rgba(74,222,128,.4); } 100% { background: var(--panel-2); } }
+@keyframes fx-flash-red-soft { 0% { background: rgba(239,68,68,.35); } 100% { background: var(--panel-2); } }
+
+/* ---- Dames : pion qui vient de bouger / capture ---- */
+.ck-piece.ck-piece-pop { animation: fx-pop-anim .3s cubic-bezier(.34,1.56,.64,1); }
+
+/* ================= ECRAN DE DEMARRAGE (splash PWA) ================= */
+/* Même couleur de fond que manifest.json (background_color) pour enchaîner sans
+   à-coup avec le splash natif de l'OS, puis rotation du logo + zoom façon "vrai jeu"
+   pour révéler l'appli en dessous une fois le chargement terminé. */
+#boot-splash {
+  position: fixed; inset: 0; z-index: 9999; background: var(--bg);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+#boot-splash-icon {
+  width: 112px; height: 112px; border-radius: 26px; box-shadow: 0 10px 34px rgba(0,0,0,.55);
+  transform-origin: center;
+}
+#boot-splash-title {
+  font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 30px;
+  letter-spacing: .05em; color: var(--text); margin: 0; opacity: .92;
+}
+#boot-splash-title span { color: var(--accent); }
+#boot-splash.boot-spin #boot-splash-icon { animation: boot-spin-anim .7s cubic-bezier(.45,0,.2,1); }
+@keyframes boot-spin-anim {
+  0% { transform: rotate(0deg) scale(1); }
+  70% { transform: rotate(320deg) scale(1.08); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+#boot-splash.boot-zoom { animation: boot-zoom-anim .6s cubic-bezier(.5,0,.75,0) forwards; pointer-events: none; }
+@keyframes boot-zoom-anim {
+  0% { transform: scale(1); opacity: 1; }
+  55% { transform: scale(3.2); opacity: 1; }
+  100% { transform: scale(8); opacity: 0; }
+}
+#boot-splash.boot-hidden { display: none; }
+@media (prefers-reduced-motion: reduce) {
+  #boot-splash.boot-spin #boot-splash-icon { animation: none; }
+  #boot-splash.boot-zoom { animation: boot-fade-anim .3s ease forwards; }
+}
+@keyframes boot-fade-anim { to { opacity: 0; } }
+
 /* ---- Confort : réduire les animations ---- */
 body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after {
   animation-duration: 0.01ms !important;
@@ -1358,20 +1438,63 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
 .sudoku-erase { color: #f87171; }
 
 /* ================= SOLO : DEMINEUR ================= */
+#mines-card { position: relative; overflow: hidden; }
 .mines-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
 .btn-small { padding: 6px 10px; font-size: 12px; flex: none; }
 .btn-small.active { background: var(--accent); border-color: var(--accent); color: #1a1e28; }
 .mines-grid {
-  display: grid; grid-template-columns: repeat(9, 1fr); width: 100%; max-width: 306px; aspect-ratio: 1;
+  display: grid; grid-template-columns: repeat(9, 1fr); grid-auto-rows: 1fr; width: 100%; max-width: 306px; aspect-ratio: 1;
   margin: 0 auto; gap: 2px; background: #0a1622; border: 2px solid #2c4a63; border-radius: 8px; padding: 4px;
 }
+/* aspect-ratio + grid-auto-rows:1fr ensemble garantissent des cases parfaitement carrées, quel que
+   soit l'emoji affiché dedans (💣/🚩 ont des métriques de hauteur différentes d'un chiffre) : sans ça,
+   les lignes de la grille se redimensionnaient au contenu et "déformaient" tout le quadrillage. */
 .mines-cell {
-  display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; border-radius: 3px;
+  position: relative; aspect-ratio: 1; overflow: hidden; display: flex; align-items: center; justify-content: center;
+  font-size: 15px; line-height: 1; font-weight: 700; border-radius: 3px; user-select: none;
+  transition: background .15s ease;
 }
 .mines-cell-hidden { background: #3b6a8f; cursor: pointer; }
 .mines-cell-hidden:active { background: #2c5170; }
 .mines-cell-revealed { background: #16202c; }
 .mines-cell-mine { background: #b91c1c; }
 
-/* ================= SOLO : CASSE-BRIQUES & BUBBLE SHOOTER ================= */
-#breakout-canvas, #bubbles-canvas { touch-action: none; }
+.mines-cell.mines-pop { animation: mines-pop .3s cubic-bezier(.34,1.56,.64,1); }
+@keyframes mines-pop {
+  0% { transform: scale(.25); opacity: .3; }
+  60% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); }
+}
+.mines-cell.mines-flag-pop { animation: mines-flag-pop .35s cubic-bezier(.34,1.56,.64,1); }
+@keyframes mines-flag-pop {
+  0% { transform: scale(0) rotate(-20deg); }
+  60% { transform: scale(1.3) rotate(10deg); }
+  100% { transform: scale(1) rotate(0); }
+}
+.mines-cell.mines-boom { animation: mines-boom .45s ease-out; }
+@keyframes mines-boom {
+  0% { transform: scale(.3); filter: brightness(2.8); }
+  45% { transform: scale(1.35); filter: brightness(2); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+.mines-cell.mines-win-pulse { animation: mines-win-pulse .55s ease-out; }
+@keyframes mines-win-pulse {
+  0% { box-shadow: 0 0 0 rgba(74,222,128,0); background: inherit; }
+  35% { box-shadow: 0 0 14px rgba(74,222,128,.95); background: rgba(74,222,128,.4); }
+  100% { box-shadow: 0 0 0 rgba(74,222,128,0); }
+}
+.mines-shake { animation: mines-shake-anim .5s ease; }
+@keyframes mines-shake-anim {
+  10%, 90% { transform: translate(-1px, -1px); }
+  20%, 80% { transform: translate(2px, 2px); }
+  30%, 50%, 70% { transform: translate(-5px, 3px); }
+  40%, 60% { transform: translate(5px, -3px); }
+}
+.mines-flash {
+  position: absolute; inset: 0; background: radial-gradient(circle, rgba(239,68,68,.75), rgba(239,68,68,.25));
+  pointer-events: none; z-index: 20; animation: mines-flash-anim .5s ease-out forwards;
+}
+@keyframes mines-flash-anim { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+/* ================= SOLO : CASSE-BRIQUES ================= */
+#breakout-canvas { touch-action: none; }

@@ -18,6 +18,12 @@
 </head>
 <body>
 
+<!-- ===== ECRAN DE DEMARRAGE (logo animé au lancement de la PWA) ===== -->
+<div id="boot-splash" aria-hidden="true">
+  <img src="icons/icon-512.png" alt="" id="boot-splash-icon" />
+  <h1 id="boot-splash-title">CAP<span>NAVAL</span></h1>
+</div>
+
 <div id="offline-banner" class="connection-banner offline-banner" style="display:none">📶 Pas de connexion Internet</div>
 <div id="connection-banner" class="connection-banner" style="display:none"></div>
 
@@ -253,7 +259,7 @@
 
 <!-- ===== ECRAN SOLO : DEMINEUR ===== -->
 <section id="screen-solo-mines" class="screen">
-  <div class="card">
+  <div class="card" id="mines-card">
     <h2 class="lobby-title">💣 Démineur</h2>
     <div class="mines-toolbar">
       <p class="hint" style="margin:0">🚩 <span id="mines-flags">0</span> / <span id="mines-total">10</span></p>
@@ -281,22 +287,6 @@
     <div class="solo-game-btns">
       <button type="button" id="btn-breakout-restart" class="btn btn-secondary">Recommencer</button>
       <button type="button" id="btn-breakout-quit" class="btn btn-secondary">Retour</button>
-    </div>
-  </div>
-</section>
-
-<!-- ===== ECRAN SOLO : BUBBLE SHOOTER ===== -->
-<section id="screen-solo-bubbles" class="screen">
-  <div class="card">
-    <h2 class="lobby-title">🫧 Bubble Shooter</h2>
-    <p class="hint" style="text-align:center">Score : <span id="bubbles-score">0</span></p>
-    <div class="flappy-wrap">
-      <canvas id="bubbles-canvas" width="300" height="420"></canvas>
-    </div>
-    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche l'écran pour viser et tirer une bulle. Regroupe 3 bulles de la même couleur pour les faire éclater.</p>
-    <div class="solo-game-btns">
-      <button type="button" id="btn-bubbles-restart" class="btn btn-secondary">Recommencer</button>
-      <button type="button" id="btn-bubbles-quit" class="btn btn-secondary">Retour</button>
     </div>
   </div>
 </section>

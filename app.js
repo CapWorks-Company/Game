@@ -558,7 +558,6 @@ const SOLO_GAMES = [
   { id: "sudoku", kind: "sudoku", icon: "🔢", label: "Sudoku", desc: "Remplis la grille 9x9 sans répéter de chiffre sur une ligne, une colonne ou un carré." },
   { id: "mines", kind: "mines", icon: "💣", label: "Démineur", desc: "Révèle toutes les cases sûres et repère les mines à l'aide des indices." },
   { id: "breakout", kind: "breakout", icon: "🧱", label: "Casse-briques", desc: "Dirige la raquette pour renvoyer la balle et casser toutes les briques." },
-  { id: "bubbles", kind: "bubbles", icon: "🫧", label: "Bubble Shooter", desc: "Vise et tire des bulles pour regrouper 3 couleurs identiques et les faire éclater." },
 ];
 let soloRetryHandler = null;
 
@@ -578,7 +577,7 @@ function showSoloEnd(outcome, title, text) {
   titleEl.textContent = title;
   document.getElementById("solo-end-text").textContent = text;
   showScreen("screen-solo-end");
-  if (outcome === "win") { vibrate([40, 30, 40, 30, 90]); spawnConfetti("confetti-layer-solo"); }
+  if (outcome === "win") { vibrate([40, 30, 40, 30, 90]); spawnConfetti("confetti-layer-solo"); sfxFanfare(); }
 }
 
 function openSoloHub() {
@@ -602,7 +601,6 @@ function openSoloHub() {
       else if (g.kind === "sudoku") startSudokuGame();
       else if (g.kind === "mines") startMinesGame();
       else if (g.kind === "breakout") startBreakoutGame();
-      else if (g.kind === "bubbles") startBubblesGame();
     });
   });
   showScreen("screen-solo-hub");
@@ -1844,12 +1842,19 @@ function onSudokuNumber(n) {
   const { r, c } = sudokuState.selected;
   if (sudokuState.given[r][c]) return;
   sudokuState.grid[r][c] = n;
-  if (n !== 0 && !sudokuValidPlacement(sudokuState.grid, r, c, n)) {
+  const isError = n !== 0 && !sudokuValidPlacement(sudokuState.grid, r, c, n);
+  renderSudokuGrid();
+  const cellEl = document.getElementById("sudoku-grid").children[r * 9 + c];
+  if (isError) {
     sudokuState.errors++;
     document.getElementById("sudoku-errors").textContent = String(sudokuState.errors);
     vibrate(20);
+    if (cellEl) { cellEl.classList.remove("sudoku-error-shake"); void cellEl.offsetWidth; cellEl.classList.add("sudoku-error-shake"); }
+    playTone(160, 0.15, "sawtooth", 0.15);
+  } else if (n !== 0) {
+    if (cellEl) { cellEl.classList.remove("sudoku-pop"); void cellEl.offsetWidth; cellEl.classList.add("sudoku-pop"); }
+    playTone(700, 0.05, "sine", 0.08);
   }
-  renderSudokuGrid();
   checkSudokuWin();
 }
 function checkSudokuWin() {
@@ -1927,18 +1932,60 @@ document.getElementById("btn-mines-flagmode").addEventListener("click", () => {
   minesState.flagMode = !minesState.flagMode;
   document.getElementById("btn-mines-flagmode").classList.toggle("active", minesState.flagMode);
 });
-function minesFloodReveal(grid, r, c) {
-  const cell = grid[r][c];
-  if (cell.revealed || cell.flagged) return;
-  cell.revealed = true;
-  minesState.revealedCount++;
-  if (cell.adj === 0 && !cell.mine) {
-    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
-      if (!dr && !dc) continue;
-      const rr = r + dr, cc = c + dc;
-      if (rr >= 0 && rr < MINES_SIZE && cc >= 0 && cc < MINES_SIZE && !grid[rr][cc].revealed) minesFloodReveal(grid, rr, cc);
+// Révélation en cascade façon BFS : renvoie l'ordre dans lequel les cases s'ouvrent,
+// pour pouvoir ensuite les animer/sonoriser en vague plutôt que d'un coup sec.
+function minesFloodReveal(grid, startR, startC) {
+  const order = [];
+  const seen = new Set([startR + "," + startC]);
+  const queue = [[startR, startC]];
+  while (queue.length) {
+    const [r, c] = queue.shift();
+    const cell = grid[r][c];
+    if (cell.flagged) continue;
+    if (!cell.revealed) {
+      cell.revealed = true;
+      minesState.revealedCount++;
+      order.push([r, c]);
+    }
+    if (cell.adj === 0 && !cell.mine) {
+      for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+        if (!dr && !dc) continue;
+        const rr = r + dr, cc = c + dc, key = rr + "," + cc;
+        if (rr >= 0 && rr < MINES_SIZE && cc >= 0 && cc < MINES_SIZE && !seen.has(key) && !grid[rr][cc].revealed) {
+          seen.add(key);
+          queue.push([rr, cc]);
+        }
+      }
     }
   }
+  return order;
+}
+function minesCellEl(r, c) {
+  const grid = document.getElementById("mines-grid");
+  return grid.children[r * MINES_SIZE + c];
+}
+function minesPulseClass(el, cls) {
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth; // force le navigateur à repartir de zéro pour rejouer l'animation
+  el.classList.add(cls);
+}
+function sfxMinesTick(i) { playTone(520 + Math.min(i, 22) * 28, 0.055, "sine", 0.08); }
+function sfxMinesFlag(placed) { placed ? playTone(880, 0.07, "triangle", 0.12) : playTone(420, 0.06, "triangle", 0.1); }
+function animateMinesReveal(order) {
+  order.forEach(([r, c], i) => {
+    setTimeout(() => {
+      minesPulseClass(minesCellEl(r, c), "mines-pop");
+      sfxMinesTick(i);
+    }, Math.min(i, 45) * 22);
+  });
+}
+function flashMinesScreen() {
+  const card = document.getElementById("mines-card");
+  const flash = document.createElement("div");
+  flash.className = "mines-flash";
+  card.appendChild(flash);
+  setTimeout(() => flash.remove(), 550);
 }
 function onMinesCellTap(r, c) {
   if (!minesState || minesState.ended) return;
@@ -1948,24 +1995,56 @@ function onMinesCellTap(r, c) {
     cell.flagged = !cell.flagged;
     document.getElementById("mines-flags").textContent = String(minesState.grid.flat().filter(x => x.flagged).length);
     renderMinesGrid();
+    minesPulseClass(minesCellEl(r, c), "mines-flag-pop");
+    sfxMinesFlag(cell.flagged);
+    vibrate(cell.flagged ? 15 : 10);
     return;
   }
   if (cell.flagged || cell.revealed) return;
   if (cell.mine) {
     minesState.ended = true;
-    minesState.grid.forEach(row => row.forEach(x => { if (x.mine) x.revealed = true; }));
-    renderMinesGrid();
+    const mineCells = [];
+    minesState.grid.forEach((row, rr) => row.forEach((x, cc) => { if (x.mine) mineCells.push([rr, cc]); }));
+    mineCells.sort((a, b) => Math.hypot(a[0] - r, a[1] - c) - Math.hypot(b[0] - r, b[1] - c));
+    minesPulseClass(document.getElementById("mines-card"), "mines-shake");
+    flashMinesScreen();
+    sfxExplosion();
     vibrate([30, 30, 60]);
-    setTimeout(() => showSoloEnd("lose", "Boum !", "Tu as touché une mine. Une revanche ?"), 300);
+    mineCells.forEach(([rr, cc], i) => {
+      setTimeout(() => {
+        minesState.grid[rr][cc].revealed = true;
+        renderMinesGrid();
+        minesPulseClass(minesCellEl(rr, cc), "mines-boom");
+        if (i > 0) sfxImpact();
+      }, i * 90);
+    });
+    setTimeout(() => showSoloEnd("lose", "Boum !", "Tu as touché une mine. Une revanche ?"), 350 + mineCells.length * 90);
     return;
   }
-  minesFloodReveal(minesState.grid, r, c);
+  const order = minesFloodReveal(minesState.grid, r, c);
   renderMinesGrid();
+  animateMinesReveal(order);
   const totalSafe = MINES_SIZE * MINES_SIZE - MINES_COUNT;
   if (minesState.revealedCount >= totalSafe) {
     minesState.ended = true;
-    setTimeout(() => showSoloEnd("win", "Terrain déminé !", "Bravo, tu as révélé toutes les cases sûres !"), 200);
+    celebrateMinesWin();
   }
+}
+// Petite vague de victoire en diagonale sur toute la grille, avec auto-pose des
+// derniers drapeaux sur les mines restées cachées, avant d'afficher l'écran de fin.
+function celebrateMinesWin() {
+  const cells = [];
+  for (let r = 0; r < MINES_SIZE; r++) for (let c = 0; c < MINES_SIZE; c++) cells.push([r, c]);
+  cells.sort((a, b) => (a[0] + a[1]) - (b[0] + b[1]));
+  cells.forEach(([r, c], i) => {
+    setTimeout(() => {
+      const cell = minesState.grid[r][c];
+      if (cell.mine && !cell.flagged) { cell.flagged = true; renderMinesGrid(); }
+      minesPulseClass(minesCellEl(r, c), "mines-win-pulse");
+      if (i % 3 === 0) sfxMinesTick(i / 2);
+    }, i * 13);
+  });
+  setTimeout(() => showSoloEnd("win", "Terrain déminé !", "Bravo, tu as révélé toutes les cases sûres !"), cells.length * 13 + 350);
 }
 function renderMinesGrid() {
   const grid = document.getElementById("mines-grid");
@@ -2021,6 +2100,7 @@ function startBreakoutGame() {
   breakoutState = {
     paddleX: BRK_W / 2 - BRK_PADDLE_W / 2, ballX: BRK_W / 2, ballY: BRK_PADDLE_Y - BRK_BALL_R - 1,
     ballVX: 0, ballVY: 0, launched: false, bricks: breakoutBuildBricks(), score: 0, lives: 3, ended: false,
+    particles: [],
   };
   soloRetryHandler = startBreakoutGame;
   document.getElementById("breakout-score").textContent = "0";
@@ -2057,15 +2137,30 @@ function wireBreakoutControls() {
     breakoutState.paddleX = Math.max(0, Math.min(BRK_W - BRK_PADDLE_W, x - BRK_PADDLE_W / 2));
   });
 }
+function brkSpawnBurst(x, y, color) {
+  for (let i = 0; i < 9; i++) {
+    const angle = Math.random() * Math.PI * 2, speed = 1.5 + Math.random() * 2.5;
+    breakoutState.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 1, color });
+  }
+}
+function brkFlashAndShake(colorClass) {
+  const wrap = document.querySelector("#screen-solo-breakout .flappy-wrap");
+  if (!wrap) return;
+  wrap.classList.remove("fx-shake"); void wrap.offsetWidth; wrap.classList.add("fx-shake");
+  const flash = document.createElement("div");
+  flash.className = colorClass;
+  wrap.appendChild(flash);
+  setTimeout(() => flash.remove(), 550);
+}
 function breakoutLoop() {
   if (!breakoutState || breakoutState.ended) return;
   const s = breakoutState;
   if (s.launched) {
     s.ballX += s.ballVX;
     s.ballY += s.ballVY;
-    if (s.ballX - BRK_BALL_R < 0) { s.ballX = BRK_BALL_R; s.ballVX *= -1; }
-    if (s.ballX + BRK_BALL_R > BRK_W) { s.ballX = BRK_W - BRK_BALL_R; s.ballVX *= -1; }
-    if (s.ballY - BRK_BALL_R < 0) { s.ballY = BRK_BALL_R; s.ballVY *= -1; }
+    if (s.ballX - BRK_BALL_R < 0) { s.ballX = BRK_BALL_R; s.ballVX *= -1; playTone(300, 0.04, "square", 0.06); }
+    if (s.ballX + BRK_BALL_R > BRK_W) { s.ballX = BRK_W - BRK_BALL_R; s.ballVX *= -1; playTone(300, 0.04, "square", 0.06); }
+    if (s.ballY - BRK_BALL_R < 0) { s.ballY = BRK_BALL_R; s.ballVY *= -1; playTone(300, 0.04, "square", 0.06); }
     if (s.ballY + BRK_BALL_R >= BRK_PADDLE_Y && s.ballY + BRK_BALL_R <= BRK_PADDLE_Y + BRK_PADDLE_H + 6 &&
         s.ballX >= s.paddleX && s.ballX <= s.paddleX + BRK_PADDLE_W && s.ballVY > 0) {
       const hit = (s.ballX - (s.paddleX + BRK_PADDLE_W / 2)) / (BRK_PADDLE_W / 2);
@@ -2074,6 +2169,7 @@ function breakoutLoop() {
       s.ballVX = Math.cos(angle) * speed;
       s.ballVY = Math.sin(angle) * speed;
       s.ballY = BRK_PADDLE_Y - BRK_BALL_R;
+      playTone(220, 0.06, "triangle", 0.1);
     }
     for (const b of s.bricks) {
       if (!b.alive) continue;
@@ -2082,6 +2178,8 @@ function breakoutLoop() {
         s.score += 10;
         document.getElementById("breakout-score").textContent = String(s.score);
         vibrate(10);
+        brkSpawnBurst(b.x + b.w / 2, b.y + b.h / 2, b.color);
+        playTone(420 + (BRK_ROWS - 1 - Math.floor((b.y - BRK_BRICK_TOP) / (BRK_BRICK_H + BRK_BRICK_PAD))) * 70, 0.08, "triangle", 0.12);
         const overlapX = Math.min(s.ballX + BRK_BALL_R - b.x, b.x + b.w - (s.ballX - BRK_BALL_R));
         const overlapY = Math.min(s.ballY + BRK_BALL_R - b.y, b.y + b.h - (s.ballY - BRK_BALL_R));
         if (overlapX < overlapY) s.ballVX *= -1; else s.ballVY *= -1;
@@ -2091,19 +2189,24 @@ function breakoutLoop() {
     if (s.bricks.every(b => !b.alive)) {
       s.ended = true;
       if (breakoutRaf) cancelAnimationFrame(breakoutRaf);
+      brkFlashAndShake("fx-flash-green");
       setTimeout(() => showSoloEnd("win", "Toutes les briques cassées !", `Score final : ${s.score}.`), 200);
       return;
     }
     if (s.ballY - BRK_BALL_R > BRK_H) {
       s.lives--;
       document.getElementById("breakout-lives").textContent = String(s.lives);
+      brkFlashAndShake("fx-flash-red");
       if (s.lives <= 0) {
         s.ended = true;
         if (breakoutRaf) cancelAnimationFrame(breakoutRaf);
         vibrate([30, 30, 60]);
+        sfxKO();
         setTimeout(() => showSoloEnd("lose", "Perdu !", `Tu as perdu toutes tes vies. Score : ${s.score}.`), 250);
         return;
       }
+      vibrate([20, 20, 20]);
+      playTone(180, 0.2, "sawtooth", 0.14);
       s.launched = false;
       s.ballX = s.paddleX + BRK_PADDLE_W / 2;
       s.ballY = BRK_PADDLE_Y - BRK_BALL_R - 1;
@@ -2113,6 +2216,8 @@ function breakoutLoop() {
   } else {
     s.ballX = s.paddleX + BRK_PADDLE_W / 2;
   }
+  s.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.12; p.life -= 0.045; });
+  s.particles = s.particles.filter(p => p.life > 0);
   drawBreakout();
   breakoutRaf = requestAnimationFrame(breakoutLoop);
 }
@@ -2124,240 +2229,18 @@ function drawBreakout() {
   ctx.fillRect(0, 0, BRK_W, BRK_H);
   const s = breakoutState;
   s.bricks.forEach(b => { if (b.alive) { ctx.fillStyle = b.color; ctx.fillRect(b.x, b.y, b.w, b.h); } });
+  s.particles.forEach(p => {
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+  });
+  ctx.globalAlpha = 1;
   ctx.fillStyle = "#e5e7eb";
   ctx.fillRect(s.paddleX, BRK_PADDLE_Y, BRK_PADDLE_W, BRK_PADDLE_H);
   ctx.beginPath();
   ctx.fillStyle = "#facc15";
   ctx.arc(s.ballX, s.ballY, BRK_BALL_R, 0, Math.PI * 2);
   ctx.fill();
-}
-
-// ================= SOLO : BUBBLE SHOOTER =================
-let bubblesState = null, bubblesRaf = null, bubblesWired = false;
-const BUB_W = 300, BUB_H = 420;
-const BUB_COLS = 8, BUB_R = 15, BUB_CELL = BUB_R * 2, BUB_ROW_H = BUB_R * Math.sqrt(3), BUB_TOP = 20;
-const BUB_INIT_ROWS = 5;
-const BUB_COLORS = ["#ef4444", "#f97316", "#facc15", "#4ade80", "#60a5fa", "#c084fc"];
-const BUB_LOSE_Y = BUB_H - 60;
-function bubCellPos(row, col) {
-  const offsetX = (row % 2 === 1) ? BUB_R : 0;
-  return { x: BUB_R + col * BUB_CELL + offsetX, y: BUB_TOP + BUB_R + row * BUB_ROW_H };
-}
-function bubNeighbors(row, col) {
-  const even = row % 2 === 0;
-  const deltas = even
-    ? [[0, -1], [0, 1], [-1, -1], [-1, 0], [1, -1], [1, 0]]
-    : [[0, -1], [0, 1], [-1, 0], [-1, 1], [1, 0], [1, 1]];
-  return deltas.map(([dr, dc]) => [row + dr, col + dc]).filter(([r, c]) => r >= 0 && c >= 0 && c < BUB_COLS);
-}
-function bubBuildInitialGrid() {
-  const grid = [];
-  for (let r = 0; r < BUB_INIT_ROWS; r++) {
-    const row = [];
-    for (let c = 0; c < BUB_COLS; c++) row.push(Math.floor(Math.random() * BUB_COLORS.length));
-    grid.push(row);
-  }
-  return grid;
-}
-function startBubblesGame() {
-  bubblesState = {
-    grid: bubBuildInitialGrid(), shots: 0, score: 0, ended: false,
-    ball: null, // { x, y, vx, vy, color } pendant le vol
-    nextColor: Math.floor(Math.random() * BUB_COLORS.length),
-    shooterX: BUB_W / 2, shooterY: BUB_H - 30,
-  };
-  soloRetryHandler = startBubblesGame;
-  document.getElementById("bubbles-score").textContent = "0";
-  wireBubblesControls();
-  showScreen("screen-solo-bubbles");
-  drawBubbles();
-  if (bubblesRaf) cancelAnimationFrame(bubblesRaf);
-  bubblesRaf = requestAnimationFrame(bubblesLoop);
-}
-document.getElementById("btn-bubbles-quit").addEventListener("click", () => {
-  if (bubblesRaf) cancelAnimationFrame(bubblesRaf);
-  showScreen("screen-home");
-});
-document.getElementById("btn-bubbles-restart").addEventListener("click", () => startBubblesGame());
-function wireBubblesControls() {
-  if (bubblesWired) return;
-  bubblesWired = true;
-  const canvas = document.getElementById("bubbles-canvas");
-  canvas.addEventListener("pointerdown", (e) => {
-    e.preventDefault();
-    if (!bubblesState || bubblesState.ended || bubblesState.ball) return;
-    const rect = canvas.getBoundingClientRect();
-    const tx = (e.clientX - rect.left) * (BUB_W / rect.width);
-    const ty = (e.clientY - rect.top) * (BUB_H / rect.height);
-    bubblesShoot(tx, ty);
-  });
-}
-function bubblesShoot(tx, ty) {
-  const s = bubblesState;
-  let dx = tx - s.shooterX, dy = ty - s.shooterY;
-  if (dy > -10) dy = -10; // on tire toujours vers le haut
-  const len = Math.hypot(dx, dy) || 1;
-  const speed = 7;
-  s.ball = { x: s.shooterX, y: s.shooterY, vx: (dx / len) * speed, vy: (dy / len) * speed, color: s.nextColor };
-  s.nextColor = Math.floor(Math.random() * BUB_COLORS.length);
-  vibrate(12);
-}
-function bubblesLoop() {
-  if (!bubblesState || bubblesState.ended) return;
-  const s = bubblesState;
-  if (s.ball) {
-    s.ball.x += s.ball.vx;
-    s.ball.y += s.ball.vy;
-    if (s.ball.x - BUB_R < 0) { s.ball.x = BUB_R; s.ball.vx *= -1; }
-    if (s.ball.x + BUB_R > BUB_W) { s.ball.x = BUB_W - BUB_R; s.ball.vx *= -1; }
-    let landed = null;
-    if (s.ball.y - BUB_R <= BUB_TOP) {
-      landed = bubNearestEmptyCell(0, s.ball.x);
-    } else {
-      outer:
-      for (let r = 0; r < s.grid.length; r++) for (let c = 0; c < BUB_COLS; c++) {
-        if (s.grid[r][c] == null) continue;
-        const pos = bubCellPos(r, c);
-        if (Math.hypot(pos.x - s.ball.x, pos.y - s.ball.y) < BUB_CELL - 4) {
-          landed = bubNearestEmptyNeighbor(r, c, s.ball.x, s.ball.y);
-          break outer;
-        }
-      }
-    }
-    if (landed) {
-      const { row, col } = landed;
-      while (s.grid.length <= row) s.grid.push(new Array(BUB_COLS).fill(null));
-      s.grid[row][col] = s.ball.color;
-      bubblesResolveMatch(row, col);
-      s.ball = null;
-      s.shots++;
-      if (s.shots % 5 === 0) bubblesAddRow();
-      if (bubblesCheckLose()) {
-        s.ended = true;
-        if (bubblesRaf) cancelAnimationFrame(bubblesRaf);
-        vibrate([30, 30, 60]);
-        setTimeout(() => showSoloEnd("lose", "Débordement !", `Les bulles ont atteint le bas. Score : ${s.score}.`), 250);
-        return;
-      }
-      if (bubblesGridEmpty()) {
-        s.ended = true;
-        if (bubblesRaf) cancelAnimationFrame(bubblesRaf);
-        setTimeout(() => showSoloEnd("win", "Plateau nettoyé !", `Bravo, toutes les bulles ont éclaté ! Score : ${s.score}.`), 200);
-        return;
-      }
-    }
-  }
-  drawBubbles();
-  bubblesRaf = requestAnimationFrame(bubblesLoop);
-}
-function bubNearestEmptyCell(row, x) {
-  let best = null, bestDist = Infinity;
-  for (let c = 0; c < BUB_COLS; c++) {
-    if (bubblesState.grid[row] && bubblesState.grid[row][c] != null) continue;
-    const pos = bubCellPos(row, c);
-    const d = Math.abs(pos.x - x);
-    if (d < bestDist) { bestDist = d; best = { row, col: c }; }
-  }
-  return best;
-}
-function bubNearestEmptyNeighbor(row, col, bx, by) {
-  const candidates = bubNeighbors(row, col).filter(([r, c]) => !(bubblesState.grid[r] && bubblesState.grid[r][c] != null));
-  if (!candidates.length) return bubNearestEmptyCell(Math.max(0, row - 1), bx);
-  let best = null, bestDist = Infinity;
-  for (const [r, c] of candidates) {
-    const pos = bubCellPos(r, c);
-    const d = Math.hypot(pos.x - bx, pos.y - by);
-    if (d < bestDist) { bestDist = d; best = { row: r, col: c }; }
-  }
-  return best;
-}
-function bubblesResolveMatch(row, col) {
-  const s = bubblesState;
-  const color = s.grid[row][col];
-  const seen = new Set([row + "," + col]);
-  const group = [[row, col]];
-  const stack = [[row, col]];
-  while (stack.length) {
-    const [r, c] = stack.pop();
-    for (const [nr, nc] of bubNeighbors(r, c)) {
-      const key = nr + "," + nc;
-      if (seen.has(key)) continue;
-      if (s.grid[nr] && s.grid[nr][nc] === color) { seen.add(key); group.push([nr, nc]); stack.push([nr, nc]); }
-    }
-  }
-  if (group.length >= 3) {
-    group.forEach(([r, c]) => { s.grid[r][c] = null; });
-    s.score += group.length * 10;
-    vibrate(15);
-    bubblesRemoveFloating();
-    document.getElementById("bubbles-score").textContent = String(s.score);
-  }
-}
-function bubblesRemoveFloating() {
-  const s = bubblesState;
-  const rows = s.grid.length;
-  const connected = new Set();
-  const stack = [];
-  for (let c = 0; c < BUB_COLS; c++) if (s.grid[0][c] != null) { connected.add("0," + c); stack.push([0, c]); }
-  while (stack.length) {
-    const [r, c] = stack.pop();
-    for (const [nr, nc] of bubNeighbors(r, c)) {
-      const key = nr + "," + nc;
-      if (nr < 0 || nr >= rows || connected.has(key)) continue;
-      if (s.grid[nr][nc] != null) { connected.add(key); stack.push([nr, nc]); }
-    }
-  }
-  let dropped = 0;
-  for (let r = 0; r < rows; r++) for (let c = 0; c < BUB_COLS; c++) {
-    if (s.grid[r][c] != null && !connected.has(r + "," + c)) { s.grid[r][c] = null; dropped++; }
-  }
-  if (dropped) s.score += dropped * 5;
-}
-function bubblesGridEmpty() {
-  return bubblesState.grid.every(row => row.every(v => v == null));
-}
-function bubblesCheckLose() {
-  const s = bubblesState;
-  for (let r = 0; r < s.grid.length; r++) for (let c = 0; c < BUB_COLS; c++) {
-    if (s.grid[r][c] != null && bubCellPos(r, c).y + BUB_R > BUB_LOSE_Y) return true;
-  }
-  return false;
-}
-function bubblesAddRow() {
-  const newRow = Array.from({ length: BUB_COLS }, () => Math.random() < 0.85 ? Math.floor(Math.random() * BUB_COLORS.length) : null);
-  bubblesState.grid.unshift(newRow);
-}
-function drawBubbles() {
-  const canvas = document.getElementById("bubbles-canvas");
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, BUB_W, BUB_H);
-  ctx.fillStyle = "#0a1622";
-  ctx.fillRect(0, 0, BUB_W, BUB_H);
-  const s = bubblesState;
-  ctx.strokeStyle = "rgba(239,68,68,.5)";
-  ctx.beginPath(); ctx.moveTo(0, BUB_LOSE_Y); ctx.lineTo(BUB_W, BUB_LOSE_Y); ctx.stroke();
-  for (let r = 0; r < s.grid.length; r++) for (let c = 0; c < BUB_COLS; c++) {
-    const color = s.grid[r][c];
-    if (color == null) continue;
-    const pos = bubCellPos(r, c);
-    ctx.beginPath();
-    ctx.fillStyle = BUB_COLORS[color];
-    ctx.arc(pos.x, pos.y, BUB_R - 1.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  if (s.ball) {
-    ctx.beginPath();
-    ctx.fillStyle = BUB_COLORS[s.ball.color];
-    ctx.arc(s.ball.x, s.ball.y, BUB_R - 1.5, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.beginPath();
-  ctx.fillStyle = BUB_COLORS[s.nextColor];
-  ctx.arc(s.shooterX, s.shooterY, BUB_R - 1.5, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.strokeStyle = "#fff";
-  ctx.lineWidth = 2;
-  ctx.stroke();
 }
 
 // ================= MODE DUO : BATAILLE NAVALE EN LIGNE, chacun sur son appareil =================
@@ -2426,6 +2309,8 @@ document.querySelectorAll(".rps-choice").forEach(btn => {
   btn.addEventListener("click", () => {
     if (!duo || duo.myChoice) return;
     sendDuo({ type: "duoChoice", choice: btn.dataset.choice });
+    playTone(500, 0.06, "square", 0.08);
+    vibrate(15);
   });
 });
 
@@ -2715,6 +2600,24 @@ function renderDuoEnd() {
 }
 
 // ---- Puissance 4 (Connect 4) ----
+function c4FindWinningLine(board, num) {
+  const rows = board.length, cols = board[0].length;
+  const dirs = [[0, 1], [1, 0], [1, 1], [1, -1]];
+  for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+    if (board[r][c] !== num) continue;
+    for (const [dr, dc] of dirs) {
+      const line = [[r, c]];
+      for (let i = 1; i < 4; i++) {
+        const rr = r + dr * i, cc = c + dc * i;
+        if (rr < 0 || rr >= rows || cc < 0 || cc >= cols || board[rr][cc] !== num) break;
+        line.push([rr, cc]);
+      }
+      if (line.length >= 4) return line.slice(0, 4);
+    }
+  }
+  return [];
+}
+let c4LastFilledCount = 0;
 function renderDuoConnect4() {
   if (!duo || myDuoNum === null) return;
   if (document.querySelector(".screen.active").id !== "screen-duo-connect4") showScreen("screen-duo-connect4");
@@ -2727,6 +2630,7 @@ function renderDuoConnect4() {
   if (grid.children.length !== rows * cols) {
     grid.innerHTML = "";
     grid.style.setProperty("--c4-cols", cols);
+    c4LastFilledCount = 0;
     for (let c = 0; c < cols; c++) {
       const colEl = document.createElement("div");
       colEl.className = "c4-col";
@@ -2737,25 +2641,36 @@ function renderDuoConnect4() {
         colEl.appendChild(cell);
       }
       colEl.addEventListener("click", () => {
-        if (duo.turn === myDuoNum && duo.status === "playing") sendDuo({ type: "duoDrop", col: parseInt(colEl.dataset.col, 10) });
+        if (duo.turn === myDuoNum && duo.status === "playing") {
+          sendDuo({ type: "duoDrop", col: parseInt(colEl.dataset.col, 10) });
+          playTone(500, 0.04, "square", 0.06);
+        }
       });
       grid.appendChild(colEl);
     }
   }
   grid.classList.toggle("c4-clickable", myTurn);
   const cols2 = grid.children;
+  const winLine = (duo.status === "ended" && duo.winner) ? c4FindWinningLine(duo.board, duo.winner) : [];
+  let filled = 0;
   for (let c = 0; c < cols; c++) {
     const cellEls = cols2[c].children;
     for (let r = 0; r < rows; r++) {
       const v = duo.board[r][c];
-      cellEls[r].className = "c4-cell" + (v === 1 ? " c4-p1" : v === 2 ? " c4-p2" : "");
+      if (v) filled++;
+      let cls = "c4-cell" + (v === 1 ? " c4-p1" : v === 2 ? " c4-p2" : "");
+      if (winLine.some(([wr, wc]) => wr === r && wc === c)) cls += " c4-win-cell";
+      cellEls[r].className = cls;
     }
   }
+  if (filled > c4LastFilledCount) { playTone(220, 0.05, "square", 0.1); playTone(150, 0.08, "square", 0.08); vibrate(10); }
+  c4LastFilledCount = filled;
 }
 
 // ---- Pierre-Feuille-Ciseaux ----
 const RPS_EMOJI = { rock: "✊", paper: "✋", scissors: "✌️" };
 const RPS_LABEL = { rock: "Pierre", paper: "Feuille", scissors: "Ciseaux" };
+let rpsLastResultKey = null; // référence du dernier lastResult déjà animé, pour ne pas rejouer le son/flash à chaque re-render
 function renderDuoRps() {
   if (!duo || myDuoNum === null) return;
   if (document.querySelector(".screen.active").id !== "screen-duo-rps") showScreen("screen-duo-rps");
@@ -2770,8 +2685,17 @@ function renderDuoRps() {
     const oppPick = duo.lastResult.choices[myDuoNum === 1 ? 2 : 1];
     const rw = duo.lastResult.roundWinner;
     const text = rw === null ? "Égalité !" : (rw === myDuoNum ? "Tu remportes la manche !" : "L'adversaire remporte la manche.");
+    const isNewResult = rpsLastResultKey !== duo.lastResult;
     resultEl.innerHTML = `<div class="rps-result-row"><span>${RPS_EMOJI[myPick]} ${RPS_LABEL[myPick]}</span><span>vs</span><span>${RPS_EMOJI[oppPick]} ${RPS_LABEL[oppPick]}</span></div><p>${text}</p>`;
     resultEl.style.display = "block";
+    if (isNewResult) {
+      rpsLastResultKey = duo.lastResult;
+      resultEl.classList.remove("rps-result-win", "rps-result-lose");
+      void resultEl.offsetWidth;
+      if (rw === myDuoNum) { resultEl.classList.add("rps-result-win"); playTone(700, 0.1, "triangle", 0.14); setTimeout(() => playTone(1000, 0.14, "triangle", 0.14), 90); vibrate(20); }
+      else if (rw === null) { playTone(440, 0.12, "sine", 0.1); }
+      else { resultEl.classList.add("rps-result-lose"); playTone(220, 0.18, "sawtooth", 0.13); vibrate([15, 15, 15]); }
+    }
   } else {
     resultEl.style.display = "none";
   }
@@ -2786,6 +2710,7 @@ function renderDuoRps() {
 
 // ---- Dames (Checkers) ----
 let ckSelected = null; // {r,c} case sélectionnée en attente d'une destination
+let ckPrevBoard = null; // dernier plateau affiché, pour détecter déplacement/prise et jouer le bon effet
 function renderDuoCheckers() {
   if (!duo || myDuoNum === null) return;
   if (document.querySelector(".screen.active").id !== "screen-duo-checkers") showScreen("screen-duo-checkers");
@@ -2798,6 +2723,7 @@ function renderDuoCheckers() {
   const size = duo.board.length;
   if (grid.children.length !== size * size) {
     grid.innerHTML = "";
+    ckPrevBoard = null;
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
         const cell = document.createElement("div");
@@ -2805,6 +2731,22 @@ function renderDuoCheckers() {
         cell.addEventListener("click", () => onCkCellTap(r, c));
         grid.appendChild(cell);
       }
+    }
+  }
+  // Détecte ce qui a changé depuis le dernier rendu (case vidée / case occupée) pour savoir
+  // si un pion vient de se poser (son + petit "pop") et si une prise a eu lieu (son plus grave + flash).
+  let movedTo = null, captureHappened = false;
+  if (ckPrevBoard) {
+    let prevCount = 0, newCount = 0;
+    const appeared = [];
+    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
+      if (ckPrevBoard[r][c]) prevCount++;
+      if (duo.board[r][c]) newCount++;
+      if (!ckPrevBoard[r][c] && duo.board[r][c]) appeared.push([r, c]);
+    }
+    if (newCount <= prevCount && appeared.length === 1) {
+      movedTo = appeared[0];
+      captureHappened = newCount < prevCount;
     }
   }
   const cells = grid.children;
@@ -2820,11 +2762,23 @@ function renderDuoCheckers() {
       if (piece) {
         const el = document.createElement("div");
         el.className = "ck-piece " + (piece.owner === myDuoNum ? "ck-piece-mine" : "ck-piece-theirs") + (piece.king ? " ck-piece-king" : "");
+        if (movedTo && movedTo[0] === r && movedTo[1] === c) el.className += " ck-piece-pop";
         el.textContent = piece.king ? "♛" : "●";
         cell.appendChild(el);
       }
     }
   }
+  if (movedTo) {
+    if (captureHappened) {
+      playTone(180, 0.14, "sawtooth", 0.14);
+      setTimeout(() => playTone(120, 0.16, "sawtooth", 0.12), 90);
+      vibrate([20, 20, 20]);
+    } else {
+      playTone(440, 0.06, "sine", 0.08);
+      vibrate(10);
+    }
+  }
+  ckPrevBoard = duo.board.map(row => row.map(cell => cell ? { owner: cell.owner, king: cell.king } : null));
 }
 function onCkCellTap(r, c) {
   if (!duo || duo.status !== "playing" || duo.turn !== myDuoNum) return;
@@ -3283,6 +3237,32 @@ function setFab(mode) {
     btnInstall.style.display = "none";
   }
 }
+
+// ---- Ecran de démarrage : le logo tourne puis zoome pour révéler l'appli ----
+(function runBootSplash() {
+  const splash = document.getElementById("boot-splash");
+  if (!splash) return;
+  const reduceMotion = document.body.classList.contains("reduce-motion") ||
+    (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+  const play = () => {
+    if (reduceMotion) {
+      splash.classList.add("boot-zoom");
+      setTimeout(() => splash.classList.add("boot-hidden"), 320);
+      return;
+    }
+    // petit temps de lecture pour que le logo soit bien visible avant l'animation
+    setTimeout(() => {
+      splash.classList.add("boot-spin");
+      setTimeout(() => {
+        splash.classList.remove("boot-spin");
+        splash.classList.add("boot-zoom");
+        setTimeout(() => splash.classList.add("boot-hidden"), 650);
+      }, 700);
+    }, 300);
+  };
+  if (document.readyState === "complete") play();
+  else window.addEventListener("load", play);
+})();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
