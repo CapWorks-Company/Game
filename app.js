@@ -83,6 +83,10 @@ const MODE_FIELD_DEFS = {
   chrono:   [{ name: "minutes",          label: "Durée (minutes)",                 def: 5,  min: 1, max: 60 }],
   survivor: [],
   ctf:      [{ name: "targetCaptures",   label: "Captures pour gagner",            def: 3,  min: 1, max: 20 }],
+  zoneMobile:   [{ name: "targetScore",       label: "Points pour gagner",              def: 20, min: 1, max: 200 }],
+  treasureHunt: [{ name: "targetTreasures",   label: "Trésors pour gagner",             def: 8,  min: 1, max: 50 }],
+  escort:       [{ name: "escortMinutes",     label: "Durée à survivre (minutes)",      def: 3,  min: 1, max: 15 }],
+  infection:    [{ name: "infectionMinutes",  label: "Durée de la partie (minutes)",    def: 4,  min: 1, max: 30 }],
   boss: [
     { name: "bossHpMultiplier", label: "Multiplicateur de PV du Boss", def: 3, min: 1.5, max: 6, step: 0.5 },
     { type: "select", name: "bossIsBot", label: "Le Boss est…", def: "false",
@@ -551,6 +555,10 @@ const SOLO_GAMES = [
   { id: "taquin", kind: "taquin", icon: "🔢", label: "Taquin", desc: "Fais glisser les cases pour reformer l'ordre de 1 à 15." },
   { id: "morpion", kind: "morpion", icon: "❌⭕", label: "Morpion contre IA", desc: "Affronte une IA maligne dans un morpion classique." },
   { id: "flappy", kind: "flappy", icon: "🐦", label: "Envol Marin", desc: "Touche l'écran pour voler entre les récifs sans les toucher." },
+  { id: "sudoku", kind: "sudoku", icon: "🔢", label: "Sudoku", desc: "Remplis la grille 9x9 sans répéter de chiffre sur une ligne, une colonne ou un carré." },
+  { id: "mines", kind: "mines", icon: "💣", label: "Démineur", desc: "Révèle toutes les cases sûres et repère les mines à l'aide des indices." },
+  { id: "breakout", kind: "breakout", icon: "🧱", label: "Casse-briques", desc: "Dirige la raquette pour renvoyer la balle et casser toutes les briques." },
+  { id: "bubbles", kind: "bubbles", icon: "🫧", label: "Bubble Shooter", desc: "Vise et tire des bulles pour regrouper 3 couleurs identiques et les faire éclater." },
 ];
 let soloRetryHandler = null;
 
@@ -591,6 +599,10 @@ function openSoloHub() {
       else if (g.kind === "taquin") startTaquinGame();
       else if (g.kind === "morpion") startMorpionGame();
       else if (g.kind === "flappy") startFlappyGame();
+      else if (g.kind === "sudoku") startSudokuGame();
+      else if (g.kind === "mines") startMinesGame();
+      else if (g.kind === "breakout") startBreakoutGame();
+      else if (g.kind === "bubbles") startBubblesGame();
     });
   });
   showScreen("screen-solo-hub");
@@ -1572,11 +1584,22 @@ function onMorpionCellTap(idx) {
   setMorpionStatus("L'IA réfléchit...");
   setTimeout(morpionAiMove, 380);
 }
+// L'IA joue son meilleur coup la plupart du temps, mais se trompe volontairement
+// un coup sur quatre environ pour rester battable — un morpion joué à la perfection
+// des deux côtés fait toujours match nul, ce qui rendrait la partie insupportable.
+const MORPION_AI_MISTAKE_CHANCE = 0.25;
 function morpionAiMove() {
   if (morpionState.ended) return;
   const board = morpionState.board;
-  const best = morpionBestMoves(board);
-  const move = best[Math.floor(Math.random() * best.length)];
+  let move;
+  if (Math.random() < MORPION_AI_MISTAKE_CHANCE) {
+    const legal = [];
+    for (let i = 0; i < 9; i++) if (!board[i]) legal.push(i);
+    move = legal[Math.floor(Math.random() * legal.length)];
+  } else {
+    const best = morpionBestMoves(board);
+    move = best[Math.floor(Math.random() * best.length)];
+  }
   board[move] = "O";
   renderMorpion();
   const result = morpionResult(board);
@@ -1750,10 +1773,599 @@ function endFlappy() {
   setTimeout(() => showSoloEnd("lose", "Splash !", `Tu t'es écrasé avec un score de ${flappyState.score} récifs franchis.`), 250);
 }
 
+// ================= SOLO : SUDOKU =================
+let sudokuState = null;
+function sudokuEmptyGrid() { return Array.from({ length: 9 }, () => Array(9).fill(0)); }
+function sudokuValidPlacement(grid, r, c, v) {
+  for (let i = 0; i < 9; i++) {
+    if (i !== c && grid[r][i] === v) return false;
+    if (i !== r && grid[i][c] === v) return false;
+  }
+  const br = Math.floor(r / 3) * 3, bc = Math.floor(c / 3) * 3;
+  for (let rr = br; rr < br + 3; rr++) for (let cc = bc; cc < bc + 3; cc++) {
+    if ((rr !== r || cc !== c) && grid[rr][cc] === v) return false;
+  }
+  return true;
+}
+function sudokuGenerateSolved() {
+  const grid = sudokuEmptyGrid();
+  function fill(pos) {
+    if (pos === 81) return true;
+    const r = Math.floor(pos / 9), c = pos % 9;
+    const nums = [1, 2, 3, 4, 5, 6, 7, 8, 9].sort(() => Math.random() - 0.5);
+    for (const v of nums) {
+      if (sudokuValidPlacement(grid, r, c, v)) {
+        grid[r][c] = v;
+        if (fill(pos + 1)) return true;
+        grid[r][c] = 0;
+      }
+    }
+    return false;
+  }
+  fill(0);
+  return grid;
+}
+function startSudokuGame() {
+  const solved = sudokuGenerateSolved();
+  const puzzle = solved.map(row => row.slice());
+  const cells = [];
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) cells.push([r, c]);
+  cells.sort(() => Math.random() - 0.5);
+  let toRemove = 45;
+  for (const [r, c] of cells) {
+    if (toRemove <= 0) break;
+    puzzle[r][c] = 0;
+    toRemove--;
+  }
+  sudokuState = {
+    given: puzzle.map(row => row.map(v => v !== 0)),
+    grid: puzzle.map(row => row.slice()),
+    selected: null, errors: 0, ended: false,
+  };
+  soloRetryHandler = startSudokuGame;
+  document.getElementById("sudoku-errors").textContent = "0";
+  renderSudokuNumpad();
+  renderSudokuGrid();
+  showScreen("screen-solo-sudoku");
+}
+document.getElementById("btn-sudoku-quit").addEventListener("click", () => showScreen("screen-home"));
+document.getElementById("btn-sudoku-restart").addEventListener("click", () => startSudokuGame());
+function renderSudokuNumpad() {
+  const wrap = document.getElementById("sudoku-numpad");
+  if (wrap.children.length) return;
+  wrap.innerHTML = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(n => `<button type="button" class="sudoku-num" data-n="${n}">${n}</button>`).join("") +
+    `<button type="button" class="sudoku-num sudoku-erase" data-n="0">✕</button>`;
+  wrap.querySelectorAll(".sudoku-num").forEach(btn => {
+    btn.addEventListener("click", () => onSudokuNumber(parseInt(btn.dataset.n, 10)));
+  });
+}
+function onSudokuNumber(n) {
+  if (!sudokuState || sudokuState.ended || !sudokuState.selected) return;
+  const { r, c } = sudokuState.selected;
+  if (sudokuState.given[r][c]) return;
+  sudokuState.grid[r][c] = n;
+  if (n !== 0 && !sudokuValidPlacement(sudokuState.grid, r, c, n)) {
+    sudokuState.errors++;
+    document.getElementById("sudoku-errors").textContent = String(sudokuState.errors);
+    vibrate(20);
+  }
+  renderSudokuGrid();
+  checkSudokuWin();
+}
+function checkSudokuWin() {
+  const g = sudokuState.grid;
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+    if (!g[r][c] || !sudokuValidPlacement(g, r, c, g[r][c])) return;
+  }
+  sudokuState.ended = true;
+  setTimeout(() => showSoloEnd("win", "Grille complétée !", `Bravo, tu as résolu la grille avec ${sudokuState.errors} erreur(s).`), 200);
+}
+function renderSudokuGrid() {
+  const grid = document.getElementById("sudoku-grid");
+  if (grid.children.length !== 81) {
+    grid.innerHTML = "";
+    for (let i = 0; i < 81; i++) {
+      const r = Math.floor(i / 9), c = i % 9;
+      const cell = document.createElement("div");
+      cell.dataset.r = r; cell.dataset.c = c;
+      cell.addEventListener("click", () => {
+        if (sudokuState.given[r][c]) return;
+        sudokuState.selected = { r, c };
+        renderSudokuGrid();
+      });
+      grid.appendChild(cell);
+    }
+  }
+  const cells = grid.children;
+  for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
+    const cell = cells[r * 9 + c];
+    const v = sudokuState.grid[r][c];
+    const given = sudokuState.given[r][c];
+    const sel = sudokuState.selected && sudokuState.selected.r === r && sudokuState.selected.c === c;
+    const valid = !v || sudokuValidPlacement(sudokuState.grid, r, c, v);
+    cell.className = "sudoku-cell" + (given ? " sudoku-given" : "") + (sel ? " sudoku-selected" : "") + (!valid ? " sudoku-invalid" : "") +
+      (c % 3 === 0 ? " sudoku-border-left" : "") + (r % 3 === 0 ? " sudoku-border-top" : "");
+    cell.textContent = v ? String(v) : "";
+  }
+}
+
+// ================= SOLO : DEMINEUR =================
+let minesState = null;
+const MINES_SIZE = 9, MINES_COUNT = 10;
+function startMinesGame() {
+  const total = MINES_SIZE * MINES_SIZE;
+  const mineSet = new Set();
+  while (mineSet.size < MINES_COUNT) mineSet.add(Math.floor(Math.random() * total));
+  const grid = [];
+  for (let r = 0; r < MINES_SIZE; r++) {
+    const row = [];
+    for (let c = 0; c < MINES_SIZE; c++) row.push({ mine: mineSet.has(r * MINES_SIZE + c), revealed: false, flagged: false, adj: 0 });
+    grid.push(row);
+  }
+  for (let r = 0; r < MINES_SIZE; r++) for (let c = 0; c < MINES_SIZE; c++) {
+    if (grid[r][c].mine) continue;
+    let count = 0;
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const rr = r + dr, cc = c + dc;
+      if (rr >= 0 && rr < MINES_SIZE && cc >= 0 && cc < MINES_SIZE && grid[rr][cc].mine) count++;
+    }
+    grid[r][c].adj = count;
+  }
+  minesState = { grid, flagMode: false, ended: false, revealedCount: 0 };
+  soloRetryHandler = startMinesGame;
+  document.getElementById("mines-total").textContent = String(MINES_COUNT);
+  document.getElementById("mines-flags").textContent = "0";
+  document.getElementById("btn-mines-flagmode").classList.remove("active");
+  renderMinesGrid();
+  showScreen("screen-solo-mines");
+}
+document.getElementById("btn-mines-quit").addEventListener("click", () => showScreen("screen-home"));
+document.getElementById("btn-mines-restart").addEventListener("click", () => startMinesGame());
+document.getElementById("btn-mines-flagmode").addEventListener("click", () => {
+  if (!minesState) return;
+  minesState.flagMode = !minesState.flagMode;
+  document.getElementById("btn-mines-flagmode").classList.toggle("active", minesState.flagMode);
+});
+function minesFloodReveal(grid, r, c) {
+  const cell = grid[r][c];
+  if (cell.revealed || cell.flagged) return;
+  cell.revealed = true;
+  minesState.revealedCount++;
+  if (cell.adj === 0 && !cell.mine) {
+    for (let dr = -1; dr <= 1; dr++) for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const rr = r + dr, cc = c + dc;
+      if (rr >= 0 && rr < MINES_SIZE && cc >= 0 && cc < MINES_SIZE && !grid[rr][cc].revealed) minesFloodReveal(grid, rr, cc);
+    }
+  }
+}
+function onMinesCellTap(r, c) {
+  if (!minesState || minesState.ended) return;
+  const cell = minesState.grid[r][c];
+  if (minesState.flagMode) {
+    if (cell.revealed) return;
+    cell.flagged = !cell.flagged;
+    document.getElementById("mines-flags").textContent = String(minesState.grid.flat().filter(x => x.flagged).length);
+    renderMinesGrid();
+    return;
+  }
+  if (cell.flagged || cell.revealed) return;
+  if (cell.mine) {
+    minesState.ended = true;
+    minesState.grid.forEach(row => row.forEach(x => { if (x.mine) x.revealed = true; }));
+    renderMinesGrid();
+    vibrate([30, 30, 60]);
+    setTimeout(() => showSoloEnd("lose", "Boum !", "Tu as touché une mine. Une revanche ?"), 300);
+    return;
+  }
+  minesFloodReveal(minesState.grid, r, c);
+  renderMinesGrid();
+  const totalSafe = MINES_SIZE * MINES_SIZE - MINES_COUNT;
+  if (minesState.revealedCount >= totalSafe) {
+    minesState.ended = true;
+    setTimeout(() => showSoloEnd("win", "Terrain déminé !", "Bravo, tu as révélé toutes les cases sûres !"), 200);
+  }
+}
+function renderMinesGrid() {
+  const grid = document.getElementById("mines-grid");
+  if (grid.children.length !== MINES_SIZE * MINES_SIZE) {
+    grid.innerHTML = "";
+    for (let i = 0; i < MINES_SIZE * MINES_SIZE; i++) {
+      const r = Math.floor(i / MINES_SIZE), c = i % MINES_SIZE;
+      const cell = document.createElement("div");
+      cell.addEventListener("click", () => onMinesCellTap(r, c));
+      grid.appendChild(cell);
+    }
+  }
+  const cells = grid.children;
+  const NUM_COLORS = ["", "#4a90d9", "#4caf50", "#e53935", "#7b1fa2", "#ff8f00", "#00897b", "#424242", "#9e9e9e"];
+  for (let r = 0; r < MINES_SIZE; r++) for (let c = 0; c < MINES_SIZE; c++) {
+    const cell = cells[r * MINES_SIZE + c];
+    const x = minesState.grid[r][c];
+    let cls = "mines-cell";
+    cell.style.color = "";
+    if (x.revealed) {
+      cls += x.mine ? " mines-cell-mine" : " mines-cell-revealed";
+      cell.textContent = x.mine ? "💣" : (x.adj > 0 ? String(x.adj) : "");
+      if (!x.mine && x.adj > 0) cell.style.color = NUM_COLORS[x.adj];
+    } else {
+      cls += " mines-cell-hidden";
+      cell.textContent = x.flagged ? "🚩" : "";
+    }
+    cell.className = cls;
+  }
+}
+
+// ================= SOLO : CASSE-BRIQUES (Breakout) =================
+let breakoutState = null, breakoutRaf = null, breakoutWired = false;
+const BRK_W = 300, BRK_H = 400;
+const BRK_PADDLE_W = 60, BRK_PADDLE_H = 10, BRK_PADDLE_Y = BRK_H - 24;
+const BRK_BALL_R = 6;
+const BRK_ROWS = 5, BRK_COLS = 7, BRK_BRICK_H = 16, BRK_BRICK_PAD = 3, BRK_BRICK_TOP = 36;
+const BRK_COLORS = ["#ef4444", "#f97316", "#facc15", "#4ade80", "#60a5fa"];
+function breakoutBuildBricks() {
+  const bricks = [];
+  const brickW = (BRK_W - (BRK_COLS + 1) * BRK_BRICK_PAD) / BRK_COLS;
+  for (let r = 0; r < BRK_ROWS; r++) {
+    for (let c = 0; c < BRK_COLS; c++) {
+      bricks.push({
+        x: BRK_BRICK_PAD + c * (brickW + BRK_BRICK_PAD), y: BRK_BRICK_TOP + r * (BRK_BRICK_H + BRK_BRICK_PAD),
+        w: brickW, h: BRK_BRICK_H, alive: true, color: BRK_COLORS[r % BRK_COLORS.length],
+      });
+    }
+  }
+  return bricks;
+}
+function startBreakoutGame() {
+  breakoutState = {
+    paddleX: BRK_W / 2 - BRK_PADDLE_W / 2, ballX: BRK_W / 2, ballY: BRK_PADDLE_Y - BRK_BALL_R - 1,
+    ballVX: 0, ballVY: 0, launched: false, bricks: breakoutBuildBricks(), score: 0, lives: 3, ended: false,
+  };
+  soloRetryHandler = startBreakoutGame;
+  document.getElementById("breakout-score").textContent = "0";
+  document.getElementById("breakout-lives").textContent = "3";
+  document.getElementById("breakout-hint").style.display = "flex";
+  wireBreakoutControls();
+  showScreen("screen-solo-breakout");
+  drawBreakout();
+  if (breakoutRaf) cancelAnimationFrame(breakoutRaf);
+  breakoutRaf = requestAnimationFrame(breakoutLoop);
+}
+document.getElementById("btn-breakout-quit").addEventListener("click", () => {
+  if (breakoutRaf) cancelAnimationFrame(breakoutRaf);
+  showScreen("screen-home");
+});
+document.getElementById("btn-breakout-restart").addEventListener("click", () => startBreakoutGame());
+function breakoutLaunch() {
+  if (!breakoutState || breakoutState.ended || breakoutState.launched) return;
+  breakoutState.launched = true;
+  document.getElementById("breakout-hint").style.display = "none";
+  const angle = -Math.PI / 2 + (Math.random() * 0.6 - 0.3);
+  breakoutState.ballVX = Math.cos(angle) * 3.6;
+  breakoutState.ballVY = Math.sin(angle) * 3.6;
+}
+function wireBreakoutControls() {
+  if (breakoutWired) return;
+  breakoutWired = true;
+  const canvas = document.getElementById("breakout-canvas");
+  canvas.addEventListener("pointerdown", (e) => { e.preventDefault(); breakoutLaunch(); });
+  canvas.addEventListener("pointermove", (e) => {
+    if (!breakoutState || breakoutState.ended) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (BRK_W / rect.width);
+    breakoutState.paddleX = Math.max(0, Math.min(BRK_W - BRK_PADDLE_W, x - BRK_PADDLE_W / 2));
+  });
+}
+function breakoutLoop() {
+  if (!breakoutState || breakoutState.ended) return;
+  const s = breakoutState;
+  if (s.launched) {
+    s.ballX += s.ballVX;
+    s.ballY += s.ballVY;
+    if (s.ballX - BRK_BALL_R < 0) { s.ballX = BRK_BALL_R; s.ballVX *= -1; }
+    if (s.ballX + BRK_BALL_R > BRK_W) { s.ballX = BRK_W - BRK_BALL_R; s.ballVX *= -1; }
+    if (s.ballY - BRK_BALL_R < 0) { s.ballY = BRK_BALL_R; s.ballVY *= -1; }
+    if (s.ballY + BRK_BALL_R >= BRK_PADDLE_Y && s.ballY + BRK_BALL_R <= BRK_PADDLE_Y + BRK_PADDLE_H + 6 &&
+        s.ballX >= s.paddleX && s.ballX <= s.paddleX + BRK_PADDLE_W && s.ballVY > 0) {
+      const hit = (s.ballX - (s.paddleX + BRK_PADDLE_W / 2)) / (BRK_PADDLE_W / 2);
+      const speed = Math.hypot(s.ballVX, s.ballVY);
+      const angle = hit * 1.1 - Math.PI / 2;
+      s.ballVX = Math.cos(angle) * speed;
+      s.ballVY = Math.sin(angle) * speed;
+      s.ballY = BRK_PADDLE_Y - BRK_BALL_R;
+    }
+    for (const b of s.bricks) {
+      if (!b.alive) continue;
+      if (s.ballX + BRK_BALL_R > b.x && s.ballX - BRK_BALL_R < b.x + b.w && s.ballY + BRK_BALL_R > b.y && s.ballY - BRK_BALL_R < b.y + b.h) {
+        b.alive = false;
+        s.score += 10;
+        document.getElementById("breakout-score").textContent = String(s.score);
+        vibrate(10);
+        const overlapX = Math.min(s.ballX + BRK_BALL_R - b.x, b.x + b.w - (s.ballX - BRK_BALL_R));
+        const overlapY = Math.min(s.ballY + BRK_BALL_R - b.y, b.y + b.h - (s.ballY - BRK_BALL_R));
+        if (overlapX < overlapY) s.ballVX *= -1; else s.ballVY *= -1;
+        break;
+      }
+    }
+    if (s.bricks.every(b => !b.alive)) {
+      s.ended = true;
+      if (breakoutRaf) cancelAnimationFrame(breakoutRaf);
+      setTimeout(() => showSoloEnd("win", "Toutes les briques cassées !", `Score final : ${s.score}.`), 200);
+      return;
+    }
+    if (s.ballY - BRK_BALL_R > BRK_H) {
+      s.lives--;
+      document.getElementById("breakout-lives").textContent = String(s.lives);
+      if (s.lives <= 0) {
+        s.ended = true;
+        if (breakoutRaf) cancelAnimationFrame(breakoutRaf);
+        vibrate([30, 30, 60]);
+        setTimeout(() => showSoloEnd("lose", "Perdu !", `Tu as perdu toutes tes vies. Score : ${s.score}.`), 250);
+        return;
+      }
+      s.launched = false;
+      s.ballX = s.paddleX + BRK_PADDLE_W / 2;
+      s.ballY = BRK_PADDLE_Y - BRK_BALL_R - 1;
+      s.ballVX = 0; s.ballVY = 0;
+      document.getElementById("breakout-hint").style.display = "flex";
+    }
+  } else {
+    s.ballX = s.paddleX + BRK_PADDLE_W / 2;
+  }
+  drawBreakout();
+  breakoutRaf = requestAnimationFrame(breakoutLoop);
+}
+function drawBreakout() {
+  const canvas = document.getElementById("breakout-canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, BRK_W, BRK_H);
+  ctx.fillStyle = "#10141c";
+  ctx.fillRect(0, 0, BRK_W, BRK_H);
+  const s = breakoutState;
+  s.bricks.forEach(b => { if (b.alive) { ctx.fillStyle = b.color; ctx.fillRect(b.x, b.y, b.w, b.h); } });
+  ctx.fillStyle = "#e5e7eb";
+  ctx.fillRect(s.paddleX, BRK_PADDLE_Y, BRK_PADDLE_W, BRK_PADDLE_H);
+  ctx.beginPath();
+  ctx.fillStyle = "#facc15";
+  ctx.arc(s.ballX, s.ballY, BRK_BALL_R, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+// ================= SOLO : BUBBLE SHOOTER =================
+let bubblesState = null, bubblesRaf = null, bubblesWired = false;
+const BUB_W = 300, BUB_H = 420;
+const BUB_COLS = 8, BUB_R = 15, BUB_CELL = BUB_R * 2, BUB_ROW_H = BUB_R * Math.sqrt(3), BUB_TOP = 20;
+const BUB_INIT_ROWS = 5;
+const BUB_COLORS = ["#ef4444", "#f97316", "#facc15", "#4ade80", "#60a5fa", "#c084fc"];
+const BUB_LOSE_Y = BUB_H - 60;
+function bubCellPos(row, col) {
+  const offsetX = (row % 2 === 1) ? BUB_R : 0;
+  return { x: BUB_R + col * BUB_CELL + offsetX, y: BUB_TOP + BUB_R + row * BUB_ROW_H };
+}
+function bubNeighbors(row, col) {
+  const even = row % 2 === 0;
+  const deltas = even
+    ? [[0, -1], [0, 1], [-1, -1], [-1, 0], [1, -1], [1, 0]]
+    : [[0, -1], [0, 1], [-1, 0], [-1, 1], [1, 0], [1, 1]];
+  return deltas.map(([dr, dc]) => [row + dr, col + dc]).filter(([r, c]) => r >= 0 && c >= 0 && c < BUB_COLS);
+}
+function bubBuildInitialGrid() {
+  const grid = [];
+  for (let r = 0; r < BUB_INIT_ROWS; r++) {
+    const row = [];
+    for (let c = 0; c < BUB_COLS; c++) row.push(Math.floor(Math.random() * BUB_COLORS.length));
+    grid.push(row);
+  }
+  return grid;
+}
+function startBubblesGame() {
+  bubblesState = {
+    grid: bubBuildInitialGrid(), shots: 0, score: 0, ended: false,
+    ball: null, // { x, y, vx, vy, color } pendant le vol
+    nextColor: Math.floor(Math.random() * BUB_COLORS.length),
+    shooterX: BUB_W / 2, shooterY: BUB_H - 30,
+  };
+  soloRetryHandler = startBubblesGame;
+  document.getElementById("bubbles-score").textContent = "0";
+  wireBubblesControls();
+  showScreen("screen-solo-bubbles");
+  drawBubbles();
+  if (bubblesRaf) cancelAnimationFrame(bubblesRaf);
+  bubblesRaf = requestAnimationFrame(bubblesLoop);
+}
+document.getElementById("btn-bubbles-quit").addEventListener("click", () => {
+  if (bubblesRaf) cancelAnimationFrame(bubblesRaf);
+  showScreen("screen-home");
+});
+document.getElementById("btn-bubbles-restart").addEventListener("click", () => startBubblesGame());
+function wireBubblesControls() {
+  if (bubblesWired) return;
+  bubblesWired = true;
+  const canvas = document.getElementById("bubbles-canvas");
+  canvas.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    if (!bubblesState || bubblesState.ended || bubblesState.ball) return;
+    const rect = canvas.getBoundingClientRect();
+    const tx = (e.clientX - rect.left) * (BUB_W / rect.width);
+    const ty = (e.clientY - rect.top) * (BUB_H / rect.height);
+    bubblesShoot(tx, ty);
+  });
+}
+function bubblesShoot(tx, ty) {
+  const s = bubblesState;
+  let dx = tx - s.shooterX, dy = ty - s.shooterY;
+  if (dy > -10) dy = -10; // on tire toujours vers le haut
+  const len = Math.hypot(dx, dy) || 1;
+  const speed = 7;
+  s.ball = { x: s.shooterX, y: s.shooterY, vx: (dx / len) * speed, vy: (dy / len) * speed, color: s.nextColor };
+  s.nextColor = Math.floor(Math.random() * BUB_COLORS.length);
+  vibrate(12);
+}
+function bubblesLoop() {
+  if (!bubblesState || bubblesState.ended) return;
+  const s = bubblesState;
+  if (s.ball) {
+    s.ball.x += s.ball.vx;
+    s.ball.y += s.ball.vy;
+    if (s.ball.x - BUB_R < 0) { s.ball.x = BUB_R; s.ball.vx *= -1; }
+    if (s.ball.x + BUB_R > BUB_W) { s.ball.x = BUB_W - BUB_R; s.ball.vx *= -1; }
+    let landed = null;
+    if (s.ball.y - BUB_R <= BUB_TOP) {
+      landed = bubNearestEmptyCell(0, s.ball.x);
+    } else {
+      outer:
+      for (let r = 0; r < s.grid.length; r++) for (let c = 0; c < BUB_COLS; c++) {
+        if (s.grid[r][c] == null) continue;
+        const pos = bubCellPos(r, c);
+        if (Math.hypot(pos.x - s.ball.x, pos.y - s.ball.y) < BUB_CELL - 4) {
+          landed = bubNearestEmptyNeighbor(r, c, s.ball.x, s.ball.y);
+          break outer;
+        }
+      }
+    }
+    if (landed) {
+      const { row, col } = landed;
+      while (s.grid.length <= row) s.grid.push(new Array(BUB_COLS).fill(null));
+      s.grid[row][col] = s.ball.color;
+      bubblesResolveMatch(row, col);
+      s.ball = null;
+      s.shots++;
+      if (s.shots % 5 === 0) bubblesAddRow();
+      if (bubblesCheckLose()) {
+        s.ended = true;
+        if (bubblesRaf) cancelAnimationFrame(bubblesRaf);
+        vibrate([30, 30, 60]);
+        setTimeout(() => showSoloEnd("lose", "Débordement !", `Les bulles ont atteint le bas. Score : ${s.score}.`), 250);
+        return;
+      }
+      if (bubblesGridEmpty()) {
+        s.ended = true;
+        if (bubblesRaf) cancelAnimationFrame(bubblesRaf);
+        setTimeout(() => showSoloEnd("win", "Plateau nettoyé !", `Bravo, toutes les bulles ont éclaté ! Score : ${s.score}.`), 200);
+        return;
+      }
+    }
+  }
+  drawBubbles();
+  bubblesRaf = requestAnimationFrame(bubblesLoop);
+}
+function bubNearestEmptyCell(row, x) {
+  let best = null, bestDist = Infinity;
+  for (let c = 0; c < BUB_COLS; c++) {
+    if (bubblesState.grid[row] && bubblesState.grid[row][c] != null) continue;
+    const pos = bubCellPos(row, c);
+    const d = Math.abs(pos.x - x);
+    if (d < bestDist) { bestDist = d; best = { row, col: c }; }
+  }
+  return best;
+}
+function bubNearestEmptyNeighbor(row, col, bx, by) {
+  const candidates = bubNeighbors(row, col).filter(([r, c]) => !(bubblesState.grid[r] && bubblesState.grid[r][c] != null));
+  if (!candidates.length) return bubNearestEmptyCell(Math.max(0, row - 1), bx);
+  let best = null, bestDist = Infinity;
+  for (const [r, c] of candidates) {
+    const pos = bubCellPos(r, c);
+    const d = Math.hypot(pos.x - bx, pos.y - by);
+    if (d < bestDist) { bestDist = d; best = { row: r, col: c }; }
+  }
+  return best;
+}
+function bubblesResolveMatch(row, col) {
+  const s = bubblesState;
+  const color = s.grid[row][col];
+  const seen = new Set([row + "," + col]);
+  const group = [[row, col]];
+  const stack = [[row, col]];
+  while (stack.length) {
+    const [r, c] = stack.pop();
+    for (const [nr, nc] of bubNeighbors(r, c)) {
+      const key = nr + "," + nc;
+      if (seen.has(key)) continue;
+      if (s.grid[nr] && s.grid[nr][nc] === color) { seen.add(key); group.push([nr, nc]); stack.push([nr, nc]); }
+    }
+  }
+  if (group.length >= 3) {
+    group.forEach(([r, c]) => { s.grid[r][c] = null; });
+    s.score += group.length * 10;
+    vibrate(15);
+    bubblesRemoveFloating();
+    document.getElementById("bubbles-score").textContent = String(s.score);
+  }
+}
+function bubblesRemoveFloating() {
+  const s = bubblesState;
+  const rows = s.grid.length;
+  const connected = new Set();
+  const stack = [];
+  for (let c = 0; c < BUB_COLS; c++) if (s.grid[0][c] != null) { connected.add("0," + c); stack.push([0, c]); }
+  while (stack.length) {
+    const [r, c] = stack.pop();
+    for (const [nr, nc] of bubNeighbors(r, c)) {
+      const key = nr + "," + nc;
+      if (nr < 0 || nr >= rows || connected.has(key)) continue;
+      if (s.grid[nr][nc] != null) { connected.add(key); stack.push([nr, nc]); }
+    }
+  }
+  let dropped = 0;
+  for (let r = 0; r < rows; r++) for (let c = 0; c < BUB_COLS; c++) {
+    if (s.grid[r][c] != null && !connected.has(r + "," + c)) { s.grid[r][c] = null; dropped++; }
+  }
+  if (dropped) s.score += dropped * 5;
+}
+function bubblesGridEmpty() {
+  return bubblesState.grid.every(row => row.every(v => v == null));
+}
+function bubblesCheckLose() {
+  const s = bubblesState;
+  for (let r = 0; r < s.grid.length; r++) for (let c = 0; c < BUB_COLS; c++) {
+    if (s.grid[r][c] != null && bubCellPos(r, c).y + BUB_R > BUB_LOSE_Y) return true;
+  }
+  return false;
+}
+function bubblesAddRow() {
+  const newRow = Array.from({ length: BUB_COLS }, () => Math.random() < 0.85 ? Math.floor(Math.random() * BUB_COLORS.length) : null);
+  bubblesState.grid.unshift(newRow);
+}
+function drawBubbles() {
+  const canvas = document.getElementById("bubbles-canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, BUB_W, BUB_H);
+  ctx.fillStyle = "#0a1622";
+  ctx.fillRect(0, 0, BUB_W, BUB_H);
+  const s = bubblesState;
+  ctx.strokeStyle = "rgba(239,68,68,.5)";
+  ctx.beginPath(); ctx.moveTo(0, BUB_LOSE_Y); ctx.lineTo(BUB_W, BUB_LOSE_Y); ctx.stroke();
+  for (let r = 0; r < s.grid.length; r++) for (let c = 0; c < BUB_COLS; c++) {
+    const color = s.grid[r][c];
+    if (color == null) continue;
+    const pos = bubCellPos(r, c);
+    ctx.beginPath();
+    ctx.fillStyle = BUB_COLORS[color];
+    ctx.arc(pos.x, pos.y, BUB_R - 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (s.ball) {
+    ctx.beginPath();
+    ctx.fillStyle = BUB_COLORS[s.ball.color];
+    ctx.arc(s.ball.x, s.ball.y, BUB_R - 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.beginPath();
+  ctx.fillStyle = BUB_COLORS[s.nextColor];
+  ctx.arc(s.shooterX, s.shooterY, BUB_R - 1.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = "#fff";
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
 // ================= MODE DUO : BATAILLE NAVALE EN LIGNE, chacun sur son appareil =================
 const BS_GRID = 8;
 let duoWs = null, myDuoNum = null, duo = null;
 let bsPlace = null; // état local du placement des navires, avant l'envoi au serveur
+let selectedDuoGame = "battleship"; // jeu choisi dans la modale, avant de créer un duel
+let duoGame = "battleship"; // jeu de la partie Duo en cours (confirmé par le serveur via duoWelcome)
 
 document.getElementById("btn-choose-duo").addEventListener("click", () => {
   document.getElementById("mode-choice-modal").style.display = "none";
@@ -1762,13 +2374,23 @@ document.getElementById("btn-choose-duo").addEventListener("click", () => {
 document.getElementById("btn-close-duo-choice").addEventListener("click", () => {
   document.getElementById("duo-choice-modal").style.display = "none";
 });
+document.querySelectorAll(".duo-game-choice").forEach(btn => {
+  btn.addEventListener("click", () => {
+    selectedDuoGame = btn.dataset.game;
+    document.querySelectorAll(".duo-game-choice").forEach(b => b.classList.toggle("active", b === btn));
+  });
+});
 document.getElementById("btn-duo-create").addEventListener("click", async () => {
   const pseudo = document.getElementById("input-pseudo").value.trim() || "Joueur";
   document.getElementById("duo-choice-modal").style.display = "none";
   try {
-    const res = await fetch(`${BACKEND_URL}/api/duo-create`, { method: "POST" });
+    const res = await fetch(`${BACKEND_URL}/api/duo-create`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ game: selectedDuoGame }),
+    });
     const data = await res.json();
-    connectDuo(data.code, pseudo);
+    connectDuo(data.code, pseudo, selectedDuoGame);
   } catch (e) {
     alert("Impossible de joindre le serveur. Vérifie ta connexion.");
   }
@@ -1788,15 +2410,34 @@ document.getElementById("btn-duo-quit").addEventListener("click", () => {
   if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
   showScreen("screen-home");
 });
+document.getElementById("btn-duo-c4-quit").addEventListener("click", () => {
+  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  showScreen("screen-home");
+});
+document.getElementById("btn-duo-rps-quit").addEventListener("click", () => {
+  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  showScreen("screen-home");
+});
+document.getElementById("btn-duo-ck-quit").addEventListener("click", () => {
+  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  showScreen("screen-home");
+});
+document.querySelectorAll(".rps-choice").forEach(btn => {
+  btn.addEventListener("click", () => {
+    if (!duo || duo.myChoice) return;
+    sendDuo({ type: "duoChoice", choice: btn.dataset.choice });
+  });
+});
 
-function connectDuo(code, pseudo) {
+function connectDuo(code, pseudo, game) {
   document.getElementById("duo-wait-code").textContent = code;
   document.getElementById("duo-wait-status").textContent = "Connexion au serveur...";
   showScreen("screen-duo-wait");
   myDuoNum = null;
   duo = null;
   bsPlace = null;
-  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?duo=1&code=${code}&pseudo=${encodeURIComponent(pseudo)}`;
+  duoGame = game || "battleship";
+  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?duo=1&code=${code}&pseudo=${encodeURIComponent(pseudo)}&game=${duoGame}`;
   try { duoWs = new WebSocket(wsUrl); } catch (e) { document.getElementById("duo-wait-status").textContent = "Connexion impossible."; return; }
   duoWs.onopen = () => { document.getElementById("duo-wait-status").textContent = "En attente qu'il/elle rejoigne..."; };
   duoWs.onmessage = (ev) => {
@@ -1806,7 +2447,7 @@ function connectDuo(code, pseudo) {
   duoWs.onerror = () => { document.getElementById("duo-wait-status").textContent = "Erreur de connexion au serveur."; };
   duoWs.onclose = () => {
     const active = document.querySelector(".screen.active").id;
-    if (active === "screen-duo-battle" || active === "screen-duo-place") {
+    if (["screen-duo-battle", "screen-duo-place", "screen-duo-connect4", "screen-duo-rps", "screen-duo-checkers"].includes(active)) {
       showSoloEnd("neutral", "Connexion perdue", "La connexion avec ton adversaire a été coupée.");
       soloRetryHandler = null;
     }
@@ -1814,16 +2455,36 @@ function connectDuo(code, pseudo) {
 }
 function onDuoMessage(msg) {
   if (msg.type === "error") { alert(msg.message); showScreen("screen-home"); return; }
-  if (msg.type === "duoWelcome") { myDuoNum = msg.num; return; }
+  if (msg.type === "duoWelcome") { myDuoNum = msg.num; duoGame = msg.game || "battleship"; return; }
   if (msg.type === "duoPlaceError") { setDuoPlaceHint(msg.message, true); return; }
   if (msg.type === "duoState") {
     const prevStatus = duo && duo.status;
     duo = msg;
+    if (msg.game) duoGame = msg.game;
     if (msg.status === "waiting") { showScreen("screen-duo-wait"); return; }
     if (msg.status === "placing") { renderDuoPlace(prevStatus); return; }
-    if (msg.status === "playing") { renderDuoBattle(); return; }
-    if (msg.status === "ended") { renderDuoEnd(); return; }
+    if (msg.status === "playing") {
+      if (duoGame === "connect4") { renderDuoConnect4(); return; }
+      if (duoGame === "rps") { renderDuoRps(); return; }
+      if (duoGame === "checkers") { renderDuoCheckers(); return; }
+      renderDuoBattle(); return;
+    }
+    if (msg.status === "ended") {
+      if (duoGame === "connect4") { renderDuoConnect4(); renderDuoGenericEnd(); return; }
+      if (duoGame === "rps") { renderDuoRps(); renderDuoGenericEnd(); return; }
+      if (duoGame === "checkers") { renderDuoCheckers(); renderDuoGenericEnd(); return; }
+      renderDuoEnd(); return;
+    }
   }
+}
+function renderDuoGenericEnd() {
+  const draw = duo.winner === null;
+  const won = duo.winner === myDuoNum;
+  showSoloEnd(draw ? "draw" : (won ? "win" : "lose"),
+    draw ? "Match nul !" : (won ? "Victoire !" : "Défaite..."),
+    draw ? "Personne ne l'emporte cette fois. Une revanche ?" :
+      (won ? "Bien joué, tu remportes ce duel !" : "Ton adversaire l'emporte cette fois. Une revanche ?"));
+  soloRetryHandler = () => sendDuo({ type: "duoRestart" });
 }
 
 function sendDuo(payload) { if (duoWs && duoWs.readyState === 1) duoWs.send(JSON.stringify(payload)); }
@@ -2051,6 +2712,132 @@ function renderDuoEnd() {
   showSoloEnd(won ? "win" : "lose", won ? "Victoire !" : "Défaite...",
     won ? "Tu as coulé toute la flotte adverse. GG !" : "Ta flotte a été entièrement coulée. Une revanche ?");
   soloRetryHandler = () => sendDuo({ type: "duoRestart" });
+}
+
+// ---- Puissance 4 (Connect 4) ----
+function renderDuoConnect4() {
+  if (!duo || myDuoNum === null) return;
+  if (document.querySelector(".screen.active").id !== "screen-duo-connect4") showScreen("screen-duo-connect4");
+  const myTurn = duo.turn === myDuoNum && duo.status === "playing";
+  const banner = document.getElementById("duo-c4-turn-banner");
+  banner.textContent = myTurn ? "🔴 À toi de jouer !" : `En attente de ${duo.opponent ? duo.opponent.pseudo : "l'adversaire"}...`;
+  banner.classList.toggle("bs-my-turn", myTurn);
+  const grid = document.getElementById("duo-c4-grid");
+  const rows = duo.board.length, cols = duo.board[0].length;
+  if (grid.children.length !== rows * cols) {
+    grid.innerHTML = "";
+    grid.style.setProperty("--c4-cols", cols);
+    for (let c = 0; c < cols; c++) {
+      const colEl = document.createElement("div");
+      colEl.className = "c4-col";
+      colEl.dataset.col = c;
+      for (let r = 0; r < rows; r++) {
+        const cell = document.createElement("div");
+        cell.className = "c4-cell";
+        colEl.appendChild(cell);
+      }
+      colEl.addEventListener("click", () => {
+        if (duo.turn === myDuoNum && duo.status === "playing") sendDuo({ type: "duoDrop", col: parseInt(colEl.dataset.col, 10) });
+      });
+      grid.appendChild(colEl);
+    }
+  }
+  grid.classList.toggle("c4-clickable", myTurn);
+  const cols2 = grid.children;
+  for (let c = 0; c < cols; c++) {
+    const cellEls = cols2[c].children;
+    for (let r = 0; r < rows; r++) {
+      const v = duo.board[r][c];
+      cellEls[r].className = "c4-cell" + (v === 1 ? " c4-p1" : v === 2 ? " c4-p2" : "");
+    }
+  }
+}
+
+// ---- Pierre-Feuille-Ciseaux ----
+const RPS_EMOJI = { rock: "✊", paper: "✋", scissors: "✌️" };
+const RPS_LABEL = { rock: "Pierre", paper: "Feuille", scissors: "Ciseaux" };
+function renderDuoRps() {
+  if (!duo || myDuoNum === null) return;
+  if (document.querySelector(".screen.active").id !== "screen-duo-rps") showScreen("screen-duo-rps");
+  document.getElementById("duo-rps-score").textContent =
+    `Toi ${duo.scores[myDuoNum]} — ${duo.scores[myDuoNum === 1 ? 2 : 1]} ${duo.opponent ? duo.opponent.pseudo : "Adversaire"}`;
+  const statusEl = document.getElementById("duo-rps-status");
+  const choicesWrap = document.getElementById("duo-rps-choices");
+  const resultEl = document.getElementById("duo-rps-result");
+  document.querySelectorAll(".rps-choice").forEach(btn => btn.classList.toggle("rps-choice-selected", duo.myChoice === btn.dataset.choice));
+  if (duo.lastResult) {
+    const myPick = duo.lastResult.choices[myDuoNum];
+    const oppPick = duo.lastResult.choices[myDuoNum === 1 ? 2 : 1];
+    const rw = duo.lastResult.roundWinner;
+    const text = rw === null ? "Égalité !" : (rw === myDuoNum ? "Tu remportes la manche !" : "L'adversaire remporte la manche.");
+    resultEl.innerHTML = `<div class="rps-result-row"><span>${RPS_EMOJI[myPick]} ${RPS_LABEL[myPick]}</span><span>vs</span><span>${RPS_EMOJI[oppPick]} ${RPS_LABEL[oppPick]}</span></div><p>${text}</p>`;
+    resultEl.style.display = "block";
+  } else {
+    resultEl.style.display = "none";
+  }
+  if (duo.status !== "playing") return;
+  if (duo.myChoice) {
+    statusEl.textContent = duo.opponentChose ? "Résolution de la manche..." : `Choix fait : ${RPS_EMOJI[duo.myChoice]}. En attente de l'adversaire...`;
+  } else {
+    statusEl.textContent = `Manche ${duo.round} — premier à ${duo.winTarget} manches gagnées. Choisis ton coup !`;
+  }
+  choicesWrap.classList.toggle("rps-choices-locked", !!duo.myChoice);
+}
+
+// ---- Dames (Checkers) ----
+let ckSelected = null; // {r,c} case sélectionnée en attente d'une destination
+function renderDuoCheckers() {
+  if (!duo || myDuoNum === null) return;
+  if (document.querySelector(".screen.active").id !== "screen-duo-checkers") showScreen("screen-duo-checkers");
+  const myTurn = duo.turn === myDuoNum && duo.status === "playing";
+  const banner = document.getElementById("duo-ck-turn-banner");
+  banner.textContent = myTurn ? "⚫ À toi de jouer !" : `En attente de ${duo.opponent ? duo.opponent.pseudo : "l'adversaire"}...`;
+  banner.classList.toggle("bs-my-turn", myTurn);
+  if (!myTurn) ckSelected = null;
+  const grid = document.getElementById("duo-ck-grid");
+  const size = duo.board.length;
+  if (grid.children.length !== size * size) {
+    grid.innerHTML = "";
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        const cell = document.createElement("div");
+        cell.dataset.r = r; cell.dataset.c = c;
+        cell.addEventListener("click", () => onCkCellTap(r, c));
+        grid.appendChild(cell);
+      }
+    }
+  }
+  const cells = grid.children;
+  for (let r = 0; r < size; r++) {
+    for (let c = 0; c < size; c++) {
+      const piece = duo.board[r][c];
+      const dark = (r + c) % 2 === 1;
+      let cls = "ck-cell " + (dark ? "ck-dark" : "ck-light");
+      if (ckSelected && ckSelected.r === r && ckSelected.c === c) cls += " ck-selected";
+      const cell = cells[r * size + c];
+      cell.className = cls;
+      cell.innerHTML = "";
+      if (piece) {
+        const el = document.createElement("div");
+        el.className = "ck-piece " + (piece.owner === myDuoNum ? "ck-piece-mine" : "ck-piece-theirs") + (piece.king ? " ck-piece-king" : "");
+        el.textContent = piece.king ? "♛" : "●";
+        cell.appendChild(el);
+      }
+    }
+  }
+}
+function onCkCellTap(r, c) {
+  if (!duo || duo.status !== "playing" || duo.turn !== myDuoNum) return;
+  const piece = duo.board[r][c];
+  if (piece && piece.owner === myDuoNum) {
+    ckSelected = (ckSelected && ckSelected.r === r && ckSelected.c === c) ? null : { r, c };
+    renderDuoCheckers();
+    return;
+  }
+  if (ckSelected) {
+    sendDuo({ type: "duoMove", fr: ckSelected.r, fc: ckSelected.c, tr: r, tc: c });
+    ckSelected = null;
+  }
 }
 
 
@@ -3386,15 +4173,18 @@ function teamBadge(p) {
 
 function statLine(p, mode) {
   if (mode === "koHunt" || mode === "chrono") return `${p.eliminations} K.O.`;
-  if (mode === "kingHill") return `${p.score} pts`;
-  if (mode === "survivor") return p.alive ? "vivant" : "K.O.";
+  if (mode === "kingHill" || mode === "zoneMobile") return `${p.score} pts`;
+  if (mode === "treasureHunt") return `${p.score} 💰`;
+  if (mode === "survivor" || mode === "escort") return p.alive ? "vivant" : "K.O.";
+  if (mode === "infection") return p.infected ? "infecté 🧟" : "humain";
   return "";
 }
 
 function statSort(p, mode) {
   if (mode === "koHunt" || mode === "chrono") return p.eliminations;
-  if (mode === "kingHill") return p.score;
-  if (mode === "survivor") return p.alive ? 1 : 0;
+  if (mode === "kingHill" || mode === "zoneMobile" || mode === "treasureHunt") return p.score;
+  if (mode === "survivor" || mode === "escort") return p.alive ? 1 : 0;
+  if (mode === "infection") return p.infected ? 0 : 1;
   return 0;
 }
 
@@ -3539,8 +4329,8 @@ function renderBoard() {
     });
   }
 
-  // colline (mode Roi de la case)
-  if (lastState.mode === "kingHill") {
+  // colline (mode Roi de la case / Zone mobile)
+  if (lastState.mode === "kingHill" || lastState.mode === "zoneMobile") {
     (lastState.hillCells || []).forEach(({ x, y }) => {
       const c = board.querySelector(`.cell[data-x="${x}"][data-y="${y}"]`);
       if (c) c.classList.add("hill");
@@ -3604,6 +4394,16 @@ function renderBoard() {
     const el = document.createElement("div");
     el.className = "powerup powerup-" + pu.type;
     el.textContent = POWERUP_ICON[pu.type] || "?";
+    c.appendChild(el);
+  });
+
+  // trésors (mode Chasse au trésor)
+  (lastState.treasures || []).forEach(t => {
+    const c = board.querySelector(`.cell[data-x="${t.x}"][data-y="${t.y}"]`);
+    if (!c) return;
+    const el = document.createElement("div");
+    el.className = "treasure-marker";
+    el.textContent = "💰";
     c.appendChild(el);
   });
 
@@ -3681,11 +4481,15 @@ function updatePlayerTokens() {
     if (p.slowedUntil && p.slowedUntil > now) statusIcons += "❄️";
     if (p.resistUntil && p.resistUntil > now) statusIcons += "🛡";
     if (p.speedUntil && p.speedUntil > now) statusIcons += "⚡";
+    if (lastState.mode === "infection" && p.infected) statusIcons += "🧟";
+    if (lastState.escortId && p.id === lastState.escortId) statusIcons += "🎯";
     el.querySelector(".pseudo-label").textContent = p.pseudo + (statusIcons ? " " + statusIcons : "") + (p.connected === false ? " · déco" : "");
     el.classList.toggle("me", p.id === myId);
     el.classList.toggle("dead", !p.alive);
     el.classList.toggle("disconnected", p.connected === false);
     el.classList.toggle("hidden-in-bush", !!p.hidden && p.alive);
+    el.classList.toggle("infected-token", lastState.mode === "infection" && !!p.infected);
+    el.classList.toggle("escort-token", !!lastState.escortId && p.id === lastState.escortId);
 
     const prev = prevPlayerStats.get(p.id);
     const respawned = !!(prev && prev.alive === false && p.alive === true);
@@ -3745,7 +4549,21 @@ function formatModeStatus() {
   if (lastState.suddenDeath) return `<strong>⚔ MORT SUBITE</strong> — le prochain K.O. gagne !${shrinkTxt}`;
   if (mode === "koHunt") return `<strong>Chasse au K.O.</strong> — objectif ${config.targetKO} K.O.${lastState.teamsEnabled ? " — cumul d'équipe" : ""}${shrinkTxt}`;
   if (mode === "kingHill") return `<strong>Roi de la case</strong> — objectif ${config.targetScore} pts, tiens le centre${shrinkTxt}`;
+  if (mode === "zoneMobile") return `<strong>Zone mobile</strong> — objectif ${config.targetScore} pts, la zone se déplace régulièrement${shrinkTxt}`;
+  if (mode === "treasureHunt") return `<strong>Chasse au trésor</strong> — objectif ${config.targetTreasures} 💰${lastState.teamsEnabled ? " — cumul d'équipe" : ""}${shrinkTxt}`;
   if (mode === "survivor") return `<strong>Dernier survivant</strong> — pas de respawn${shrinkTxt}`;
+  if (mode === "escort") {
+    const vip = lastState.players.find(p => p.id === lastState.escortId);
+    return `<strong>Escorte</strong> — protège/traque ${vip ? escapeHtml(vip.pseudo) : "le VIP"} 🎯${shrinkTxt}`;
+  }
+  if (mode === "infection") {
+    const remaining = Math.max(0, (lastState.infectionEndAt || 0) - Date.now());
+    const mm = Math.floor(remaining / 60000);
+    const ss = Math.floor((remaining % 60000) / 1000).toString().padStart(2, "0");
+    const me = lastState.players.find(p => p.id === myId);
+    const myStatus = me ? (me.infected ? "Tu es infecté 🧟, contamine les autres !" : "Tu es humain, fuis les infectés !") : "";
+    return `<strong>Infection</strong> — ${mm}:${ss} restantes. ${myStatus}${shrinkTxt}`;
+  }
   if (mode === "chrono") {
     const remaining = Math.max(0, (lastState.chronoEndAt || 0) - Date.now());
     const mm = Math.floor(remaining / 60000);
@@ -3758,7 +4576,7 @@ function formatModeStatus() {
 function startChronoTicker() {
   if (chronoTickHandle) clearInterval(chronoTickHandle);
   chronoTickHandle = setInterval(() => {
-    if (!lastState || lastState.status !== "playing" || lastState.mode !== "chrono") {
+    if (!lastState || lastState.status !== "playing" || (lastState.mode !== "chrono" && lastState.mode !== "infection")) {
       clearInterval(chronoTickHandle); chronoTickHandle = null; return;
     }
     const el = document.getElementById("mode-status");
@@ -3821,7 +4639,7 @@ function renderHud() {
   if (lastState.mode) {
     modeStatusEl.style.display = "block";
     modeStatusEl.innerHTML = formatModeStatus();
-    if (lastState.mode === "chrono" && !chronoTickHandle) startChronoTicker();
+    if ((lastState.mode === "chrono" || lastState.mode === "infection") && !chronoTickHandle) startChronoTicker();
   } else {
     modeStatusEl.style.display = "none";
   }
@@ -3937,9 +4755,11 @@ function renderPlayersPanel() {
     const bossTag = isBoss ? " 👑" : "";
     const botTag = p.isBot ? " 🤖" : "";
     const flagTag = carriedFlag ? " 🚩" : "";
+    const escortTag = lastState.escortId && p.id === lastState.escortId ? " 🎯" : "";
+    const infectedTag = lastState.mode === "infection" && p.infected ? " 🧟" : "";
     li.innerHTML = `<span class="dot" style="background:${displayColor(p.color)}"></span>
       ${teamBadge(p)}
-      <span class="pname">${escapeHtml(p.pseudo)}${bossTag}${botTag}${flagTag}${p.id===myId?" · toi":""}${!p.alive?" · K.O.":""}${stat?` · ${stat}`:""}${discoTxt}</span>
+      <span class="pname">${escapeHtml(p.pseudo)}${bossTag}${botTag}${flagTag}${escortTag}${infectedTag}${p.id===myId?" · toi":""}${!p.alive?" · K.O.":""}${stat?` · ${stat}`:""}${discoTxt}</span>
       <span class="hpbar"><span class="hpbar-fill" style="width:${pct}%;background:${barColor}"></span></span>`;
     if (isBoss) li.classList.add("boss-row");
     if (p.connected === false) li.style.opacity = "0.5";

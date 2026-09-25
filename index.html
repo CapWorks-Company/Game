@@ -236,6 +236,71 @@
   </div>
 </section>
 
+<!-- ===== ECRAN SOLO : SUDOKU ===== -->
+<section id="screen-solo-sudoku" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🔢 Sudoku</h2>
+    <p class="hint" style="text-align:center">Erreurs : <span id="sudoku-errors">0</span></p>
+    <div id="sudoku-grid" class="sudoku-grid"></div>
+    <div id="sudoku-numpad" class="sudoku-numpad"></div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:6px">Touche une case libre puis un chiffre. Remplis la grille sans répéter de chiffre sur une ligne, une colonne ou un carré.</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-sudoku-restart" class="btn btn-secondary">Nouvelle grille</button>
+      <button type="button" id="btn-sudoku-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : DEMINEUR ===== -->
+<section id="screen-solo-mines" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">💣 Démineur</h2>
+    <div class="mines-toolbar">
+      <p class="hint" style="margin:0">🚩 <span id="mines-flags">0</span> / <span id="mines-total">10</span></p>
+      <button type="button" id="btn-mines-flagmode" class="btn btn-secondary btn-small">🚩 Mode drapeau</button>
+    </div>
+    <div id="mines-grid" class="mines-grid"></div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:6px">Touche une case pour la révéler. Active le mode drapeau pour marquer les mines suspectées.</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-mines-restart" class="btn btn-secondary">Nouvelle grille</button>
+      <button type="button" id="btn-mines-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : CASSE-BRIQUES ===== -->
+<section id="screen-solo-breakout" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🧱 Casse-briques</h2>
+    <p class="hint" style="text-align:center">Score : <span id="breakout-score">0</span> — Vies : <span id="breakout-lives">3</span></p>
+    <div class="flappy-wrap">
+      <canvas id="breakout-canvas" width="300" height="400"></canvas>
+      <div id="breakout-hint" class="flappy-tap-hint">Touche l'écran pour lancer la balle !</div>
+    </div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Fais glisser le doigt pour déplacer la raquette. Casse toutes les briques !</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-breakout-restart" class="btn btn-secondary">Recommencer</button>
+      <button type="button" id="btn-breakout-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : BUBBLE SHOOTER ===== -->
+<section id="screen-solo-bubbles" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🫧 Bubble Shooter</h2>
+    <p class="hint" style="text-align:center">Score : <span id="bubbles-score">0</span></p>
+    <div class="flappy-wrap">
+      <canvas id="bubbles-canvas" width="300" height="420"></canvas>
+    </div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche l'écran pour viser et tirer une bulle. Regroupe 3 bulles de la même couleur pour les faire éclater.</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-bubbles-restart" class="btn btn-secondary">Recommencer</button>
+      <button type="button" id="btn-bubbles-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
 <!-- ===== ECRAN DUO : PLACEMENT DES NAVIRES (Bataille Navale en ligne) ===== -->
 <section id="screen-duo-place" class="screen">
   <div class="card">
@@ -266,6 +331,43 @@
     <div id="duo-my-grid" class="bs-grid"></div>
 
     <button type="button" id="btn-duo-quit" class="btn btn-secondary" style="margin-top:12px">Abandonner</button>
+  </div>
+</section>
+
+<!-- ===== ECRAN DUO : PUISSANCE 4 EN LIGNE ===== -->
+<section id="screen-duo-connect4" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">🔴 Puissance 4</h2>
+    <div id="duo-c4-turn-banner" class="bs-turn-banner">C'est ton tour</div>
+    <div id="duo-c4-grid" class="c4-grid"></div>
+    <button type="button" id="btn-duo-c4-quit" class="btn btn-secondary" style="margin-top:12px">Abandonner</button>
+  </div>
+</section>
+
+<!-- ===== ECRAN DUO : PIERRE-FEUILLE-CISEAUX EN LIGNE ===== -->
+<section id="screen-duo-rps" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">✂️ Pierre-Feuille-Ciseaux</h2>
+    <p id="duo-rps-score" class="hint" style="text-align:center;font-size:16px;font-weight:700">Toi 0 — 0 Adversaire</p>
+    <p id="duo-rps-status" class="bs-place-hint">Choisis ton coup !</p>
+    <div id="duo-rps-choices" class="rps-choices">
+      <button type="button" class="rps-choice" data-choice="rock">✊</button>
+      <button type="button" class="rps-choice" data-choice="paper">✋</button>
+      <button type="button" class="rps-choice" data-choice="scissors">✌️</button>
+    </div>
+    <div id="duo-rps-result" class="rps-result" style="display:none"></div>
+    <button type="button" id="btn-duo-rps-quit" class="btn btn-secondary" style="margin-top:12px">Abandonner</button>
+  </div>
+</section>
+
+<!-- ===== ECRAN DUO : DAMES EN LIGNE ===== -->
+<section id="screen-duo-checkers" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">⚫ Dames</h2>
+    <div id="duo-ck-turn-banner" class="bs-turn-banner">C'est ton tour</div>
+    <div id="duo-ck-grid" class="ck-grid"></div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche un pion puis une case pour le déplacer en diagonale. Saute par-dessus un pion adverse pour le prendre.</p>
+    <button type="button" id="btn-duo-ck-quit" class="btn btn-secondary" style="margin-top:12px">Abandonner</button>
   </div>
 </section>
 
@@ -700,8 +802,16 @@
   <div class="card" style="max-width:340px">
     <h2 class="lobby-title" style="font-size:19px">🕹️ Duo en ligne</h2>
     <p class="hint" style="font-size:12px">Chacun sur son propre appareil, connectés ensemble.</p>
-    <button type="button" id="btn-duo-create" class="btn btn-primary" style="margin-top:8px">Créer un duel</button>
+    <p class="hint" style="font-size:12px;margin-top:10px">Pour créer un duel, choisis d'abord le jeu :</p>
+    <div id="duo-game-picker" class="duo-game-picker">
+      <button type="button" class="duo-game-choice active" data-game="battleship">⚓<br>Bataille Navale</button>
+      <button type="button" class="duo-game-choice" data-game="connect4">🔴<br>Puissance 4</button>
+      <button type="button" class="duo-game-choice" data-game="rps">✂️<br>Pierre-Feuille-Ciseaux</button>
+      <button type="button" class="duo-game-choice" data-game="checkers">⚫<br>Dames</button>
+    </div>
+    <button type="button" id="btn-duo-create" class="btn btn-primary" style="margin-top:10px">Créer un duel</button>
     <div class="divider" style="margin:14px 0"><span>ou</span></div>
+    <p class="hint" style="font-size:12px;margin-top:-6px">Rejoindre reprend automatiquement le jeu choisi par ton adversaire.</p>
     <input type="text" id="duo-join-code" maxlength="5" placeholder="Code du duel" style="text-transform:uppercase; width:100%; padding:12px; margin-bottom:10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--text); font-size:16px; text-align:center; box-sizing:border-box">
     <button type="button" id="btn-duo-join" class="btn btn-secondary">Rejoindre</button>
     <button type="button" id="btn-close-duo-choice" class="btn btn-secondary" style="margin-top:10px">Annuler</button>

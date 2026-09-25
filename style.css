@@ -384,6 +384,15 @@ html, body {
   box-shadow: 0 3px 8px rgba(0,0,0,.5); transition: transform .05s linear;
 }
 
+/* ================= MODE DUO : CHOIX DU JEU ================= */
+.duo-game-picker { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 10px 0; }
+.duo-game-choice {
+  padding: 10px 6px; background: var(--panel-2); border: 2px solid var(--line); border-radius: 10px;
+  color: var(--text); font-size: 12px; font-weight: 600; text-align: center; cursor: pointer;
+  transition: border-color .15s ease, background .15s ease; line-height: 1.6;
+}
+.duo-game-choice.active { border-color: var(--accent); background: rgba(96,165,250,.12); }
+
 /* ================= MODE DUO : BATAILLE NAVALE EN LIGNE ================= */
 .bs-turn-banner {
   text-align: center; font-weight: 700; font-size: 14px; padding: 8px 10px; margin-bottom: 8px;
@@ -476,7 +485,8 @@ html, body {
   position: relative; width: 100%; max-width: 300px; margin: 14px auto 0;
   border-radius: 10px; overflow: hidden; border: 1px solid var(--line); touch-action: none;
 }
-#flappy-canvas { display: block; width: 100%; height: auto; background: linear-gradient(#4db8e8, #7fd6f2); }
+.flappy-wrap canvas { display: block; width: 100%; height: auto; }
+#flappy-canvas { background: linear-gradient(#4db8e8, #7fd6f2); }
 .flappy-tap-hint {
   position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   color: #fff; font-weight: 700; font-size: 14px; text-shadow: 0 1px 3px rgba(0,0,0,.6);
@@ -674,6 +684,11 @@ html, body {
 .powerup-heal { background: var(--hp-full); }
 .powerup-resist { background: #60a5fa; font-size: 11px; }
 .powerup-speed { background: #facc15; font-size: 11px; }
+.treasure-marker {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 60%; animation: pickup-bob 1.4s ease-in-out infinite;
+  filter: drop-shadow(0 0 3px rgba(250,204,21,.8));
+}
 .turn-banner {
   background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
   padding: 10px 14px; text-align: center; font-weight: 600; font-size: 14px;
@@ -735,6 +750,14 @@ html, body {
 .player-token.no-glide { transition: none; }
 .player-token.boss-token {
   border-radius: 8px; box-shadow: 0 0 0 2px #eab308 inset, 0 0 12px rgba(234,179,8,.6);
+}
+.player-token.infected-token {
+  box-shadow: 0 0 0 2px #4ade80 inset, 0 0 10px rgba(74,222,128,.7);
+  animation: infected-pulse 1.3s ease-in-out infinite;
+}
+@keyframes infected-pulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.35); } }
+.player-token.escort-token {
+  box-shadow: 0 0 0 2px #facc15 inset, 0 0 12px rgba(250,204,21,.7);
 }
 .player-token .pseudo-label {
   position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
@@ -1262,3 +1285,93 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
   animation-iteration-count: 1 !important;
   transition-duration: 0.01ms !important;
 }
+
+/* ================= MODE DUO : PUISSANCE 4 EN LIGNE ================= */
+.c4-grid {
+  display: grid; grid-template-columns: repeat(var(--c4-cols, 7), 1fr); gap: 4px;
+  width: 100%; max-width: 320px; margin: 0 auto; background: #0d3a63; border: 2px solid #1d5a94;
+  border-radius: 10px; padding: 6px;
+}
+.c4-col { display: flex; flex-direction: column; gap: 4px; cursor: default; border-radius: 6px; }
+.c4-grid.c4-clickable .c4-col { cursor: pointer; }
+.c4-grid.c4-clickable .c4-col:active { background: rgba(255,255,255,.08); }
+.c4-cell {
+  aspect-ratio: 1; border-radius: 50%; background: #08243f;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.4);
+}
+.c4-cell.c4-p1 { background: #ef4444; animation: c4-drop .28s cubic-bezier(.34,1.56,.64,1) both; box-shadow: inset 0 -2px 4px rgba(0,0,0,.25), 0 0 6px rgba(239,68,68,.6); }
+.c4-cell.c4-p2 { background: #facc15; animation: c4-drop .28s cubic-bezier(.34,1.56,.64,1) both; box-shadow: inset 0 -2px 4px rgba(0,0,0,.25), 0 0 6px rgba(250,204,21,.6); }
+@keyframes c4-drop { 0% { transform: scale(.3); opacity: 0; } 70% { transform: scale(1.15); opacity: 1; } 100% { transform: scale(1); } }
+
+/* ================= MODE DUO : PIERRE-FEUILLE-CISEAUX EN LIGNE ================= */
+.rps-choices { display: flex; gap: 10px; justify-content: center; margin: 16px 0; }
+.rps-choice {
+  width: 70px; height: 70px; border-radius: 50%; font-size: 30px; background: var(--panel-2);
+  border: 2px solid var(--line); cursor: pointer; transition: transform .15s ease, border-color .15s ease;
+  display: flex; align-items: center; justify-content: center;
+}
+.rps-choice:active { transform: scale(.92); }
+.rps-choice-selected { border-color: var(--accent); background: rgba(255,138,61,.15); transform: scale(1.05); }
+.rps-choices-locked .rps-choice:not(.rps-choice-selected) { opacity: .4; }
+.rps-result { text-align: center; margin: 14px 0; padding: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; }
+.rps-result-row { display: flex; gap: 10px; justify-content: center; align-items: center; font-size: 22px; margin-bottom: 6px; }
+.rps-result-row span:nth-child(2) { font-size: 12px; color: var(--text-dim); }
+.rps-result p { margin: 0; font-size: 13px; color: var(--text-dim); }
+
+/* ================= MODE DUO : DAMES EN LIGNE ================= */
+.ck-grid {
+  display: grid; grid-template-columns: repeat(8, 1fr); width: 100%; max-width: 300px; aspect-ratio: 1;
+  margin: 0 auto; border: 2px solid #2c4a63; border-radius: 8px; overflow: hidden;
+}
+.ck-cell { position: relative; display: flex; align-items: center; justify-content: center; }
+.ck-light { background: #d8c9a3; }
+.ck-dark { background: #6b4a2f; cursor: pointer; }
+.ck-dark.ck-selected { background: #8a6a3f; box-shadow: inset 0 0 0 3px #facc15; }
+.ck-piece {
+  width: 76%; height: 76%; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 18px; box-shadow: 0 2px 4px rgba(0,0,0,.4);
+}
+.ck-piece-mine { background: #ef4444; color: #fff; border: 2px solid #b91c1c; }
+.ck-piece-theirs { background: #f4f4f5; color: #333; border: 2px solid #a1a1aa; }
+.ck-piece-king { font-size: 20px; }
+
+/* ================= SOLO : SUDOKU ================= */
+.sudoku-grid {
+  display: grid; grid-template-columns: repeat(9, 1fr); width: 100%; max-width: 306px; aspect-ratio: 1;
+  margin: 10px auto; border: 2px solid #4b5563; border-radius: 6px; overflow: hidden; background: #1a1e28;
+}
+.sudoku-cell {
+  display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600;
+  background: #232838; color: var(--text); border: 1px solid #2b3140; cursor: pointer; user-select: none;
+}
+.sudoku-cell.sudoku-border-left { border-left: 2px solid #4b5563; }
+.sudoku-cell.sudoku-border-top { border-top: 2px solid #4b5563; }
+.sudoku-given { color: #93a3b8; background: #1a1e28; cursor: default; font-weight: 700; }
+.sudoku-selected { background: rgba(96,165,250,.28) !important; }
+.sudoku-invalid { color: #f87171 !important; }
+.sudoku-numpad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; max-width: 306px; margin: 0 auto; }
+.sudoku-num {
+  padding: 10px 0; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  color: var(--text); font-size: 16px; font-weight: 700; cursor: pointer;
+}
+.sudoku-num:active { background: var(--accent-dim); }
+.sudoku-erase { color: #f87171; }
+
+/* ================= SOLO : DEMINEUR ================= */
+.mines-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
+.btn-small { padding: 6px 10px; font-size: 12px; flex: none; }
+.btn-small.active { background: var(--accent); border-color: var(--accent); color: #1a1e28; }
+.mines-grid {
+  display: grid; grid-template-columns: repeat(9, 1fr); width: 100%; max-width: 306px; aspect-ratio: 1;
+  margin: 0 auto; gap: 2px; background: #0a1622; border: 2px solid #2c4a63; border-radius: 8px; padding: 4px;
+}
+.mines-cell {
+  display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; border-radius: 3px;
+}
+.mines-cell-hidden { background: #3b6a8f; cursor: pointer; }
+.mines-cell-hidden:active { background: #2c5170; }
+.mines-cell-revealed { background: #16202c; }
+.mines-cell-mine { background: #b91c1c; }
+
+/* ================= SOLO : CASSE-BRIQUES & BUBBLE SHOOTER ================= */
+#breakout-canvas, #bubbles-canvas { touch-action: none; }
