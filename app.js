@@ -558,6 +558,10 @@ const SOLO_GAMES = [
   { id: "sudoku", kind: "sudoku", icon: "🔢", label: "Sudoku", desc: "Remplis la grille 9x9 sans répéter de chiffre sur une ligne, une colonne ou un carré." },
   { id: "mines", kind: "mines", icon: "💣", label: "Démineur", desc: "Révèle toutes les cases sûres et repère les mines à l'aide des indices." },
   { id: "breakout", kind: "breakout", icon: "🧱", label: "Casse-briques", desc: "Dirige la raquette pour renvoyer la balle et casser toutes les briques." },
+  { id: "simon", kind: "simon", icon: "🎵", label: "Simon", desc: "Mémorise la séquence de bouées lumineuses et reproduis-la, elle s'allonge à chaque tour." },
+  { id: "peche", kind: "peche", icon: "🎣", label: "Pêche", desc: "Attrape les poissons qui passent, évite les déchets, marque un maximum de points." },
+  { id: "magic", kind: "magic", icon: "🎹", label: "Rythme des Vagues", desc: "Touche les bonnes colonnes au bon moment avant que les tuiles ne sortent de l'écran." },
+  { id: "darts", kind: "darts", icon: "🎯", label: "Fléchettes", desc: "Vise la cible en mouvement et lance au bon moment pour marquer un maximum de points." },
 ];
 let soloRetryHandler = null;
 
@@ -601,6 +605,10 @@ function openSoloHub() {
       else if (g.kind === "sudoku") startSudokuGame();
       else if (g.kind === "mines") startMinesGame();
       else if (g.kind === "breakout") startBreakoutGame();
+      else if (g.kind === "simon") startSimonGame();
+      else if (g.kind === "peche") startPecheGame();
+      else if (g.kind === "magic") startMagicGame();
+      else if (g.kind === "darts") startDartsGame();
     });
   });
   showScreen("screen-solo-hub");
@@ -1575,6 +1583,8 @@ function renderMorpion() {
 function onMorpionCellTap(idx) {
   if (morpionState.ended || morpionState.turn !== "X" || morpionState.board[idx]) return;
   morpionState.board[idx] = "X";
+  vibrate(10);
+  playTone(500, 0.06, "sine", 0.1);
   renderMorpion();
   const result = morpionResult(morpionState.board);
   if (result) { finishMorpion(result); return; }
@@ -1599,6 +1609,8 @@ function morpionAiMove() {
     move = best[Math.floor(Math.random() * best.length)];
   }
   board[move] = "O";
+  vibrate(8);
+  playTone(340, 0.06, "sine", 0.09);
   renderMorpion();
   const result = morpionResult(board);
   if (result) { finishMorpion(result); return; }
@@ -1896,8 +1908,30 @@ function renderSudokuGrid() {
 
 // ================= SOLO : DEMINEUR =================
 let minesState = null;
-const MINES_SIZE = 9, MINES_COUNT = 10;
+const MINES_DIFFICULTIES = {
+  mini: { size: 6, mines: 3 },
+  normal: { size: 9, mines: 10 },
+  grande: { size: 12, mines: 20 },
+};
+let minesDifficulty = localStorage.getItem("capnaval-mines-difficulty") || "normal";
+if (!MINES_DIFFICULTIES[minesDifficulty]) minesDifficulty = "normal";
+let MINES_SIZE = MINES_DIFFICULTIES[minesDifficulty].size, MINES_COUNT = MINES_DIFFICULTIES[minesDifficulty].mines;
+function setMinesDifficulty(diff) {
+  if (!MINES_DIFFICULTIES[diff]) return;
+  minesDifficulty = diff;
+  localStorage.setItem("capnaval-mines-difficulty", diff);
+  MINES_SIZE = MINES_DIFFICULTIES[diff].size;
+  MINES_COUNT = MINES_DIFFICULTIES[diff].mines;
+  document.querySelectorAll(".mines-diff-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.diff === diff));
+  const grid = document.getElementById("mines-grid");
+  grid.style.gridTemplateColumns = `repeat(${MINES_SIZE}, 1fr)`;
+  grid.style.setProperty("--mines-cell-font", Math.max(9, Math.round(150 / MINES_SIZE)) + "px");
+}
+document.querySelectorAll(".mines-diff-btn").forEach(btn => {
+  btn.addEventListener("click", () => { setMinesDifficulty(btn.dataset.diff); startMinesGame(); });
+});
 function startMinesGame() {
+  setMinesDifficulty(minesDifficulty);
   const total = MINES_SIZE * MINES_SIZE;
   const mineSet = new Set();
   while (mineSet.size < MINES_COUNT) mineSet.add(Math.floor(Math.random() * total));
@@ -2243,6 +2277,394 @@ function drawBreakout() {
   ctx.fill();
 }
 
+// ================= MINI-JEU SOLO : SIMON (bouées lumineuses) =================
+const SIMON_FREQS = [329.63, 392.00, 440.00, 523.25]; // Mi-Sol-La-Do : chaque bouée a sa note
+let simonState = null;
+let simonBest = parseInt(localStorage.getItem("capnaval-simon-best") || "0", 10) || 0;
+function startSimonGame() {
+  simonState = { sequence: [], userIndex: 0, level: 0, accepting: false, playing: false };
+  document.getElementById("simon-best").textContent = String(simonBest);
+  document.querySelectorAll(".simon-pad").forEach(pad => pad.classList.remove("simon-pad-lit", "simon-pad-wrong"));
+  showScreen("screen-solo-simon");
+  setTimeout(simonNextRound, 400);
+}
+function simonNextRound() {
+  const s = simonState;
+  s.sequence.push(Math.floor(Math.random() * 4));
+  s.level = s.sequence.length;
+  s.userIndex = 0;
+  s.accepting = false;
+  document.getElementById("simon-level").textContent = String(s.level);
+  document.getElementById("simon-hint").textContent = "Regarde bien la séquence...";
+  document.getElementById("simon-center").textContent = "👀";
+  simonPlaySequence();
+}
+function simonLightPad(i, duration) {
+  const pad = document.querySelector(`.simon-pad[data-pad="${i}"]`);
+  playTone(SIMON_FREQS[i], duration / 1000, "triangle", 0.18);
+  pad.classList.add("simon-pad-lit");
+  setTimeout(() => pad.classList.remove("simon-pad-lit"), duration);
+}
+function simonPlaySequence() {
+  const s = simonState;
+  s.playing = true;
+  const step = Math.max(280, 620 - s.level * 18); // la cadence s'accélère avec le niveau
+  s.sequence.forEach((padIdx, i) => {
+    setTimeout(() => simonLightPad(padIdx, step * 0.7), 500 + i * step);
+  });
+  setTimeout(() => {
+    s.playing = false;
+    s.accepting = true;
+    document.getElementById("simon-hint").textContent = "À toi ! Reproduis la séquence.";
+    document.getElementById("simon-center").textContent = "▶";
+  }, 500 + s.sequence.length * step);
+}
+function onSimonPadTap(i) {
+  const s = simonState;
+  if (!s || !s.accepting) return;
+  const expected = s.sequence[s.userIndex];
+  const pad = document.querySelector(`.simon-pad[data-pad="${i}"]`);
+  if (i === expected) {
+    vibrate(15);
+    playTone(SIMON_FREQS[i], 0.18, "triangle", 0.18);
+    pad.classList.add("simon-pad-lit");
+    setTimeout(() => pad.classList.remove("simon-pad-lit"), 180);
+    s.userIndex++;
+    if (s.userIndex === s.sequence.length) {
+      s.accepting = false;
+      if (s.level > simonBest) { simonBest = s.level; localStorage.setItem("capnaval-simon-best", String(simonBest)); }
+      setTimeout(simonNextRound, 700);
+    }
+  } else {
+    s.accepting = false;
+    vibrate([40, 30, 40, 30, 90]);
+    sfxKO();
+    document.querySelectorAll(".simon-pad").forEach(p => p.classList.add("simon-pad-wrong"));
+    document.getElementById("simon-grid").classList.add("fx-shake");
+    if (s.level > simonBest) { simonBest = s.level; localStorage.setItem("capnaval-simon-best", String(simonBest)); }
+    setTimeout(() => showSoloEnd("lose", "Séquence brisée !", `Tu es allé jusqu'au niveau ${s.level}. Record : ${simonBest}.`), 500);
+  }
+}
+document.querySelectorAll(".simon-pad").forEach(pad => {
+  pad.addEventListener("click", () => onSimonPadTap(parseInt(pad.dataset.pad, 10)));
+});
+document.getElementById("btn-simon-restart").addEventListener("click", startSimonGame);
+document.getElementById("btn-simon-quit").addEventListener("click", () => showScreen("screen-solo-hub"));
+
+// ================= MINI-JEU SOLO : PECHE (attrape ce qui passe, évite les déchets) =================
+const PECHE_DURATION = 30;
+const PECHE_FISH = [
+  { icon: "🐟", points: 1 }, { icon: "🐠", points: 2 }, { icon: "🐡", points: 3 }, { icon: "🦑", points: 4 },
+];
+const PECHE_JUNK = [{ icon: "🥾", points: -2 }, { icon: "👢", points: -2 }, { icon: "🛢️", points: -3 }];
+let pecheState = null;
+function startPecheGame() {
+  if (pecheState) { clearInterval(pecheState.spawnTimer); clearInterval(pecheState.tickTimer); }
+  const pond = document.getElementById("peche-pond");
+  pond.innerHTML = "";
+  pond.classList.remove("fx-shake");
+  pecheState = { score: 0, lives: 3, timeLeft: PECHE_DURATION, running: true, spawnTimer: null, tickTimer: null };
+  document.getElementById("peche-score").textContent = "0";
+  document.getElementById("peche-time").textContent = String(PECHE_DURATION);
+  document.getElementById("peche-lives").textContent = "3";
+  showScreen("screen-solo-peche");
+  pecheState.spawnTimer = setInterval(pecheSpawnCritter, 550);
+  pecheState.tickTimer = setInterval(pecheTick, 1000);
+  pecheSpawnCritter();
+}
+function pecheTick() {
+  const s = pecheState;
+  if (!s || !s.running) return;
+  s.timeLeft--;
+  document.getElementById("peche-time").textContent = String(Math.max(0, s.timeLeft));
+  if (s.timeLeft <= 0) pecheEndGame(true);
+}
+function pecheSpawnCritter() {
+  const s = pecheState;
+  if (!s || !s.running) return;
+  const pond = document.getElementById("peche-pond");
+  const isJunk = Math.random() < 0.28;
+  const item = isJunk ? PECHE_JUNK[Math.floor(Math.random() * PECHE_JUNK.length)] : PECHE_FISH[Math.floor(Math.random() * PECHE_FISH.length)];
+  const el = document.createElement("div");
+  el.className = "peche-critter" + (isJunk ? " peche-critter-junk" : "");
+  el.textContent = item.icon;
+  const lane = Math.random() * 82; // % du haut de la mare
+  const fromLeft = Math.random() < 0.5;
+  const duration = 2.4 + Math.random() * 1.6;
+  el.style.top = lane + "%";
+  el.style.animationDuration = duration + "s";
+  el.style.animationName = fromLeft ? "peche-swim-right" : "peche-swim-left";
+  if (fromLeft) el.style.transform = "scaleX(1)"; else el.style.transform = "scaleX(-1)";
+  let caught = false;
+  el.addEventListener("click", () => {
+    if (caught || !pecheState || !pecheState.running) return;
+    caught = true;
+    pecheCatch(el, item, isJunk);
+  });
+  el.addEventListener("animationend", () => { if (!caught) el.remove(); });
+  pond.appendChild(el);
+}
+function pecheCatch(el, item, isJunk) {
+  const s = pecheState;
+  s.score = Math.max(0, s.score + item.points);
+  document.getElementById("peche-score").textContent = String(s.score);
+  el.classList.add("peche-critter-pop");
+  el.style.animation = "none";
+  setTimeout(() => el.remove(), 220);
+  if (isJunk) {
+    s.lives--;
+    document.getElementById("peche-lives").textContent = String(Math.max(0, s.lives));
+    vibrate([30, 20, 30]);
+    sfxKO();
+    const pond = document.getElementById("peche-pond");
+    pond.classList.remove("fx-shake"); void pond.offsetWidth; pond.classList.add("fx-shake");
+    if (s.lives <= 0) { pecheEndGame(false); return; }
+  } else {
+    vibrate(15);
+    sfxPickup();
+  }
+}
+function pecheEndGame(timeUp) {
+  const s = pecheState;
+  if (!s || !s.running) return;
+  s.running = false;
+  clearInterval(s.spawnTimer);
+  clearInterval(s.tickTimer);
+  document.querySelectorAll("#peche-pond .peche-critter").forEach(el => el.remove());
+  const won = timeUp && s.lives > 0;
+  setTimeout(() => showSoloEnd(won ? "win" : "lose",
+    won ? "Belle pêche !" : "Chaviré !",
+    won ? `Le temps est écoulé, tu termines avec ${s.score} points !` : `Tu as perdu toutes tes vies avec ${s.score} points au compteur.`), 200);
+}
+document.getElementById("btn-peche-restart").addEventListener("click", startPecheGame);
+document.getElementById("btn-peche-quit").addEventListener("click", () => {
+  if (pecheState) { clearInterval(pecheState.spawnTimer); clearInterval(pecheState.tickTimer); pecheState.running = false; }
+  showScreen("screen-solo-hub");
+});
+
+// ================= MINI-JEU SOLO : RYTHME DES VAGUES (façon "Magic Tiles") =================
+const MAGIC_W = 300, MAGIC_H = 400, MAGIC_LANES = 4, MAGIC_LANE_W = MAGIC_W / MAGIC_LANES, MAGIC_TILE_H = 90;
+const MAGIC_NOTES = [392.00, 440.00, 523.25, 659.25]; // Sol-La-Do-Mi : une note par colonne
+let magicState = null, magicRaf = null, magicWired = false;
+let magicBest = parseInt(localStorage.getItem("capnaval-magic-best") || "0", 10) || 0;
+function startMagicGame() {
+  wireMagicControls();
+  magicState = { tiles: [], score: 0, speed: 2.6, spawnTimer: 0, spawnInterval: 60, ended: false, lastLane: -1, particles: [] };
+  document.getElementById("magic-score").textContent = "0";
+  document.getElementById("magic-best").textContent = String(magicBest);
+  document.getElementById("magic-hint").style.display = "flex";
+  showScreen("screen-solo-magic");
+  if (magicRaf) cancelAnimationFrame(magicRaf);
+  magicRaf = requestAnimationFrame(magicLoop);
+}
+function wireMagicControls() {
+  if (magicWired) return;
+  magicWired = true;
+  const canvas = document.getElementById("magic-canvas");
+  canvas.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    if (!magicState || magicState.ended) return;
+    document.getElementById("magic-hint").style.display = "none";
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) * (MAGIC_W / rect.width);
+    const lane = Math.max(0, Math.min(MAGIC_LANES - 1, Math.floor(x / MAGIC_LANE_W)));
+    onMagicLaneTap(lane);
+  });
+}
+// Touche-anytime façon Piano/Magic Tiles : une tuile peut être validée n'importe quand tant
+// qu'elle est visible dans sa colonne — pas besoin de viser une zone précise en bas de l'écran.
+function onMagicLaneTap(lane) {
+  const s = magicState;
+  if (!s || s.ended) return;
+  const idx = s.tiles.findIndex(t => t.lane === lane);
+  if (idx === -1) { magicGameOver(); return; }
+  const tile = s.tiles[idx];
+  s.tiles.splice(idx, 1);
+  s.score++;
+  document.getElementById("magic-score").textContent = String(s.score);
+  playTone(MAGIC_NOTES[lane], 0.15, "sine", 0.17);
+  vibrate(10);
+  magicSpawnBurst(lane * MAGIC_LANE_W + MAGIC_LANE_W / 2, Math.min(tile.y + MAGIC_TILE_H / 2, MAGIC_H - 20));
+}
+function magicSpawnBurst(x, y) {
+  for (let i = 0; i < 8; i++) {
+    const angle = Math.random() * Math.PI * 2, speed = 1 + Math.random() * 2.2;
+    magicState.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 1 });
+  }
+}
+function magicGameOver() {
+  const s = magicState;
+  if (!s || s.ended) return;
+  s.ended = true;
+  if (magicRaf) cancelAnimationFrame(magicRaf);
+  vibrate([30, 30, 60]);
+  sfxKO();
+  if (s.score > magicBest) { magicBest = s.score; localStorage.setItem("capnaval-magic-best", String(magicBest)); }
+  setTimeout(() => showSoloEnd("lose", "Rythme brisé !", `Score final : ${s.score}.`), 250);
+}
+function magicLoop() {
+  const s = magicState;
+  if (!s || s.ended) return;
+  s.spawnTimer++;
+  if (s.spawnTimer >= s.spawnInterval) {
+    s.spawnTimer = 0;
+    let lane = Math.floor(Math.random() * MAGIC_LANES);
+    if (lane === s.lastLane && Math.random() < 0.7) lane = (lane + 1 + Math.floor(Math.random() * (MAGIC_LANES - 1))) % MAGIC_LANES;
+    s.lastLane = lane;
+    s.tiles.push({ lane, y: -MAGIC_TILE_H });
+    s.speed = Math.min(7.5, s.speed + 0.06); // la cadence s'accélère au fil de la partie
+    s.spawnInterval = Math.max(32, s.spawnInterval - 0.45);
+  }
+  s.tiles.forEach(t => { t.y += s.speed; });
+  if (s.tiles.some(t => t.y > MAGIC_H)) { magicGameOver(); return; }
+  s.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life -= 0.05; });
+  s.particles = s.particles.filter(p => p.life > 0);
+  drawMagic();
+  magicRaf = requestAnimationFrame(magicLoop);
+}
+function drawMagic() {
+  const canvas = document.getElementById("magic-canvas");
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, MAGIC_W, MAGIC_H);
+  ctx.fillStyle = "#10141c";
+  ctx.fillRect(0, 0, MAGIC_W, MAGIC_H);
+  for (let i = 1; i < MAGIC_LANES; i++) {
+    ctx.strokeStyle = "rgba(255,255,255,.08)";
+    ctx.beginPath(); ctx.moveTo(i * MAGIC_LANE_W, 0); ctx.lineTo(i * MAGIC_LANE_W, MAGIC_H); ctx.stroke();
+  }
+  ctx.fillStyle = "rgba(74,222,128,.14)";
+  ctx.fillRect(0, MAGIC_H - 66, MAGIC_W, 66);
+  const s = magicState;
+  s.tiles.forEach(t => {
+    ctx.fillStyle = "#1a2230";
+    ctx.strokeStyle = "#4a90d9";
+    ctx.lineWidth = 2;
+    const x = t.lane * MAGIC_LANE_W + 3;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, t.y, MAGIC_LANE_W - 6, MAGIC_TILE_H - 6, 8);
+    else ctx.rect(x, t.y, MAGIC_LANE_W - 6, MAGIC_TILE_H - 6);
+    ctx.fill(); ctx.stroke();
+  });
+  s.particles.forEach(p => {
+    ctx.globalAlpha = Math.max(0, p.life);
+    ctx.fillStyle = "#facc15";
+    ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+  });
+  ctx.globalAlpha = 1;
+}
+document.getElementById("btn-magic-restart").addEventListener("click", startMagicGame);
+document.getElementById("btn-magic-quit").addEventListener("click", () => {
+  if (magicRaf) cancelAnimationFrame(magicRaf);
+  if (magicState) magicState.ended = true;
+  showScreen("screen-solo-hub");
+});
+
+// ================= MINI-JEU SOLO : FLECHETTES =================
+const DARTS_MAX_THROWS = 6, DARTS_WIN_SCORE = 100;
+let dartsState = null, dartsRaf = null, dartsWired = false;
+let dartsBest = parseInt(localStorage.getItem("capnaval-darts-best") || "0", 10) || 0;
+function startDartsGame() {
+  wireDartsControls();
+  document.querySelectorAll(".darts-mark, .darts-score-popup").forEach(el => el.remove());
+  dartsState = { throwNum: 1, score: 0, ended: false, locked: false, startTime: performance.now(), angSpeed: 2.1, radSpeed: 1.5, _lastX: 0, _lastY: 0, _lastRadius: 100 };
+  document.getElementById("darts-score").textContent = "0";
+  document.getElementById("darts-throw").textContent = "1";
+  document.getElementById("darts-maxthrows").textContent = String(DARTS_MAX_THROWS);
+  document.getElementById("darts-best").textContent = String(dartsBest);
+  document.getElementById("darts-hint").textContent = "Touche la cible au bon moment pour lancer ta fléchette au centre !";
+  showScreen("screen-solo-darts");
+  if (dartsRaf) cancelAnimationFrame(dartsRaf);
+  dartsRaf = requestAnimationFrame(dartsLoop);
+}
+function wireDartsControls() {
+  if (dartsWired) return;
+  dartsWired = true;
+  document.getElementById("darts-board").addEventListener("click", onDartsThrow);
+}
+// Le viseur décrit une trajectoire en spirale (angle + rayon qui pulse) autour du centre de la
+// cible ; le joueur doit taper au bon instant pour que le viseur soit proche du centre.
+function dartsLoop(now) {
+  const s = dartsState;
+  if (!s || s.ended || s.locked) return;
+  const t = (now - s.startTime) / 1000;
+  const board = document.getElementById("darts-board");
+  const baseRadius = board.clientWidth / 2 - 14;
+  const radius = baseRadius * (0.12 + 0.88 * Math.abs(Math.sin(t * s.radSpeed)));
+  const angle = t * s.angSpeed;
+  const x = Math.cos(angle) * radius, y = Math.sin(angle) * radius;
+  document.getElementById("darts-reticle").style.transform = `translate(${x}px, ${y}px)`;
+  s._lastX = x; s._lastY = y; s._lastRadius = baseRadius;
+  dartsRaf = requestAnimationFrame(dartsLoop);
+}
+function onDartsThrow() {
+  const s = dartsState;
+  if (!s || s.ended || s.locked) return;
+  s.locked = true;
+  if (dartsRaf) cancelAnimationFrame(dartsRaf);
+  const jitter = 10; // petit tremblement de main / brise, pour ne pas être 100% déterministe
+  const x = s._lastX + (Math.random() * 2 - 1) * jitter;
+  const y = s._lastY + (Math.random() * 2 - 1) * jitter;
+  const dist = Math.sqrt(x * x + y * y);
+  const frac = dist / s._lastRadius;
+  let points;
+  if (frac <= 0.08) points = 50;
+  else if (frac <= 0.18) points = 25;
+  else if (frac <= 0.4) points = 20;
+  else if (frac <= 0.6) points = 15;
+  else if (frac <= 0.8) points = 10;
+  else if (frac <= 1) points = 5;
+  else points = 0;
+  s.score += points;
+  document.getElementById("darts-score").textContent = String(s.score);
+  vibrate(points >= 25 ? [20, 20, 40] : points > 0 ? 12 : [30, 20, 30]);
+  if (points >= 25) sfxPickup(); else if (points > 0) playTone(440, 0.1, "sine", 0.12); else sfxKO();
+  const board = document.getElementById("darts-board");
+  const mark = document.createElement("div");
+  mark.className = "darts-mark";
+  mark.textContent = points > 0 ? "🎯" : "❌";
+  mark.style.left = `calc(50% + ${x}px)`;
+  mark.style.top = `calc(50% + ${y}px)`;
+  board.appendChild(mark);
+  const popup = document.createElement("div");
+  popup.className = "darts-score-popup";
+  popup.textContent = points > 0 ? `+${points}` : "Raté !";
+  popup.style.left = `calc(50% + ${x}px)`;
+  popup.style.top = `calc(50% + ${y}px)`;
+  board.appendChild(popup);
+  setTimeout(() => popup.remove(), 900);
+  document.getElementById("darts-hint").textContent = points > 0 ? `+${points} points !` : "Raté, dans le décor !";
+  setTimeout(() => {
+    if (s.throwNum >= DARTS_MAX_THROWS) {
+      dartsEndGame();
+    } else {
+      s.throwNum++;
+      s.locked = false;
+      s.startTime = performance.now();
+      s.angSpeed = Math.min(4.2, s.angSpeed + 0.28);
+      s.radSpeed = Math.min(3, s.radSpeed + 0.18);
+      document.getElementById("darts-throw").textContent = String(s.throwNum);
+      document.getElementById("darts-hint").textContent = "Touche la cible au bon moment pour lancer ta fléchette au centre !";
+      dartsRaf = requestAnimationFrame(dartsLoop);
+    }
+  }, 700);
+}
+function dartsEndGame() {
+  const s = dartsState;
+  s.ended = true;
+  if (s.score > dartsBest) { dartsBest = s.score; localStorage.setItem("capnaval-darts-best", String(dartsBest)); }
+  const won = s.score >= DARTS_WIN_SCORE;
+  vibrate(won ? [40, 30, 40, 30, 90] : [30, 30, 60]);
+  setTimeout(() => showSoloEnd(won ? "win" : "lose",
+    won ? "Belle partie !" : "Manqué...",
+    `Score final : ${s.score} / ${DARTS_MAX_THROWS * 50} en ${DARTS_MAX_THROWS} fléchettes.`), 300);
+}
+document.getElementById("btn-darts-restart").addEventListener("click", startDartsGame);
+document.getElementById("btn-darts-quit").addEventListener("click", () => {
+  if (dartsRaf) cancelAnimationFrame(dartsRaf);
+  if (dartsState) dartsState.ended = true;
+  showScreen("screen-solo-hub");
+});
+
 // ================= MODE DUO : BATAILLE NAVALE EN LIGNE, chacun sur son appareil =================
 const BS_GRID = 8;
 let duoWs = null, myDuoNum = null, duo = null;
@@ -2388,7 +2810,7 @@ function setDuoPlaceHint(text, isError) {
 function renderDuoPlace(prevStatus) {
   if (!duo) return;
   if (document.querySelector(".screen.active").id !== "screen-duo-place") showScreen("screen-duo-place");
-  if (!bsPlace || prevStatus !== "placing") initBsPlace();
+  if (!bsPlace || prevStatus !== "placing") { initBsPlace(); bsPrevMyShots = null; bsPrevReceived = null; }
   const readyBtn = document.getElementById("btn-duo-place-ready");
   const me = duo.me;
   if (me && me.ready) {
@@ -2444,24 +2866,96 @@ function bsCanPlace(ships, r, c, size, dir, excludeUid) {
   }
   return cells;
 }
+// ---- Silhouette des navires : reconstruit la forme (coque + arrondis de proue/poupe) ----
+// pour un groupe de cases appartenant au même navire (soit à partir de bsPlace.ships pendant
+// le placement, soit à partir de duo.me.board pendant la bataille, soit par recomposition des
+// cases "sunk" adjacentes côté adversaire, où la position exacte du navire n'est jamais connue).
+function bsCellsForShip(s) {
+  const cells = [];
+  for (let i = 0; i < s.size; i++) {
+    const rr = s.dir === 1 ? s.r + i : s.r;
+    const cc = s.dir === 0 ? s.c + i : s.c;
+    cells.push({ r: rr, c: cc });
+  }
+  return cells;
+}
+function bsGroupShipCells(board) {
+  const groups = new Map();
+  for (let r = 0; r < BS_GRID; r++) {
+    for (let c = 0; c < BS_GRID; c++) {
+      const id = board[r][c];
+      if (!id) continue;
+      if (!groups.has(id)) groups.set(id, []);
+      groups.get(id).push({ r, c });
+    }
+  }
+  return groups;
+}
+function bsGroupSunkCells(shots) {
+  const seen = new Set();
+  const groups = [];
+  for (let r = 0; r < BS_GRID; r++) {
+    for (let c = 0; c < BS_GRID; c++) {
+      if (shots[r][c] !== "sunk" || seen.has(r + "," + c)) continue;
+      const stack = [{ r, c }], group = [];
+      seen.add(r + "," + c);
+      while (stack.length) {
+        const cur = stack.pop();
+        group.push(cur);
+        [[cur.r - 1, cur.c], [cur.r + 1, cur.c], [cur.r, cur.c - 1], [cur.r, cur.c + 1]].forEach(([nr, nc]) => {
+          if (nr < 0 || nr >= BS_GRID || nc < 0 || nc >= BS_GRID) return;
+          const key = nr + "," + nc;
+          if (seen.has(key) || shots[nr][nc] !== "sunk") return;
+          seen.add(key);
+          stack.push({ r: nr, c: nc });
+        });
+      }
+      groups.push(group);
+    }
+  }
+  return groups;
+}
+function bsShipCellClasses(cells) {
+  const map = new Map();
+  if (!cells.length) return map;
+  const horizontal = cells.every(p => p.r === cells[0].r);
+  const sorted = cells.slice().sort((a, b) => horizontal ? a.c - b.c : a.r - b.r);
+  const n = sorted.length;
+  sorted.forEach((p, i) => {
+    let cls = " bs-ship-seg" + (horizontal ? " bs-ship-h" : " bs-ship-v");
+    if (i === 0) cls += horizontal ? " bs-ship-cap-left" : " bs-ship-cap-top";
+    if (i === n - 1) cls += horizontal ? " bs-ship-cap-right" : " bs-ship-cap-bottom";
+    map.set(p.r + "," + p.c, cls);
+  });
+  return map;
+}
+function bsShapeMapForShips(shipLikeList) {
+  const shapeByCell = new Map();
+  shipLikeList.forEach(cells => {
+    const classes = bsShipCellClasses(cells);
+    cells.forEach(({ r, c }) => shapeByCell.set(r + "," + c, classes.get(r + "," + c) || ""));
+  });
+  return shapeByCell;
+}
 function renderBsPlaceGrid(readonly) {
   const grid = document.getElementById("duo-place-grid");
   grid.innerHTML = "";
   const occByCell = new Map();
+  const shipGroups = [];
   bsPlace.ships.forEach(s => {
     if (!s.placed) return;
-    for (let i = 0; i < s.size; i++) {
-      const rr = s.dir === 1 ? s.r + i : s.r;
-      const cc = s.dir === 0 ? s.c + i : s.c;
-      occByCell.set(rr + "," + cc, s.uid);
-    }
+    const cells = bsCellsForShip(s);
+    shipGroups.push(cells);
+    cells.forEach(({ r, c }) => occByCell.set(r + "," + c, s.uid));
   });
+  const shapeByCell = bsShapeMapForShips(shipGroups);
   for (let r = 0; r < BS_GRID; r++) {
     for (let c = 0; c < BS_GRID; c++) {
       const cell = document.createElement("div");
-      const hasShip = occByCell.has(r + "," + c);
-      cell.className = "bs-cell" + (hasShip ? " bs-cell-ship" : "") + (!readonly ? " bs-cell-clickable" : "");
-      if (!readonly) cell.addEventListener("click", () => onBsPlaceCellTap(r, c, hasShip ? occByCell.get(r + "," + c) : null));
+      const key = r + "," + c;
+      const hasShip = occByCell.has(key);
+      cell.className = "bs-cell" + (hasShip ? " bs-cell-ship" + (shapeByCell.get(key) || "") : "") + (!readonly ? " bs-cell-clickable" : "");
+      if (!readonly) cell.addEventListener("click", () => onBsPlaceCellTap(r, c, hasShip ? occByCell.get(key) : null));
       grid.appendChild(cell);
     }
   }
@@ -2496,6 +2990,7 @@ function onBsPlaceCellTap(r, c, existingUid) {
 document.getElementById("btn-duo-place-rotate").addEventListener("click", () => {
   if (!bsPlace) return;
   bsPlace.dir = bsPlace.dir === 0 ? 1 : 0;
+  vibrate(8);
   renderBsShipPalette();
 });
 document.getElementById("btn-duo-place-random").addEventListener("click", () => {
@@ -2559,16 +3054,38 @@ function renderDuoBattle() {
   renderBsEnemyGrid(myTurn);
   renderBsMyGrid();
 }
+function bsFireFeedback(prevGrid, nowGrid, isOwnFleetHit) {
+  // Compare l'ancien et le nouvel état des tirs pour ne déclencher son/vibration que sur les
+  // cases qui viennent tout juste de changer (évite de rejouer les effets à chaque re-render).
+  if (!prevGrid) return;
+  for (let r = 0; r < BS_GRID; r++) {
+    for (let c = 0; c < BS_GRID; c++) {
+      const prev = prevGrid[r][c], now = nowGrid[r][c];
+      if (prev === now) continue;
+      if (now === "sunk") { sfxExplosion(); vibrate(isOwnFleetHit ? [50, 40, 50, 40, 120] : [40, 30, 40, 30, 90]); }
+      else if (now === "hit") { isOwnFleetHit ? sfxKO() : sfxImpact(); vibrate(isOwnFleetHit ? [30, 20, 30] : 25); }
+      else if (now === "miss" && !isOwnFleetHit) { vibrate(8); }
+    }
+  }
+}
+let bsPrevMyShots = null, bsPrevReceived = null;
 function renderBsEnemyGrid(myTurn) {
   const grid = ensureBsGridCells("duo-enemy-grid");
   const shots = duo.myShots;
+  bsFireFeedback(bsPrevMyShots, shots, false);
+  bsPrevMyShots = shots.map(row => row.slice());
+  // La grille adverse est cachée : on ne connaît la forme d'un navire que lorsqu'il est
+  // entièrement coulé (état "sunk" sur toutes ses cases) — on la reconstruit par cases adjacentes.
+  const shapeByCell = bsShapeMapForShips(bsGroupSunkCells(shots));
   const cells = grid.children;
   for (let r = 0; r < BS_GRID; r++) {
     for (let c = 0; c < BS_GRID; c++) {
       const cell = cells[r * BS_GRID + c];
       const v = shots[r][c];
+      const key = r + "," + c;
       let cls = "bs-cell";
-      if (v === "hit") cls += " bs-cell-hit";
+      if (v === "sunk") cls += " bs-cell-sunk" + (shapeByCell.get(key) || "");
+      else if (v === "hit") cls += " bs-cell-hit";
       else if (v === "miss") cls += " bs-cell-miss";
       else if (myTurn) cls += " bs-cell-clickable";
       cell.className = cls; // ré-assigner la même chaîne ne rejoue pas les animations CSS déjà terminées
@@ -2579,15 +3096,20 @@ function renderBsEnemyGrid(myTurn) {
 function renderBsMyGrid() {
   const grid = ensureBsGridCells("duo-my-grid");
   const board = duo.me.board, received = duo.me.shotsReceived;
+  bsFireFeedback(bsPrevReceived, received, true);
+  bsPrevReceived = received.map(row => row.slice());
+  const shapeByCell = bsShapeMapForShips([...bsGroupShipCells(board).values()]);
   const cells = grid.children;
   for (let r = 0; r < BS_GRID; r++) {
     for (let c = 0; c < BS_GRID; c++) {
       const cell = cells[r * BS_GRID + c];
       const shot = received[r][c];
+      const key = r + "," + c;
       let cls = "bs-cell";
-      if (shot === "hit") cls += " bs-cell-hit";
+      if (shot === "sunk") cls += " bs-cell-sunk" + (shapeByCell.get(key) || "");
+      else if (shot === "hit") cls += " bs-cell-hit" + (board[r][c] ? shapeByCell.get(key) || "" : "");
       else if (shot === "miss") cls += " bs-cell-miss";
-      else if (board[r][c]) cls += " bs-cell-ship";
+      else if (board[r][c]) cls += " bs-cell-ship" + (shapeByCell.get(key) || "");
       cell.className = cls;
     }
   }

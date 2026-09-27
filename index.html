@@ -261,8 +261,13 @@
 <section id="screen-solo-mines" class="screen">
   <div class="card" id="mines-card">
     <h2 class="lobby-title">💣 Démineur</h2>
+    <div id="mines-difficulty" class="mines-difficulty">
+      <button type="button" class="btn btn-secondary btn-small mines-diff-btn" data-diff="mini">Mini</button>
+      <button type="button" class="btn btn-secondary btn-small mines-diff-btn" data-diff="normal">Normale</button>
+      <button type="button" class="btn btn-secondary btn-small mines-diff-btn" data-diff="grande">Grande</button>
+    </div>
     <div class="mines-toolbar">
-      <p class="hint" style="margin:0">🚩 <span id="mines-flags">0</span> / <span id="mines-total">10</span></p>
+      <p class="hint mines-flag-counter">🚩 <span id="mines-flags">0</span> / <span id="mines-total">10</span></p>
       <button type="button" id="btn-mines-flagmode" class="btn btn-secondary btn-small">🚩 Mode drapeau</button>
     </div>
     <div id="mines-grid" class="mines-grid"></div>
@@ -287,6 +292,77 @@
     <div class="solo-game-btns">
       <button type="button" id="btn-breakout-restart" class="btn btn-secondary">Recommencer</button>
       <button type="button" id="btn-breakout-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : SIMON ===== -->
+<section id="screen-solo-simon" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🎵 Simon</h2>
+    <p class="hint" style="text-align:center">Niveau : <span id="simon-level">0</span> — Record : <span id="simon-best">0</span></p>
+    <div id="simon-grid" class="simon-grid">
+      <button type="button" class="simon-pad simon-pad-0" data-pad="0"></button>
+      <button type="button" class="simon-pad simon-pad-1" data-pad="1"></button>
+      <button type="button" class="simon-pad simon-pad-2" data-pad="2"></button>
+      <button type="button" class="simon-pad simon-pad-3" data-pad="3"></button>
+      <div class="simon-center" id="simon-center">▶</div>
+    </div>
+    <p id="simon-hint" class="hint" style="font-size:12px;text-align:center;margin-top:8px">Observe la séquence de bouées lumineuses, puis reproduis-la dans le même ordre.</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-simon-restart" class="btn btn-secondary">Nouvelle partie</button>
+      <button type="button" id="btn-simon-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : PECHE ===== -->
+<section id="screen-solo-peche" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🎣 Pêche</h2>
+    <p class="hint" style="text-align:center">Score : <span id="peche-score">0</span> — ⏱️ <span id="peche-time">30</span>s — Vies : <span id="peche-lives">3</span></p>
+    <div id="peche-pond" class="peche-pond"></div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche les poissons pour les attraper. Évite de toucher les déchets, ça te coûte une vie !</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-peche-restart" class="btn btn-secondary">Recommencer</button>
+      <button type="button" id="btn-peche-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : RYTHME DES VAGUES (façon "Magic Tiles") ===== -->
+<section id="screen-solo-magic" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🎹 Rythme des Vagues</h2>
+    <p class="hint" style="text-align:center">Score : <span id="magic-score">0</span> — Record : <span id="magic-best">0</span></p>
+    <div class="flappy-wrap">
+      <canvas id="magic-canvas" width="300" height="400"></canvas>
+      <div id="magic-hint" class="flappy-tap-hint">Touche la colonne quand une tuile y tombe !</div>
+    </div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche la bonne colonne avant qu'une tuile ne sorte de l'écran. Une erreur ou un raté, et c'est terminé !</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-magic-restart" class="btn btn-secondary">Recommencer</button>
+      <button type="button" id="btn-magic-quit" class="btn btn-secondary">Retour</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== ECRAN SOLO : FLECHETTES ===== -->
+<section id="screen-solo-darts" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🎯 Fléchettes</h2>
+    <p class="hint" style="text-align:center">
+      Score : <span id="darts-score">0</span> — Fléchette <span id="darts-throw">1</span>/<span id="darts-maxthrows">6</span> — Record : <span id="darts-best">0</span>
+    </p>
+    <div class="darts-wrap">
+      <div id="darts-board" class="darts-board">
+        <div id="darts-reticle" class="darts-reticle">✛</div>
+      </div>
+    </div>
+    <p id="darts-hint" class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche la cible au bon moment pour lancer ta fléchette au centre !</p>
+    <div class="solo-game-btns">
+      <button type="button" id="btn-darts-restart" class="btn btn-secondary">Nouvelle partie</button>
+      <button type="button" id="btn-darts-quit" class="btn btn-secondary">Retour</button>
     </div>
   </div>
 </section>

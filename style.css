@@ -405,7 +405,7 @@ html, body {
 .bs-fleet-count { font-size: 11px; color: var(--text-dim); text-align: center; margin-bottom: 2px; }
 
 .bs-grid {
-  display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px;
+  display: grid; grid-template-columns: repeat(8, 1fr); grid-auto-rows: 1fr; gap: 3px;
   width: 100%; max-width: 300px; aspect-ratio: 1; margin: 0 auto;
   background: #0a1622; border: 2px solid #2c4a63; border-radius: 8px; padding: 5px;
   touch-action: none;
@@ -413,6 +413,7 @@ html, body {
 .bs-cell {
   position: relative; background: #123047; border-radius: 3px;
   display: flex; align-items: center; justify-content: center; font-size: 11px;
+  aspect-ratio: 1; overflow: hidden; line-height: 1;
 }
 .bs-cell-ship { background: #3b6a8f; }
 .bs-cell-clickable { cursor: pointer; }
@@ -428,8 +429,27 @@ html, body {
   content: "🔥"; font-size: 13px; animation: bs-pop .28s cubic-bezier(.34,1.56,.64,1) both;
 }
 .bs-cell-sunk { background: #6b1f16 !important; }
-.bs-cell-sunk::after { content: "☠️"; font-size: 12px; animation: bs-pop .3s cubic-bezier(.34,1.56,.64,1) both; }
+.bs-cell-sunk::after {
+  content: "🔥"; font-size: 13px; filter: grayscale(1) brightness(1.35);
+  animation: bs-pop .3s cubic-bezier(.34,1.56,.64,1) both;
+}
 @keyframes bs-pop { 0% { transform: scale(0); } 60% { transform: scale(1.3); } 100% { transform: scale(1); } }
+
+/* ---- Silhouette des navires (case = segment de coque, arrondi aux extrémités) ---- */
+.bs-ship-seg { box-sizing: border-box; }
+.bs-ship-h { border-top: 2px solid rgba(255,255,255,.2); border-bottom: 2px solid rgba(255,255,255,.2); }
+.bs-ship-h.bs-ship-cap-left { border-left: 2px solid rgba(255,255,255,.2); border-top-left-radius: 50%; border-bottom-left-radius: 50%; }
+.bs-ship-h.bs-ship-cap-right { border-right: 2px solid rgba(255,255,255,.2); border-top-right-radius: 50%; border-bottom-right-radius: 50%; }
+.bs-ship-v { border-left: 2px solid rgba(255,255,255,.2); border-right: 2px solid rgba(255,255,255,.2); }
+.bs-ship-v.bs-ship-cap-top { border-top: 2px solid rgba(255,255,255,.2); border-top-left-radius: 50%; border-top-right-radius: 50%; }
+.bs-ship-v.bs-ship-cap-bottom { border-bottom: 2px solid rgba(255,255,255,.2); border-bottom-left-radius: 50%; border-bottom-right-radius: 50%; }
+/* Navire coulé : on l'entoure d'un trait noir */
+.bs-cell-sunk.bs-ship-h { border-top-width: 3px; border-bottom-width: 3px; border-top-color: #0a0a0a; border-bottom-color: #0a0a0a; }
+.bs-cell-sunk.bs-ship-h.bs-ship-cap-left { border-left-width: 3px; border-left-color: #0a0a0a; }
+.bs-cell-sunk.bs-ship-h.bs-ship-cap-right { border-right-width: 3px; border-right-color: #0a0a0a; }
+.bs-cell-sunk.bs-ship-v { border-left-width: 3px; border-right-width: 3px; border-left-color: #0a0a0a; border-right-color: #0a0a0a; }
+.bs-cell-sunk.bs-ship-v.bs-ship-cap-top { border-top-width: 3px; border-top-color: #0a0a0a; }
+.bs-cell-sunk.bs-ship-v.bs-ship-cap-bottom { border-bottom-width: 3px; border-bottom-color: #0a0a0a; }
 .bs-shake { animation: bs-shake-anim .3s ease; }
 @keyframes bs-shake-anim {
   0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); }
@@ -465,13 +485,13 @@ html, body {
 
 /* ---- Morpion contre IA ---- */
 .morpion-grid {
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: 8px;
   width: 100%; max-width: 260px; aspect-ratio: 1; margin: 14px auto 0;
 }
 .morpion-cell {
   background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
   display: flex; align-items: center; justify-content: center; font-size: 34px; font-weight: 700;
-  cursor: pointer; color: var(--text);
+  cursor: pointer; color: var(--text); aspect-ratio: 1; overflow: hidden; line-height: 1;
 }
 .morpion-cell-x { color: #60a5fa; }
 .morpion-cell-o { color: #f87171; }
@@ -1400,10 +1420,10 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
 
 /* ================= MODE DUO : DAMES EN LIGNE ================= */
 .ck-grid {
-  display: grid; grid-template-columns: repeat(8, 1fr); width: 100%; max-width: 300px; aspect-ratio: 1;
+  display: grid; grid-template-columns: repeat(8, 1fr); grid-auto-rows: 1fr; width: 100%; max-width: 300px; aspect-ratio: 1;
   margin: 0 auto; border: 2px solid #2c4a63; border-radius: 8px; overflow: hidden;
 }
-.ck-cell { position: relative; display: flex; align-items: center; justify-content: center; }
+.ck-cell { position: relative; display: flex; align-items: center; justify-content: center; aspect-ratio: 1; overflow: hidden; line-height: 1; }
 .ck-light { background: #d8c9a3; }
 .ck-dark { background: #6b4a2f; cursor: pointer; }
 .ck-dark.ck-selected { background: #8a6a3f; box-shadow: inset 0 0 0 3px #facc15; }
@@ -1439,7 +1459,14 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
 
 /* ================= SOLO : DEMINEUR ================= */
 #mines-card { position: relative; overflow: hidden; }
-.mines-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
+.mines-difficulty { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin: 4px 0 10px; }
+.mines-diff-btn { flex: none; padding: 6px 4px; font-size: 12px; white-space: nowrap; }
+.mines-diff-btn.active { background: var(--accent); border-color: var(--accent); color: #1a1e28; }
+.mines-toolbar { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; margin: 8px 0; }
+.mines-flag-counter {
+  margin: 0; padding: 4px 12px; border: 2px solid #000; border-radius: 20px; background: var(--panel-2);
+  font-weight: 700;
+}
 .btn-small { padding: 6px 10px; font-size: 12px; flex: none; }
 .btn-small.active { background: var(--accent); border-color: var(--accent); color: #1a1e28; }
 .mines-grid {
@@ -1451,7 +1478,7 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
    les lignes de la grille se redimensionnaient au contenu et "déformaient" tout le quadrillage. */
 .mines-cell {
   position: relative; aspect-ratio: 1; overflow: hidden; display: flex; align-items: center; justify-content: center;
-  font-size: 15px; line-height: 1; font-weight: 700; border-radius: 3px; user-select: none;
+  font-size: var(--mines-cell-font, 15px); line-height: 1; font-weight: 700; border-radius: 3px; user-select: none;
   transition: background .15s ease;
 }
 .mines-cell-hidden { background: #3b6a8f; cursor: pointer; }
@@ -1498,3 +1525,70 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
 
 /* ================= SOLO : CASSE-BRIQUES ================= */
 #breakout-canvas { touch-action: none; }
+
+/* ================= SOLO : SIMON ================= */
+.simon-grid {
+  position: relative; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 10px;
+  width: 100%; max-width: 280px; aspect-ratio: 1; margin: 16px auto 0; border-radius: 50%; overflow: hidden;
+  padding: 10px; background: #0a1622; border: 3px solid #2c4a63;
+}
+.simon-pad {
+  border: none; cursor: pointer; opacity: .55; transition: opacity .12s ease, filter .12s ease;
+  filter: saturate(.7) brightness(.8);
+}
+.simon-pad-0 { background: #ef4444; border-radius: 100% 0 0 0; }
+.simon-pad-1 { background: #4ade80; border-radius: 0 100% 0 0; }
+.simon-pad-2 { background: #facc15; border-radius: 0 0 0 100%; }
+.simon-pad-3 { background: #60a5fa; border-radius: 0 0 100% 0; }
+.simon-pad-lit { opacity: 1; filter: saturate(1.4) brightness(1.4); box-shadow: 0 0 24px currentColor; }
+.simon-pad-wrong { animation: simon-wrong-flash .4s ease 2; }
+@keyframes simon-wrong-flash { 0%, 100% { filter: saturate(.7) brightness(.8); } 50% { filter: saturate(1.6) brightness(.6) hue-rotate(180deg); } }
+.simon-center {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+  width: 64px; height: 64px; border-radius: 50%; background: var(--panel); border: 2px solid var(--line);
+  display: flex; align-items: center; justify-content: center; font-size: 24px; pointer-events: none;
+}
+
+/* ================= SOLO : PECHE ================= */
+.peche-pond {
+  position: relative; width: 100%; height: 300px; margin-top: 12px; overflow: hidden; border-radius: 12px;
+  background: linear-gradient(180deg, #1a5c8a 0%, #0c3a5e 55%, #072338 100%);
+  border: 2px solid #2c4a63; touch-action: none;
+}
+.peche-critter {
+  position: absolute; left: 0; font-size: 30px; cursor: pointer; line-height: 1;
+  animation-timing-function: linear; animation-fill-mode: forwards; user-select: none;
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,.4));
+}
+.peche-critter-junk { filter: drop-shadow(0 2px 3px rgba(0,0,0,.4)) saturate(.7); }
+.peche-critter-pop { animation: none !important; transform: scale(1.7) !important; opacity: 0; transition: transform .22s ease, opacity .22s ease; }
+@keyframes peche-swim-right { from { left: -10%; } to { left: 105%; } }
+@keyframes peche-swim-left { from { left: 105%; } to { left: -10%; } }
+
+/* ================= SOLO : FLECHETTES ================= */
+.darts-wrap { display: flex; justify-content: center; margin: 16px 0; }
+.darts-board {
+  position: relative; width: 100%; max-width: 280px; aspect-ratio: 1; border-radius: 50%;
+  background: radial-gradient(circle closest-side at center,
+    #b91c1c 0% 8%, #fef3c7 8% 18%, #166534 18% 40%, #b91c1c 40% 60%, #166534 60% 80%, #1c1917 80% 100%);
+  border: 4px solid #3d2a16; box-shadow: 0 6px 18px rgba(0,0,0,.4); cursor: pointer; touch-action: manipulation;
+}
+.darts-reticle {
+  position: absolute; top: 50%; left: 50%; width: 34px; height: 34px; margin-left: -17px; margin-top: -17px;
+  display: flex; align-items: center; justify-content: center; font-size: 26px; color: #fff; font-weight: 900;
+  pointer-events: none; text-shadow: 0 0 4px #000, 0 0 8px #000;
+}
+.darts-mark {
+  position: absolute; font-size: 20px; transform: translate(-50%, -50%); pointer-events: none;
+  animation: darts-mark-pop .3s cubic-bezier(.34,1.56,.64,1) both;
+}
+@keyframes darts-mark-pop {
+  0% { transform: translate(-50%, -50%) scale(0); } 60% { transform: translate(-50%, -50%) scale(1.3); } 100% { transform: translate(-50%, -50%) scale(1); }
+}
+.darts-score-popup {
+  position: absolute; transform: translate(-50%, -50%); pointer-events: none; font-weight: 800; font-size: 15px;
+  color: #facc15; text-shadow: 0 0 4px #000; animation: darts-popup-float .9s ease-out forwards; white-space: nowrap;
+}
+@keyframes darts-popup-float {
+  0% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(-50%, -50%) translateY(-34px); }
+}
