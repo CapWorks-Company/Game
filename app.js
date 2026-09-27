@@ -5939,3 +5939,339 @@ document.getElementById("btn-fire-self").addEventListener("click", () => {
 function escapeHtml(s) {
   return s.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
+
+// ================= EFFETS 3D : caméra + décor 3D projeté (façon RA légère) =================
+// Pas de vraie détection de surfaces (WebXR n'est pas fiable sur iPhone) : on affiche la
+// caméra en fond, et un décor 3D (Three.js) fixé devant soi qu'on regarde en faisant glisser
+// le doigt, ou en bougeant le téléphone si le capteur de mouvement est autorisé.
+const AR_THEMES = {
+  boat:   { name: "Bateau pirate" },
+  sea:    { name: "Mer déchaînée" },
+  island: { name: "Île déserte" },
+};
+let arState = null;
+let arThreeLoadPromise = null;
+
+function ensureThreeLoaded() {
+  if (window.THREE) return Promise.resolve();
+  if (arThreeLoadPromise) return arThreeLoadPromise;
+  arThreeLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js";
+    s.onload = () => resolve();
+    s.onerror = () => reject(new Error("three-load-failed"));
+    document.head.appendChild(s);
+  });
+  return arThreeLoadPromise;
+}
+
+async function startArExperience(theme) {
+  showScreen("screen-ar-view");
+  document.getElementById("ar-theme-name").textContent = AR_THEMES[theme].name;
+  const loadingEl = document.getElementById("ar-loading");
+  const errEl = document.getElementById("ar-camera-error");
+  loadingEl.style.display = "flex";
+  loadingEl.textContent = "Chargement de la scène 3D…";
+  errEl.style.display = "none";
+  document.getElementById("ar-motion-gate").style.display = "none";
+
+  try {
+    await ensureThreeLoaded();
+  } catch (e) {
+    loadingEl.style.display = "none";
+    errEl.textContent = "Impossible de charger le moteur 3D. Vérifie ta connexion internet.";
+    errEl.style.display = "flex";
+    return;
+  }
+
+  const video = document.getElementById("ar-video");
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    video.srcObject = stream;
+    await video.play().catch(() => {});
+  } catch (e) {
+    stream = null; // pas de caméra dispo/autorisée : on affichera quand même la scène 3D seule
+  }
+
+  // l'écran a pu changer entre-temps (quitté avant la fin du chargement) : on abandonne proprement
+  if (!document.getElementById("screen-ar-view").classList.contains("active")) {
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    return;
+  }
+
+  const canvas = document.getElementById("ar-canvas");
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
+  renderer.setClearColor(0x000000, 0);
+
+  const scene = new THREE.Scene();
+  if (!stream) scene.background = new THREE.Color(0x1a2a3a);
+  const camera = new THREE.PerspectiveCamera(65, canvas.clientWidth / Math.max(1, canvas.clientHeight), 0.1, 200);
+  camera.rotation.order = "YXZ";
+
+  const extras = arBuildTheme(theme, scene, camera);
+
+  arState = {
+    theme, stream, renderer, scene, camera, extras, raf: null,
+    yaw: 0, pitch: 0, dragging: false, lastX: 0, lastY: 0,
+    orientBase: null, useOrientation: false, startTime: performance.now(),
+  };
+
+  loadingEl.style.display = "none";
+  arWireInteraction();
+  arMaybeShowMotionGate();
+  arLoop();
+}
+
+function arBuildTheme(theme, scene, camera) {
+  scene.fog = new THREE.Fog(0x274156, 6, 40);
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x445566, 1.15));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.9);
+  sun.position.set(3, 6, 2);
+  scene.add(sun);
+
+  const extras = []; // { animate(t) }
+
+  function makeWater(size, segments, y) {
+    const geo = new THREE.PlaneGeometry(size, size, segments, segments);
+    geo.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshStandardMaterial({ color: 0x1f6f8b, roughness: 0.35, metalness: 0.05, transparent: true, opacity: 0.92 });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.position.y = y;
+    scene.add(mesh);
+    const basePos = geo.attributes.position.array.slice();
+    extras.push({ animate(t) {
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const bx = basePos[i * 3], bz = basePos[i * 3 + 2];
+        const h = Math.sin(bx * 0.5 + t * 1.3) * 0.12 + Math.cos(bz * 0.4 + t * 1.1) * 0.12;
+        pos.setY(i, h);
+      }
+      pos.needsUpdate = true;
+      geo.computeVertexNormals();
+    }});
+    return mesh;
+  }
+
+  function palm(x, z, scale) {
+    const g = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 1.6, 6), new THREE.MeshStandardMaterial({ color: 0x7a5a35 }));
+    trunk.position.y = 0.8;
+    trunk.rotation.z = 0.12;
+    g.add(trunk);
+    const frondMat = new THREE.MeshStandardMaterial({ color: 0x2f7a3f, roughness: 0.85, side: THREE.DoubleSide });
+    for (let i = 0; i < 6; i++) {
+      // Une palme = une lamelle plate qui part du sommet du tronc et s'évase vers l'extérieur
+      // (un cône aurait flotté loin du tronc et ressemblait à un blob, pas à une feuille).
+      const frondGeo = new THREE.ConeGeometry(0.16, 0.85, 4, 1, true);
+      frondGeo.translate(0, 0.425, 0); // la pointe (origine du cône) devient le point d'attache
+      frondGeo.scale(1, 1, 0.28); // aplati : lit comme une feuille, pas comme un volume
+      const frond = new THREE.Mesh(frondGeo, frondMat);
+      frond.position.set(0, 1.58, 0);
+      frond.rotation.order = "YXZ";
+      frond.rotation.y = (i / 6) * Math.PI * 2;
+      frond.rotation.x = 0.55; // les palmes retombent vers l'extérieur, pas droites vers le ciel
+      g.add(frond);
+    }
+    g.position.set(x, 0.1, z);
+    g.scale.setScalar(scale);
+    return g;
+  }
+
+  if (theme === "boat") {
+    makeWater(30, 40, -1.4);
+    const boat = new THREE.Group();
+    // Coque : une capsule couchée (longueur le long de Z, vers la caméra), aplatie pour
+    // ressembler à une coque plutôt qu'à un blob — plus simple et prévisible qu'un demi-cylindre.
+    const hullGeo = new THREE.CapsuleGeometry(0.55, 1.7, 4, 10);
+    hullGeo.rotateX(Math.PI / 2);
+    const hull = new THREE.Mesh(hullGeo, new THREE.MeshStandardMaterial({ color: 0x5b3a22, roughness: 0.8 }));
+    hull.scale.set(0.78, 0.42, 1.05);
+    boat.add(hull);
+    const deck = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.5, 0.18, 10), new THREE.MeshStandardMaterial({ color: 0x8a6a45, roughness: 0.85 }));
+    deck.scale.set(1, 1, 2.2);
+    deck.position.y = 0.12;
+    boat.add(deck);
+    const mast = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 2.1, 8), new THREE.MeshStandardMaterial({ color: 0x8a6a45 }));
+    mast.position.y = 1.15;
+    boat.add(mast);
+    // Voile bien de face (le long de X, pas tournée) pour rester visible depuis la caméra qui
+    // fait face au bateau — une voile tournée à 90° se retrouve vue par la tranche, invisible.
+    const sail = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 1.5), new THREE.MeshStandardMaterial({ color: 0xe9e4d8, side: THREE.DoubleSide, roughness: 0.9 }));
+    sail.position.set(0, 1.3, 0.05);
+    sail.rotation.y = 0.18;
+    boat.add(sail);
+    const flag = new THREE.Mesh(new THREE.PlaneGeometry(0.35, 0.2), new THREE.MeshStandardMaterial({ color: 0x1a1a1a, side: THREE.DoubleSide }));
+    flag.position.set(0, 2.28, 0);
+    boat.add(flag);
+    boat.position.set(0, -0.5, -5);
+    scene.add(boat);
+    extras.push({ animate(t) {
+      boat.position.y = -0.5 + Math.sin(t * 1.4) * 0.08;
+      boat.rotation.z = Math.sin(t * 0.9) * 0.05;
+      boat.rotation.x = Math.sin(t * 1.1) * 0.03;
+      flag.rotation.y = 0.18 + Math.sin(t * 3) * 0.35;
+      sail.rotation.y = 0.18 + Math.sin(t * 1.7) * 0.08;
+    }});
+  } else if (theme === "sea") {
+    makeWater(60, 70, -1.1);
+    camera.position.set(0, 0.9, 0);
+  } else if (theme === "island") {
+    makeWater(30, 30, -1.3);
+    const island = new THREE.Group();
+    const sand = new THREE.Mesh(
+      new THREE.SphereGeometry(2.2, 24, 16, 0, Math.PI * 2, 0, Math.PI / 2),
+      new THREE.MeshStandardMaterial({ color: 0xd8c48a, roughness: 1 })
+    );
+    sand.scale.set(1, 0.35, 1);
+    island.add(sand);
+    const palm1 = palm(0.6, -0.3, 1);
+    const palm2 = palm(-0.5, 0.4, 0.85);
+    island.add(palm1, palm2);
+    island.position.set(0, -0.9, -5);
+    scene.add(island);
+    extras.push({ animate(t) {
+      palm1.rotation.z = 0.12 + Math.sin(t * 1.5) * 0.03;
+      palm2.rotation.z = 0.12 + Math.sin(t * 1.5 + 1.3) * 0.03;
+    }});
+  }
+
+  if (!camera.position.y) camera.position.set(0, 1.2, 0);
+  return extras;
+}
+
+function arPointerPos(e) {
+  if (e.touches && e.touches[0]) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  return { x: e.clientX, y: e.clientY };
+}
+
+function arWireInteraction() {
+  const canvas = document.getElementById("ar-canvas");
+  canvas.onpointerdown = (e) => {
+    if (!arState) return;
+    const p = arPointerPos(e);
+    arState.dragging = true; arState.lastX = p.x; arState.lastY = p.y;
+  };
+  canvas.onpointermove = (e) => {
+    if (!arState || !arState.dragging) return;
+    const p = arPointerPos(e);
+    const dx = p.x - arState.lastX, dy = p.y - arState.lastY;
+    arState.lastX = p.x; arState.lastY = p.y;
+    arState.yaw -= dx * 0.006;
+    arState.pitch = Math.max(-1.2, Math.min(1.2, arState.pitch - dy * 0.006));
+  };
+  window.onpointerup = () => { if (arState) arState.dragging = false; };
+  window.addEventListener("resize", arOnResize);
+  arOnResize();
+}
+
+function arOnResize() {
+  if (!arState) return;
+  const canvas = document.getElementById("ar-canvas");
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  if (!w || !h) return;
+  arState.renderer.setSize(w, h, false);
+  arState.camera.aspect = w / h;
+  arState.camera.updateProjectionMatrix();
+}
+
+function arMaybeShowMotionGate() {
+  if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
+    document.getElementById("ar-motion-gate").style.display = "flex"; // iOS : demande explicite requise
+  } else if (typeof DeviceOrientationEvent !== "undefined") {
+    arEnableOrientation(); // Android / desktop : pas de permission bloquante
+  }
+}
+
+async function arRequestMotionPermission() {
+  document.getElementById("ar-motion-gate").style.display = "none";
+  try {
+    const res = await DeviceOrientationEvent.requestPermission();
+    if (res === "granted") arEnableOrientation();
+  } catch (e) { /* tant pis, le glisser-déposer au doigt reste disponible */ }
+}
+
+function arEnableOrientation() {
+  if (!arState) return;
+  arState.useOrientation = true;
+  window.addEventListener("deviceorientation", arOnOrientation);
+}
+
+function arOnOrientation(e) {
+  if (!arState || !arState.useOrientation) return;
+  const alpha = e.alpha, beta = e.beta;
+  if (alpha == null || beta == null) return;
+  if (!arState.orientBase) arState.orientBase = { alpha, beta };
+  const dAlpha = (alpha - arState.orientBase.alpha) * (Math.PI / 180);
+  const dBeta = (beta - arState.orientBase.beta) * (Math.PI / 180);
+  arState.yaw = -dAlpha;
+  arState.pitch = Math.max(-1.2, Math.min(1.2, -dBeta));
+}
+
+function arLoop() {
+  const s = arState;
+  if (!s) return;
+  const t = (performance.now() - s.startTime) / 1000;
+  s.extras.forEach(e => e.animate(t));
+  s.camera.rotation.y = s.yaw;
+  s.camera.rotation.x = s.pitch;
+  s.renderer.render(s.scene, s.camera);
+  s.raf = requestAnimationFrame(arLoop);
+}
+
+function arCapturePhoto() {
+  const s = arState;
+  if (!s) return;
+  const video = document.getElementById("ar-video");
+  const canvas3d = document.getElementById("ar-canvas");
+  const out = document.createElement("canvas");
+  out.width = canvas3d.clientWidth || 320;
+  out.height = canvas3d.clientHeight || 480;
+  const ctx = out.getContext("2d");
+  if (s.stream && video.videoWidth) {
+    const vw = video.videoWidth, vh = video.videoHeight;
+    const cw = out.width, ch = out.height;
+    const scale = Math.max(cw / vw, ch / vh);
+    const dw = vw * scale, dh = vh * scale;
+    ctx.drawImage(video, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
+  } else {
+    ctx.fillStyle = "#1a2a3a";
+    ctx.fillRect(0, 0, out.width, out.height);
+  }
+  ctx.drawImage(canvas3d, 0, 0, out.width, out.height);
+  const dataUrl = out.toDataURL("image/png");
+  document.getElementById("ar-photo-img").src = dataUrl;
+  document.getElementById("ar-photo-download").href = dataUrl;
+  document.getElementById("ar-photo-overlay").style.display = "flex";
+  vibrate(15);
+}
+
+function arCleanup() {
+  const s = arState;
+  if (!s) return;
+  if (s.raf) cancelAnimationFrame(s.raf);
+  if (s.stream) s.stream.getTracks().forEach(t => t.stop());
+  window.removeEventListener("deviceorientation", arOnOrientation);
+  window.removeEventListener("resize", arOnResize);
+  try { s.renderer.dispose(); } catch (e) {}
+  const video = document.getElementById("ar-video");
+  video.pause();
+  video.srcObject = null;
+  document.getElementById("ar-photo-overlay").style.display = "none";
+  arState = null;
+}
+
+document.getElementById("btn-open-ar").addEventListener("click", () => showScreen("screen-ar-picker"));
+document.getElementById("btn-ar-back").addEventListener("click", () => showScreen("screen-home"));
+document.querySelectorAll(".ar-theme-card").forEach(card => {
+  card.addEventListener("click", () => startArExperience(card.dataset.theme));
+});
+document.getElementById("btn-ar-quit").addEventListener("click", () => { arCleanup(); showScreen("screen-home"); });
+document.getElementById("btn-ar-switch").addEventListener("click", () => { arCleanup(); showScreen("screen-ar-picker"); });
+document.getElementById("btn-ar-capture").addEventListener("click", arCapturePhoto);
+document.getElementById("btn-ar-photo-close").addEventListener("click", () => {
+  document.getElementById("ar-photo-overlay").style.display = "none";
+});
+document.getElementById("btn-ar-enable-motion").addEventListener("click", arRequestMotionPermission);

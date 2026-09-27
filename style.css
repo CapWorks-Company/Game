@@ -562,6 +562,59 @@ html, body {
 }
 .magic-instructions strong { color: var(--accent); }
 
+/* ---- Effets 3D (caméra + Three.js) ---- */
+.ar-theme-grid { display: flex; flex-direction: column; gap: 10px; margin: 14px 0; }
+.ar-theme-card {
+  display: flex; align-items: center; gap: 12px; padding: 14px 16px;
+  background: var(--panel-2); border: 2px solid var(--line); border-radius: 10px;
+  color: var(--text); cursor: pointer; text-align: left; font-family: var(--font-body);
+}
+.ar-theme-card:active { border-color: var(--accent); }
+.ar-theme-icon { font-size: 30px; line-height: 1; }
+.ar-theme-label { font-weight: 700; font-size: 16px; }
+
+#screen-ar-view.screen { padding: 0; min-height: 100vh; }
+.ar-stage { position: fixed; inset: 0; background: #000; overflow: hidden; }
+.ar-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ar-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+.ar-topbar {
+  position: absolute; top: 0; left: 0; right: 0; z-index: 3;
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 14px 16px; background: linear-gradient(rgba(0,0,0,.55), transparent);
+}
+.ar-theme-name {
+  color: #fff; font-weight: 800; font-family: var(--font-display); font-size: 21px;
+  text-shadow: 0 1px 4px rgba(0,0,0,.6);
+}
+.ar-icon-btn {
+  width: 38px; height: 38px; border-radius: 50%; border: none; flex-shrink: 0;
+  background: rgba(0,0,0,.45); color: #fff; font-size: 18px; cursor: pointer;
+}
+.ar-bottombar {
+  position: absolute; bottom: 0; left: 0; right: 0; z-index: 3;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  padding: 16px; background: linear-gradient(transparent, rgba(0,0,0,.6));
+}
+.ar-bottombtn { flex: 1; max-width: 220px; }
+.ar-capture-btn {
+  width: 62px; height: 62px; border-radius: 50%; border: 3px solid #fff; flex-shrink: 0;
+  background: rgba(255,255,255,.25); font-size: 26px; cursor: pointer;
+}
+.ar-loading, .ar-camera-error {
+  position: absolute; inset: 0; z-index: 2; display: flex; align-items: center; justify-content: center;
+  color: #fff; text-align: center; padding: 24px; background: rgba(10,13,20,.88); font-weight: 600;
+}
+.ar-motion-gate {
+  position: absolute; inset: 0; z-index: 4; display: flex; align-items: center; justify-content: center;
+  background: rgba(10,13,20,.5);
+}
+.ar-photo-overlay {
+  position: fixed; inset: 0; z-index: 10; background: rgba(5,7,12,.96);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 20px;
+}
+.ar-photo-img { max-width: 100%; max-height: 58vh; border-radius: 10px; border: 1px solid var(--line); }
+.ar-photo-actions { display: flex; gap: 10px; }
+
 .battle-act-choices { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
 
 .battle-fight-bar-wrap { margin-bottom: 14px; cursor: pointer; }

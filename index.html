@@ -46,6 +46,7 @@
 
     <button id="btn-general-settings" class="btn btn-secondary" style="margin-top:6px">⚙️ Paramètres généraux</button>
     <button id="btn-show-tutorial" class="btn btn-secondary" style="margin-top:6px">❓ Comment jouer</button>
+    <button id="btn-open-ar" class="btn btn-secondary" style="margin-top:6px">🪄 Effets 3D (caméra)</button>
 
     <button id="btn-install" class="fab-install" style="display:none" aria-label="Installer l'app" title="Installer l'app">📲</button>
     <button id="btn-debug" class="fab-debug" aria-label="Debug" title="Debug">🐞</button>
@@ -1015,6 +1016,59 @@
     <button id="btn-editor-close" class="btn btn-secondary" style="margin-top:8px">Fermer sans enregistrer</button>
   </div>
 </div>
+
+<!-- ===== ECRAN : EFFETS 3D — choix du décor ===== -->
+<section id="screen-ar-picker" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🪄 Effets 3D</h2>
+    <p class="hint" style="text-align:center">Choisis un décor à projeter dans le monde réel avec ta caméra.</p>
+    <div class="ar-theme-grid">
+      <button type="button" class="ar-theme-card" data-theme="boat">
+        <span class="ar-theme-icon">🚢</span>
+        <span class="ar-theme-label">Bateau pirate</span>
+      </button>
+      <button type="button" class="ar-theme-card" data-theme="sea">
+        <span class="ar-theme-icon">🌊</span>
+        <span class="ar-theme-label">Mer déchaînée</span>
+      </button>
+      <button type="button" class="ar-theme-card" data-theme="island">
+        <span class="ar-theme-icon">🏝️</span>
+        <span class="ar-theme-label">Île déserte</span>
+      </button>
+    </div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:10px">Fonctionne mieux sur téléphone avec l'appareil photo arrière. Autorise la caméra (et le mouvement sur iPhone) quand c'est demandé.</p>
+    <button type="button" id="btn-ar-back" class="btn btn-secondary" style="margin-top:10px">Retour</button>
+  </div>
+</section>
+
+<!-- ===== ECRAN : EFFETS 3D — vue caméra + scène 3D ===== -->
+<section id="screen-ar-view" class="screen ar-screen">
+  <div id="ar-stage" class="ar-stage">
+    <video id="ar-video" class="ar-video" autoplay playsinline muted></video>
+    <canvas id="ar-canvas" class="ar-canvas"></canvas>
+    <div id="ar-loading" class="ar-loading">Chargement de la scène 3D…</div>
+    <div id="ar-camera-error" class="ar-camera-error" style="display:none"></div>
+    <div id="ar-motion-gate" class="ar-motion-gate" style="display:none">
+      <button type="button" id="btn-ar-enable-motion" class="btn btn-primary">🧭 Activer le mouvement</button>
+    </div>
+    <div class="ar-topbar">
+      <span id="ar-theme-name" class="ar-theme-name"></span>
+      <button type="button" id="btn-ar-quit" class="ar-icon-btn" aria-label="Quitter">✕</button>
+    </div>
+    <div class="ar-bottombar">
+      <button type="button" id="btn-ar-switch" class="btn btn-secondary ar-bottombtn">🔁 Changer de décor</button>
+      <button type="button" id="btn-ar-capture" class="ar-capture-btn" aria-label="Capturer la photo">📸</button>
+    </div>
+  </div>
+  <div id="ar-photo-overlay" class="ar-photo-overlay" style="display:none">
+    <img id="ar-photo-img" class="ar-photo-img" alt="Photo capturée" />
+    <p class="hint" style="text-align:center;color:#cfd3da">Sur iPhone : appuie longuement sur l'image pour l'enregistrer.<br>Sur Android : appuie sur « Télécharger » ci-dessous.</p>
+    <div class="ar-photo-actions">
+      <a id="ar-photo-download" class="btn btn-primary" download="capnaval-ar.png">⬇️ Télécharger</a>
+      <button type="button" id="btn-ar-photo-close" class="btn btn-secondary">Fermer</button>
+    </div>
+  </div>
+</section>
 
 <div id="ios-install-modal" class="ios-install-modal" style="display:none">
   <div class="card" style="max-width:340px">
