@@ -1959,7 +1959,7 @@ function startMinesGame() {
   renderMinesGrid();
   showScreen("screen-solo-mines");
 }
-document.getElementById("btn-mines-quit").addEventListener("click", () => showScreen("screen-home"));
+document.getElementById("btn-mines-quit").addEventListener("click", () => { minesState = null; showScreen("screen-home"); });
 document.getElementById("btn-mines-restart").addEventListener("click", () => startMinesGame());
 document.getElementById("btn-mines-flagmode").addEventListener("click", () => {
   if (!minesState) return;
@@ -2037,6 +2037,11 @@ function onMinesCellTap(r, c) {
   if (cell.flagged || cell.revealed) return;
   if (cell.mine) {
     minesState.ended = true;
+    const myGame = minesState; // capturé maintenant : si la partie change/redémarre pendant
+    // les setTimeout ci-dessous (nouvelle grille, taille différente, retour au menu...), ces
+    // callbacks doivent se voir périmés et ne rien faire, plutôt que de jouer des sons/animations
+    // en retard sur la mauvaise grille (c'était le bug : l'ancienne explosion continuait après
+    // avoir changé de partie).
     const mineCells = [];
     minesState.grid.forEach((row, rr) => row.forEach((x, cc) => { if (x.mine) mineCells.push([rr, cc]); }));
     mineCells.sort((a, b) => Math.hypot(a[0] - r, a[1] - c) - Math.hypot(b[0] - r, b[1] - c));
@@ -2046,13 +2051,17 @@ function onMinesCellTap(r, c) {
     vibrate([30, 30, 60]);
     mineCells.forEach(([rr, cc], i) => {
       setTimeout(() => {
+        if (minesState !== myGame) return;
         minesState.grid[rr][cc].revealed = true;
         renderMinesGrid();
         minesPulseClass(minesCellEl(rr, cc), "mines-boom");
         if (i > 0) sfxImpact();
       }, i * 90);
     });
-    setTimeout(() => showSoloEnd("lose", "Boum !", "Tu as touché une mine. Une revanche ?"), 350 + mineCells.length * 90);
+    setTimeout(() => {
+      if (minesState !== myGame) return;
+      showSoloEnd("lose", "Boum !", "Tu as touché une mine. Une revanche ?");
+    }, 350 + mineCells.length * 90);
     return;
   }
   const order = minesFloodReveal(minesState.grid, r, c);
@@ -2067,18 +2076,24 @@ function onMinesCellTap(r, c) {
 // Petite vague de victoire en diagonale sur toute la grille, avec auto-pose des
 // derniers drapeaux sur les mines restées cachées, avant d'afficher l'écran de fin.
 function celebrateMinesWin() {
+  const myGame = minesState; // voir le commentaire équivalent dans onMinesCellTap : évite qu'une
+  // vague de victoire déjà lancée continue de s'animer/sonoriser après un changement de partie.
   const cells = [];
   for (let r = 0; r < MINES_SIZE; r++) for (let c = 0; c < MINES_SIZE; c++) cells.push([r, c]);
   cells.sort((a, b) => (a[0] + a[1]) - (b[0] + b[1]));
   cells.forEach(([r, c], i) => {
     setTimeout(() => {
+      if (minesState !== myGame) return;
       const cell = minesState.grid[r][c];
       if (cell.mine && !cell.flagged) { cell.flagged = true; renderMinesGrid(); }
       minesPulseClass(minesCellEl(r, c), "mines-win-pulse");
       if (i % 3 === 0) sfxMinesTick(i / 2);
     }, i * 13);
   });
-  setTimeout(() => showSoloEnd("win", "Terrain déminé !", "Bravo, tu as révélé toutes les cases sûres !"), cells.length * 13 + 350);
+  setTimeout(() => {
+    if (minesState !== myGame) return;
+    showSoloEnd("win", "Terrain déminé !", "Bravo, tu as révélé toutes les cases sûres !");
+  }, cells.length * 13 + 350);
 }
 function renderMinesGrid() {
   const grid = document.getElementById("mines-grid");
@@ -2282,11 +2297,16 @@ const SIMON_FREQS = [329.63, 392.00, 440.00, 523.25]; // Mi-Sol-La-Do : chaque b
 let simonState = null;
 let simonBest = parseInt(localStorage.getItem("capnaval-simon-best") || "0", 10) || 0;
 function startSimonGame() {
+  soloRetryHandler = startSimonGame;
   simonState = { sequence: [], userIndex: 0, level: 0, accepting: false, playing: false };
+  const myGame = simonState;
   document.getElementById("simon-best").textContent = String(simonBest);
   document.querySelectorAll(".simon-pad").forEach(pad => pad.classList.remove("simon-pad-lit", "simon-pad-wrong"));
   showScreen("screen-solo-simon");
-  setTimeout(simonNextRound, 400);
+  // myGame capturé partout ci-dessous : si la partie est quittée/relancée pendant qu'une séquence
+  // est encore en train de s'animer (chaîne de setTimeout), les anciens callbacks se voient
+  // périmés (simonState a changé) et ne touchent plus à l'affichage/aux sons de la nouvelle partie.
+  setTimeout(() => { if (simonState === myGame) simonNextRound(); }, 400);
 }
 function simonNextRound() {
   const s = simonState;
@@ -2299,20 +2319,21 @@ function simonNextRound() {
   document.getElementById("simon-center").textContent = "👀";
   simonPlaySequence();
 }
-function simonLightPad(i, duration) {
+function simonLightPad(i, duration, myGame) {
   const pad = document.querySelector(`.simon-pad[data-pad="${i}"]`);
   playTone(SIMON_FREQS[i], duration / 1000, "triangle", 0.18);
   pad.classList.add("simon-pad-lit");
-  setTimeout(() => pad.classList.remove("simon-pad-lit"), duration);
+  setTimeout(() => { if (simonState === myGame) pad.classList.remove("simon-pad-lit"); }, duration);
 }
 function simonPlaySequence() {
   const s = simonState;
   s.playing = true;
   const step = Math.max(280, 620 - s.level * 18); // la cadence s'accélère avec le niveau
   s.sequence.forEach((padIdx, i) => {
-    setTimeout(() => simonLightPad(padIdx, step * 0.7), 500 + i * step);
+    setTimeout(() => { if (simonState === s) simonLightPad(padIdx, step * 0.7, s); }, 500 + i * step);
   });
   setTimeout(() => {
+    if (simonState !== s) return;
     s.playing = false;
     s.accepting = true;
     document.getElementById("simon-hint").textContent = "À toi ! Reproduis la séquence.";
@@ -2328,12 +2349,12 @@ function onSimonPadTap(i) {
     vibrate(15);
     playTone(SIMON_FREQS[i], 0.18, "triangle", 0.18);
     pad.classList.add("simon-pad-lit");
-    setTimeout(() => pad.classList.remove("simon-pad-lit"), 180);
+    setTimeout(() => { if (simonState === s) pad.classList.remove("simon-pad-lit"); }, 180);
     s.userIndex++;
     if (s.userIndex === s.sequence.length) {
       s.accepting = false;
       if (s.level > simonBest) { simonBest = s.level; localStorage.setItem("capnaval-simon-best", String(simonBest)); }
-      setTimeout(simonNextRound, 700);
+      setTimeout(() => { if (simonState === s) simonNextRound(); }, 700);
     }
   } else {
     s.accepting = false;
@@ -2342,14 +2363,17 @@ function onSimonPadTap(i) {
     document.querySelectorAll(".simon-pad").forEach(p => p.classList.add("simon-pad-wrong"));
     document.getElementById("simon-grid").classList.add("fx-shake");
     if (s.level > simonBest) { simonBest = s.level; localStorage.setItem("capnaval-simon-best", String(simonBest)); }
-    setTimeout(() => showSoloEnd("lose", "Séquence brisée !", `Tu es allé jusqu'au niveau ${s.level}. Record : ${simonBest}.`), 500);
+    setTimeout(() => {
+      if (simonState !== s) return;
+      showSoloEnd("lose", "Séquence brisée !", `Tu es allé jusqu'au niveau ${s.level}. Record : ${simonBest}.`);
+    }, 500);
   }
 }
 document.querySelectorAll(".simon-pad").forEach(pad => {
   pad.addEventListener("click", () => onSimonPadTap(parseInt(pad.dataset.pad, 10)));
 });
 document.getElementById("btn-simon-restart").addEventListener("click", startSimonGame);
-document.getElementById("btn-simon-quit").addEventListener("click", () => showScreen("screen-solo-hub"));
+document.getElementById("btn-simon-quit").addEventListener("click", () => { simonState = null; showScreen("screen-solo-hub"); });
 
 // ================= MINI-JEU SOLO : PECHE (attrape ce qui passe, évite les déchets) =================
 const PECHE_DURATION = 30;
@@ -2359,6 +2383,7 @@ const PECHE_FISH = [
 const PECHE_JUNK = [{ icon: "🥾", points: -2 }, { icon: "👢", points: -2 }, { icon: "🛢️", points: -3 }];
 let pecheState = null;
 function startPecheGame() {
+  soloRetryHandler = startPecheGame;
   if (pecheState) { clearInterval(pecheState.spawnTimer); clearInterval(pecheState.tickTimer); }
   const pond = document.getElementById("peche-pond");
   pond.innerHTML = "";
@@ -2448,6 +2473,7 @@ const MAGIC_NOTES = [392.00, 440.00, 523.25, 659.25]; // Sol-La-Do-Mi : une note
 let magicState = null, magicRaf = null, magicWired = false;
 let magicBest = parseInt(localStorage.getItem("capnaval-magic-best") || "0", 10) || 0;
 function startMagicGame() {
+  soloRetryHandler = startMagicGame;
   wireMagicControls();
   magicState = { tiles: [], score: 0, speed: 2.6, spawnTimer: 0, spawnInterval: 60, ended: false, lastLane: -1, particles: [] };
   document.getElementById("magic-score").textContent = "0";
@@ -2560,52 +2586,80 @@ document.getElementById("btn-magic-quit").addEventListener("click", () => {
 });
 
 // ================= MINI-JEU SOLO : FLECHETTES =================
+// Visée en 2 temps façon "barre de puissance" : une ligne verticale balaie l'axe horizontal,
+// on tape pour la stopper (verrouille X) ; une ligne horizontale balaie ensuite l'axe vertical,
+// on tape pour la stopper (verrouille Y) ; la fléchette part se planter à l'intersection des deux.
 const DARTS_MAX_THROWS = 6, DARTS_WIN_SCORE = 100;
 let dartsState = null, dartsRaf = null, dartsWired = false;
 let dartsBest = parseInt(localStorage.getItem("capnaval-darts-best") || "0", 10) || 0;
 function startDartsGame() {
+  soloRetryHandler = startDartsGame;
   wireDartsControls();
+  if (dartsRaf) cancelAnimationFrame(dartsRaf);
   document.querySelectorAll(".darts-mark, .darts-score-popup").forEach(el => el.remove());
-  dartsState = { throwNum: 1, score: 0, ended: false, locked: false, startTime: performance.now(), angSpeed: 2.1, radSpeed: 1.5, _lastX: 0, _lastY: 0, _lastRadius: 100 };
+  document.getElementById("darts-line-v").classList.remove("darts-line-locked");
+  document.getElementById("darts-line-h").classList.remove("darts-line-locked");
+  dartsState = {
+    throwNum: 1, score: 0, ended: false, phase: "x",
+    curX: 0, curY: 0, lockedX: 0, lockedY: 0,
+    speedX: 1.5, speedY: 1.7, startTime: performance.now(), radius: 100,
+  };
   document.getElementById("darts-score").textContent = "0";
   document.getElementById("darts-throw").textContent = "1";
   document.getElementById("darts-maxthrows").textContent = String(DARTS_MAX_THROWS);
   document.getElementById("darts-best").textContent = String(dartsBest);
-  document.getElementById("darts-hint").textContent = "Touche la cible au bon moment pour lancer ta fléchette au centre !";
+  document.getElementById("darts-hint").textContent = "Touche pour arrêter la ligne verticale au bon endroit !";
   showScreen("screen-solo-darts");
-  if (dartsRaf) cancelAnimationFrame(dartsRaf);
   dartsRaf = requestAnimationFrame(dartsLoop);
 }
 function wireDartsControls() {
   if (dartsWired) return;
   dartsWired = true;
-  document.getElementById("darts-board").addEventListener("click", onDartsThrow);
+  document.getElementById("darts-board").addEventListener("click", onDartsBoardTap);
 }
-// Le viseur décrit une trajectoire en spirale (angle + rayon qui pulse) autour du centre de la
-// cible ; le joueur doit taper au bon instant pour que le viseur soit proche du centre.
 function dartsLoop(now) {
   const s = dartsState;
-  if (!s || s.ended || s.locked) return;
-  const t = (now - s.startTime) / 1000;
+  if (!s || s.ended || s.phase === "thrown") return;
   const board = document.getElementById("darts-board");
-  const baseRadius = board.clientWidth / 2 - 14;
-  const radius = baseRadius * (0.12 + 0.88 * Math.abs(Math.sin(t * s.radSpeed)));
-  const angle = t * s.angSpeed;
-  const x = Math.cos(angle) * radius, y = Math.sin(angle) * radius;
-  document.getElementById("darts-reticle").style.transform = `translate(${x}px, ${y}px)`;
-  s._lastX = x; s._lastY = y; s._lastRadius = baseRadius;
+  const baseRadius = board.clientWidth / 2 - 10;
+  s.radius = baseRadius;
+  const t = (now - s.startTime) / 1000;
+  if (s.phase === "x") {
+    s.curX = Math.sin(t * s.speedX) * baseRadius;
+    document.getElementById("darts-line-v").style.transform = `translateX(${s.curX}px)`;
+  } else {
+    s.curY = Math.sin(t * s.speedY) * baseRadius;
+    document.getElementById("darts-line-h").style.transform = `translateY(${s.curY}px)`;
+  }
   dartsRaf = requestAnimationFrame(dartsLoop);
 }
-function onDartsThrow() {
+function onDartsBoardTap() {
   const s = dartsState;
-  if (!s || s.ended || s.locked) return;
-  s.locked = true;
-  if (dartsRaf) cancelAnimationFrame(dartsRaf);
-  const jitter = 10; // petit tremblement de main / brise, pour ne pas être 100% déterministe
-  const x = s._lastX + (Math.random() * 2 - 1) * jitter;
-  const y = s._lastY + (Math.random() * 2 - 1) * jitter;
+  if (!s || s.ended) return;
+  if (s.phase === "x") {
+    s.lockedX = s.curX;
+    document.getElementById("darts-line-v").classList.add("darts-line-locked");
+    s.phase = "y";
+    s.startTime = performance.now();
+    vibrate(8);
+    playTone(500, 0.05, "sine", 0.08);
+    document.getElementById("darts-hint").textContent = "Touche pour arrêter la ligne horizontale au bon endroit !";
+    return;
+  }
+  if (s.phase === "y") {
+    s.lockedY = s.curY;
+    s.phase = "thrown";
+    if (dartsRaf) cancelAnimationFrame(dartsRaf);
+    vibrate(8);
+    resolveDartsThrow(s);
+  }
+}
+function resolveDartsThrow(s) {
+  const jitter = 6; // petit tremblement de main, pour ne pas être 100% déterministe
+  const x = s.lockedX + (Math.random() * 2 - 1) * jitter;
+  const y = s.lockedY + (Math.random() * 2 - 1) * jitter;
   const dist = Math.sqrt(x * x + y * y);
-  const frac = dist / s._lastRadius;
+  const frac = dist / s.radius;
   let points;
   if (frac <= 0.08) points = 50;
   else if (frac <= 0.18) points = 25;
@@ -2631,37 +2685,43 @@ function onDartsThrow() {
   popup.style.left = `calc(50% + ${x}px)`;
   popup.style.top = `calc(50% + ${y}px)`;
   board.appendChild(popup);
-  setTimeout(() => popup.remove(), 900);
+  setTimeout(() => { if (dartsState === s) popup.remove(); }, 900);
   document.getElementById("darts-hint").textContent = points > 0 ? `+${points} points !` : "Raté, dans le décor !";
   setTimeout(() => {
+    if (dartsState !== s || s.ended) return; // la partie a été quittée/relancée entre-temps : on ignore
     if (s.throwNum >= DARTS_MAX_THROWS) {
-      dartsEndGame();
+      dartsEndGame(s);
     } else {
       s.throwNum++;
-      s.locked = false;
+      s.phase = "x";
       s.startTime = performance.now();
-      s.angSpeed = Math.min(4.2, s.angSpeed + 0.28);
-      s.radSpeed = Math.min(3, s.radSpeed + 0.18);
+      s.speedX = Math.min(3.4, s.speedX + 0.22);
+      s.speedY = Math.min(3.8, s.speedY + 0.24);
+      document.getElementById("darts-line-v").classList.remove("darts-line-locked");
+      document.getElementById("darts-line-h").classList.remove("darts-line-locked");
       document.getElementById("darts-throw").textContent = String(s.throwNum);
-      document.getElementById("darts-hint").textContent = "Touche la cible au bon moment pour lancer ta fléchette au centre !";
+      document.getElementById("darts-hint").textContent = "Touche pour arrêter la ligne verticale au bon endroit !";
       dartsRaf = requestAnimationFrame(dartsLoop);
     }
   }, 700);
 }
-function dartsEndGame() {
-  const s = dartsState;
+function dartsEndGame(s) {
   s.ended = true;
   if (s.score > dartsBest) { dartsBest = s.score; localStorage.setItem("capnaval-darts-best", String(dartsBest)); }
   const won = s.score >= DARTS_WIN_SCORE;
   vibrate(won ? [40, 30, 40, 30, 90] : [30, 30, 60]);
-  setTimeout(() => showSoloEnd(won ? "win" : "lose",
-    won ? "Belle partie !" : "Manqué...",
-    `Score final : ${s.score} / ${DARTS_MAX_THROWS * 50} en ${DARTS_MAX_THROWS} fléchettes.`), 300);
+  setTimeout(() => {
+    if (dartsState !== s) return;
+    showSoloEnd(won ? "win" : "lose",
+      won ? "Belle partie !" : "Manqué...",
+      `Score final : ${s.score} / ${DARTS_MAX_THROWS * 50} en ${DARTS_MAX_THROWS} fléchettes.`);
+  }, 300);
 }
 document.getElementById("btn-darts-restart").addEventListener("click", startDartsGame);
 document.getElementById("btn-darts-quit").addEventListener("click", () => {
   if (dartsRaf) cancelAnimationFrame(dartsRaf);
   if (dartsState) dartsState.ended = true;
+  dartsState = null;
   showScreen("screen-solo-hub");
 });
 
