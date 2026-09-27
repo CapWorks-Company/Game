@@ -2468,120 +2468,185 @@ document.getElementById("btn-peche-quit").addEventListener("click", () => {
 });
 
 // ================= MINI-JEU SOLO : RYTHME DES VAGUES (façon "Magic Tiles") =================
-const MAGIC_W = 300, MAGIC_H = 400, MAGIC_LANES = 4, MAGIC_LANE_W = MAGIC_W / MAGIC_LANES, MAGIC_TILE_H = 90;
-const MAGIC_NOTES = [392.00, 440.00, 523.25, 659.25]; // Sol-La-Do-Mi : une note par colonne
+// Version DOM (fini le canvas) : chaque tuile est un vrai élément cliquable, donc seul un clic
+// posé exactement sur une case compte — cliquer "dans le vide" de la colonne ne fait rien.
+const MAGIC_LANES = 4;
+const MAGIC_TILE_H = 116;      // cases agrandies (avant : 84px utiles)
+const MAGIC_HOLD_EXTRA_H = 64; // une case "maintien" est nettement plus grande
+const MAGIC_HOLD_MS = 550;     // durée à tenir appuyé sur une case maintien
+const MAGIC_NOTE_FREQ = {
+  C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392.00, A4: 440.00, B4: 493.88,
+  C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880.00,
+};
+// 10 mélodies distinctes (façon berceuses marines) ; "holds" = indices de notes tenues.
+const MAGIC_MELODIES = [
+  { name: "Vague",          notes: ["C4","E4","G4","E4","C4","G4","E4","C4"],           holds: [7] },
+  { name: "Brise",          notes: ["D4","F4","A4","F4","D4","A4","F4","D4"],           holds: [7] },
+  { name: "Écume",          notes: ["E4","G4","B4","G4","E4","B4","G4","E4"],           holds: [3, 7] },
+  { name: "Marée montante", notes: ["C4","D4","E4","F4","G4","F4","E4","D4","C4"],      holds: [4, 8] },
+  { name: "Reflets",        notes: ["G4","A4","B4","C5","B4","A4","G4","F4"],           holds: [3, 7] },
+  { name: "Abysses",        notes: ["A4","C5","E5","C5","A4","E5","C5","A4"],           holds: [2, 7] },
+  { name: "Sirène",         notes: ["E4","G4","A4","C5","A4","G4","E4","D4"],           holds: [3, 7] },
+  { name: "Récif",          notes: ["D4","F4","G4","A4","G4","F4","D4","C4"],           holds: [3, 7] },
+  { name: "Tempête",        notes: ["C4","E4","G4","C5","G4","E4","C4","G4"],           holds: [3, 7] },
+  { name: "Horizon",        notes: ["F4","A4","C5","A4","F4","C5","A4","F4"],           holds: [2, 7] },
+];
 let magicState = null, magicRaf = null, magicWired = false;
 let magicBest = parseInt(localStorage.getItem("capnaval-magic-best") || "0", 10) || 0;
+
+function magicCurrentMelody(s) { return MAGIC_MELODIES[s.melodyIdx]; }
+
 function startMagicGame() {
   soloRetryHandler = startMagicGame;
   wireMagicControls();
-  magicState = { tiles: [], score: 0, speed: 2.6, spawnTimer: 0, spawnInterval: 60, ended: false, lastLane: -1, particles: [] };
+  const field = document.getElementById("magic-field");
+  field.querySelectorAll(".magic-tile").forEach(el => el.remove());
+  magicState = {
+    melodyIdx: 0, noteIdx: 0, completedInMelody: 0,
+    tiles: [], score: 0, ended: false, lastLane: -1,
+    fallSpeed: 1.8, spawnTimer: 0, spawnInterval: 58,
+  };
   document.getElementById("magic-score").textContent = "0";
   document.getElementById("magic-best").textContent = String(magicBest);
+  document.getElementById("magic-melody-name").textContent = magicCurrentMelody(magicState).name + " (1/10)";
   document.getElementById("magic-hint").style.display = "flex";
   showScreen("screen-solo-magic");
   if (magicRaf) cancelAnimationFrame(magicRaf);
   magicRaf = requestAnimationFrame(magicLoop);
 }
+
 function wireMagicControls() {
   if (magicWired) return;
   magicWired = true;
-  const canvas = document.getElementById("magic-canvas");
-  canvas.addEventListener("pointerdown", (e) => {
+  // Volontairement : AUCUN écouteur sur le champ de jeu lui-même. Seules les tuiles (créées
+  // dynamiquement dans magicSpawnTile) reçoivent des écouteurs, donc taper "la ligne" ne fait rien.
+}
+
+function magicSpawnTile(s) {
+  const melody = magicCurrentMelody(s);
+  const noteName = melody.notes[s.noteIdx];
+  const hold = melody.holds.includes(s.noteIdx);
+  let lane = Math.floor(Math.random() * MAGIC_LANES);
+  if (lane === s.lastLane && Math.random() < 0.7) lane = (lane + 1 + Math.floor(Math.random() * (MAGIC_LANES - 1))) % MAGIC_LANES;
+  s.lastLane = lane;
+  s.noteIdx++;
+
+  const field = document.getElementById("magic-field");
+  const h = hold ? MAGIC_TILE_H + MAGIC_HOLD_EXTRA_H : MAGIC_TILE_H;
+  const el = document.createElement("div");
+  el.className = "magic-tile" + (hold ? " magic-tile-hold" : "");
+  el.style.left = (lane * (100 / MAGIC_LANES)) + "%";
+  el.style.width = "calc(" + (100 / MAGIC_LANES) + "% - 8px)";
+  el.style.height = h + "px";
+  el.style.top = (-h) + "px";
+  if (hold) {
+    el.innerHTML = '<span class="magic-tile-label">⬇ tenir</span><div class="magic-tile-fill"></div>';
+  }
+  field.appendChild(el);
+
+  const tile = { lane, y: -h, h, el, freq: MAGIC_NOTE_FREQ[noteName], hold, holding: false, holdStart: 0, done: false };
+  s.tiles.push(tile);
+
+  const onDown = (e) => {
     e.preventDefault();
-    if (!magicState || magicState.ended) return;
+    if (!magicState || magicState.ended || tile.done) return;
     document.getElementById("magic-hint").style.display = "none";
-    const rect = canvas.getBoundingClientRect();
-    const x = (e.clientX - rect.left) * (MAGIC_W / rect.width);
-    const lane = Math.max(0, Math.min(MAGIC_LANES - 1, Math.floor(x / MAGIC_LANE_W)));
-    onMagicLaneTap(lane);
-  });
+    if (!hold) { magicTileSuccess(tile, magicState); return; }
+    tile.holding = true;
+    tile.holdStart = performance.now();
+    el.classList.add("magic-tile-holding");
+  };
+  const onRelease = () => {
+    if (!hold || tile.done) return;
+    if (tile.holding && (performance.now() - tile.holdStart) < MAGIC_HOLD_MS) {
+      // relâché trop tôt : la case "maintien" n'a pas été tenue assez longtemps
+      tile.holding = false;
+      magicGameOver(magicState);
+    }
+    tile.holding = false;
+  };
+  el.addEventListener("pointerdown", onDown);
+  el.addEventListener("pointerup", onRelease);
+  el.addEventListener("pointerleave", onRelease);
+  el.addEventListener("pointercancel", onRelease);
 }
-// Touche-anytime façon Piano/Magic Tiles : une tuile peut être validée n'importe quand tant
-// qu'elle est visible dans sa colonne — pas besoin de viser une zone précise en bas de l'écran.
-function onMagicLaneTap(lane) {
-  const s = magicState;
-  if (!s || s.ended) return;
-  const idx = s.tiles.findIndex(t => t.lane === lane);
-  if (idx === -1) { magicGameOver(); return; }
-  const tile = s.tiles[idx];
-  s.tiles.splice(idx, 1);
+
+function magicTileSuccess(tile, s) {
+  if (tile.done) return;
+  tile.done = true;
+  s.tiles = s.tiles.filter(t => t !== tile);
+  tile.el.classList.add("magic-tile-pop");
+  playTone(tile.freq, tile.hold ? 0.4 : 0.16, "sine", 0.18);
+  vibrate(tile.hold ? [15, 20, 15] : 10);
+  setTimeout(() => tile.el.remove(), 180);
   s.score++;
+  s.completedInMelody++;
   document.getElementById("magic-score").textContent = String(s.score);
-  playTone(MAGIC_NOTES[lane], 0.15, "sine", 0.17);
-  vibrate(10);
-  magicSpawnBurst(lane * MAGIC_LANE_W + MAGIC_LANE_W / 2, Math.min(tile.y + MAGIC_TILE_H / 2, MAGIC_H - 20));
-}
-function magicSpawnBurst(x, y) {
-  for (let i = 0; i < 8; i++) {
-    const angle = Math.random() * Math.PI * 2, speed = 1 + Math.random() * 2.2;
-    magicState.particles.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, life: 1 });
+
+  const melody = magicCurrentMelody(s);
+  if (s.completedInMelody >= melody.notes.length) {
+    magicMelodyCleared(s);
   }
 }
-function magicGameOver() {
-  const s = magicState;
+
+function magicMelodyCleared(s) {
+  if (s.melodyIdx >= MAGIC_MELODIES.length - 1) {
+    // les 10 mélodies ont été jouées jusqu'au bout : victoire !
+    s.ended = true;
+    if (magicRaf) cancelAnimationFrame(magicRaf);
+    if (s.score > magicBest) { magicBest = s.score; localStorage.setItem("capnaval-magic-best", String(magicBest)); }
+    setTimeout(() => showSoloEnd("win", "Bravo, marin rythmé !", `Les 10 mélodies jouées jusqu'au bout ! Score final : ${s.score}.`), 300);
+    return;
+  }
+  s.melodyIdx++;
+  s.noteIdx = 0;
+  s.completedInMelody = 0;
+  s.fallSpeed = Math.min(3.4, s.fallSpeed + 0.15);
+  s.spawnInterval = Math.max(30, s.spawnInterval - 2.5);
+  document.getElementById("magic-melody-name").textContent = magicCurrentMelody(s).name + ` (${s.melodyIdx + 1}/10)`;
+}
+
+function magicGameOver(s) {
   if (!s || s.ended) return;
   s.ended = true;
   if (magicRaf) cancelAnimationFrame(magicRaf);
   vibrate([30, 30, 60]);
   sfxKO();
   if (s.score > magicBest) { magicBest = s.score; localStorage.setItem("capnaval-magic-best", String(magicBest)); }
-  setTimeout(() => showSoloEnd("lose", "Rythme brisé !", `Score final : ${s.score}.`), 250);
+  const melody = magicCurrentMelody(s);
+  setTimeout(() => showSoloEnd("lose", "Rythme brisé !", `Arrêté sur la mélodie "${melody.name}" (${s.melodyIdx + 1}/10). Score final : ${s.score}.`), 250);
 }
+
 function magicLoop() {
   const s = magicState;
   if (!s || s.ended) return;
+  const field = document.getElementById("magic-field");
+  const fieldH = field.clientHeight;
+  const now = performance.now();
+
   s.spawnTimer++;
-  if (s.spawnTimer >= s.spawnInterval) {
+  if (s.spawnTimer >= s.spawnInterval && s.noteIdx < magicCurrentMelody(s).notes.length) {
     s.spawnTimer = 0;
-    let lane = Math.floor(Math.random() * MAGIC_LANES);
-    if (lane === s.lastLane && Math.random() < 0.7) lane = (lane + 1 + Math.floor(Math.random() * (MAGIC_LANES - 1))) % MAGIC_LANES;
-    s.lastLane = lane;
-    s.tiles.push({ lane, y: -MAGIC_TILE_H });
-    s.speed = Math.min(7.5, s.speed + 0.06); // la cadence s'accélère au fil de la partie
-    s.spawnInterval = Math.max(32, s.spawnInterval - 0.45);
+    magicSpawnTile(s);
   }
-  s.tiles.forEach(t => { t.y += s.speed; });
-  if (s.tiles.some(t => t.y > MAGIC_H)) { magicGameOver(); return; }
-  s.particles.forEach(p => { p.x += p.vx; p.y += p.vy; p.vy += 0.1; p.life -= 0.05; });
-  s.particles = s.particles.filter(p => p.life > 0);
-  drawMagic();
+
+  s.tiles.forEach(t => { t.y += s.fallSpeed; t.el.style.top = t.y + "px"; });
+
+  // tuiles "maintien" tenues assez longtemps : validation automatique sans attendre le relâchement
+  const autoSuccess = s.tiles.find(t => t.hold && t.holding && (now - t.holdStart) >= MAGIC_HOLD_MS);
+  if (autoSuccess) { magicTileSuccess(autoSuccess, s); }
+
+  const missed = s.tiles.find(t => t.y > fieldH);
+  if (missed) { magicGameOver(s); return; }
+
   magicRaf = requestAnimationFrame(magicLoop);
 }
-function drawMagic() {
-  const canvas = document.getElementById("magic-canvas");
-  const ctx = canvas.getContext("2d");
-  ctx.clearRect(0, 0, MAGIC_W, MAGIC_H);
-  ctx.fillStyle = "#10141c";
-  ctx.fillRect(0, 0, MAGIC_W, MAGIC_H);
-  for (let i = 1; i < MAGIC_LANES; i++) {
-    ctx.strokeStyle = "rgba(255,255,255,.08)";
-    ctx.beginPath(); ctx.moveTo(i * MAGIC_LANE_W, 0); ctx.lineTo(i * MAGIC_LANE_W, MAGIC_H); ctx.stroke();
-  }
-  ctx.fillStyle = "rgba(74,222,128,.14)";
-  ctx.fillRect(0, MAGIC_H - 66, MAGIC_W, 66);
-  const s = magicState;
-  s.tiles.forEach(t => {
-    ctx.fillStyle = "#1a2230";
-    ctx.strokeStyle = "#4a90d9";
-    ctx.lineWidth = 2;
-    const x = t.lane * MAGIC_LANE_W + 3;
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(x, t.y, MAGIC_LANE_W - 6, MAGIC_TILE_H - 6, 8);
-    else ctx.rect(x, t.y, MAGIC_LANE_W - 6, MAGIC_TILE_H - 6);
-    ctx.fill(); ctx.stroke();
-  });
-  s.particles.forEach(p => {
-    ctx.globalAlpha = Math.max(0, p.life);
-    ctx.fillStyle = "#facc15";
-    ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
-  });
-  ctx.globalAlpha = 1;
-}
+
 document.getElementById("btn-magic-restart").addEventListener("click", startMagicGame);
 document.getElementById("btn-magic-quit").addEventListener("click", () => {
   if (magicRaf) cancelAnimationFrame(magicRaf);
   if (magicState) magicState.ended = true;
+  magicState = null;
   showScreen("screen-solo-hub");
 });
 

@@ -513,6 +513,36 @@ html, body {
   background: rgba(0,0,0,.25); pointer-events: none;
 }
 
+/* ---- Rythme des Vagues (Magic Tiles) : cases DOM, plus de canvas ---- */
+.magic-wrap { position: relative; width: 100%; max-width: 340px; margin: 14px auto 0; }
+.magic-field {
+  position: relative; width: 100%; height: 460px; overflow: hidden;
+  background: #10141c; border-radius: 10px; border: 1px solid var(--line); touch-action: none;
+}
+.magic-lane-sep { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(255,255,255,.08); }
+.magic-field::after {
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 70px;
+  background: rgba(74,222,128,.14); pointer-events: none;
+}
+.magic-tile {
+  position: absolute; box-sizing: border-box; margin: 0 4px;
+  background: #1a2230; border: 2px solid #4a90d9; border-radius: 10px;
+  display: flex; align-items: flex-end; justify-content: center; padding-bottom: 6px;
+  cursor: pointer; user-select: none; -webkit-user-select: none;
+}
+.magic-tile-hold { background: #2a2210; border-color: #facc15; }
+.magic-tile-holding { box-shadow: 0 0 0 3px rgba(250,204,21,.5) inset; }
+.magic-tile-label { font-size: 11px; font-weight: 700; color: #facc15; }
+.magic-tile-fill {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 0%;
+  background: rgba(250,204,21,.35); border-radius: 0 0 8px 8px; pointer-events: none;
+  transition: height .05s linear;
+}
+.magic-tile-holding .magic-tile-fill { animation: magic-fill 0.55s linear forwards; }
+@keyframes magic-fill { from { height: 0%; } to { height: 100%; } }
+.magic-tile-pop { animation: magic-pop .18s ease-out both; pointer-events: none; }
+@keyframes magic-pop { from { transform: scale(1); opacity: 1; } to { transform: scale(1.3); opacity: 0; } }
+
 .battle-act-choices { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
 
 .battle-fight-bar-wrap { margin-bottom: 14px; cursor: pointer; }

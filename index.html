@@ -335,11 +335,16 @@
   <div class="card">
     <h2 class="lobby-title">🎹 Rythme des Vagues</h2>
     <p class="hint" style="text-align:center">Score : <span id="magic-score">0</span> — Record : <span id="magic-best">0</span></p>
-    <div class="flappy-wrap">
-      <canvas id="magic-canvas" width="300" height="400"></canvas>
-      <div id="magic-hint" class="flappy-tap-hint">Touche la colonne quand une tuile y tombe !</div>
+    <p class="hint" style="text-align:center;font-weight:600" id="magic-melody-name">Vague (1/10)</p>
+    <div class="magic-wrap">
+      <div id="magic-field" class="magic-field">
+        <div class="magic-lane-sep" style="left:25%"></div>
+        <div class="magic-lane-sep" style="left:50%"></div>
+        <div class="magic-lane-sep" style="left:75%"></div>
+      </div>
+      <div id="magic-hint" class="flappy-tap-hint">Touche une case dès qu'elle tombe ! Les grandes cases dorées se tiennent appuyées.</div>
     </div>
-    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche la bonne colonne avant qu'une tuile ne sorte de l'écran. Une erreur ou un raté, et c'est terminé !</p>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">10 mélodies à enchaîner. Touche une case avant qu'elle ne sorte de l'écran ; tiens les cases dorées jusqu'au bout. Un raté, et c'est terminé !</p>
     <div class="solo-game-btns">
       <button type="button" id="btn-magic-restart" class="btn btn-secondary">Recommencer</button>
       <button type="button" id="btn-magic-quit" class="btn btn-secondary">Retour</button>
