@@ -2478,23 +2478,66 @@ const MAGIC_NOTE_FREQ = {
   C4: 261.63, D4: 293.66, E4: 329.63, F4: 349.23, G4: 392.00, A4: 440.00, B4: 493.88,
   C5: 523.25, D5: 587.33, E5: 659.25, F5: 698.46, G5: 783.99, A5: 880.00,
 };
-// 10 mélodies distinctes (façon berceuses marines) ; "holds" = indices de notes tenues.
-const MAGIC_MELODIES = [
-  { name: "Vague",          notes: ["C4","E4","G4","E4","C4","G4","E4","C4"],           holds: [7] },
-  { name: "Brise",          notes: ["D4","F4","A4","F4","D4","A4","F4","D4"],           holds: [7] },
-  { name: "Écume",          notes: ["E4","G4","B4","G4","E4","B4","G4","E4"],           holds: [3, 7] },
-  { name: "Marée montante", notes: ["C4","D4","E4","F4","G4","F4","E4","D4","C4"],      holds: [4, 8] },
-  { name: "Reflets",        notes: ["G4","A4","B4","C5","B4","A4","G4","F4"],           holds: [3, 7] },
-  { name: "Abysses",        notes: ["A4","C5","E5","C5","A4","E5","C5","A4"],           holds: [2, 7] },
-  { name: "Sirène",         notes: ["E4","G4","A4","C5","A4","G4","E4","D4"],           holds: [3, 7] },
-  { name: "Récif",          notes: ["D4","F4","G4","A4","G4","F4","D4","C4"],           holds: [3, 7] },
-  { name: "Tempête",        notes: ["C4","E4","G4","C5","G4","E4","C4","G4"],           holds: [3, 7] },
-  { name: "Horizon",        notes: ["F4","A4","C5","A4","F4","C5","A4","F4"],           holds: [2, 7] },
+// 10 mélodies distinctes, chacune construite à partir d'un court motif (façon berceuse marine)
+// répété et varié (transposé, renversé) pour donner un vrai morceau d'au moins ~50 notes,
+// plutôt qu'une simple boucle de 8 notes. "holds" = indices (dans le morceau complet) des
+// notes tenues (une par répétition du motif, sur la dernière note).
+const MAGIC_SCALE = ["C4","D4","E4","F4","G4","A4","B4","C5","D5","E5","F5","G5","A5"];
+function magicTranspose(names, steps) {
+  return names.map(n => {
+    let i = MAGIC_SCALE.indexOf(n) + steps;
+    i = Math.max(0, Math.min(MAGIC_SCALE.length - 1, i));
+    return MAGIC_SCALE[i];
+  });
+}
+function magicBuildMelody(name, motif) {
+  // 7 répétitions variées du motif (thème → variation transposée → renversé → thème → ...)
+  // = un vrai petit morceau à couplets/refrain plutôt qu'une boucle identique.
+  const variations = [
+    m => m,
+    m => magicTranspose(m, 2),
+    m => [...m].reverse(),
+    m => m,
+    m => magicTranspose(m, -2),
+    m => magicTranspose([...m].reverse(), 2),
+    m => m,
+  ];
+  const notes = [];
+  const holds = [];
+  variations.forEach(fn => {
+    notes.push(...fn(motif));
+    holds.push(notes.length - 1); // la dernière note de chaque répétition se tient
+  });
+  return { name, notes, holds };
+}
+const MAGIC_MOTIFS = [
+  ["Vague",          ["C4","E4","G4","E4","C4","G4","E4","C4"]],
+  ["Brise",          ["D4","F4","A4","F4","D4","A4","F4","D4"]],
+  ["Écume",          ["E4","G4","B4","G4","E4","B4","G4","E4"]],
+  ["Marée montante", ["C4","D4","E4","F4","G4","F4","E4","D4"]],
+  ["Reflets",        ["G4","A4","B4","C5","B4","A4","G4","F4"]],
+  ["Abysses",        ["A4","C5","E5","C5","A4","E5","C5","A4"]],
+  ["Sirène",         ["E4","G4","A4","C5","A4","G4","E4","D4"]],
+  ["Récif",          ["D4","F4","G4","A4","G4","F4","D4","C4"]],
+  ["Tempête",        ["C4","E4","G4","C5","G4","E4","C4","G4"]],
+  ["Horizon",        ["F4","A4","C5","A4","F4","C5","A4","F4"]],
 ];
+const MAGIC_MELODIES = MAGIC_MOTIFS.map(([name, motif]) => magicBuildMelody(name, motif));
 let magicState = null, magicRaf = null, magicWired = false;
 let magicBest = parseInt(localStorage.getItem("capnaval-magic-best") || "0", 10) || 0;
+let magicLastMelodyIdx = -1;
 
 function magicCurrentMelody(s) { return MAGIC_MELODIES[s.melodyIdx]; }
+
+// Une mélodie tirée au sort par partie (jamais deux fois de suite la même) parmi les 10 —
+// une partie = une mélodie du début à la fin, pas un enchaînement des 10.
+function magicPickMelodyIdx() {
+  if (MAGIC_MELODIES.length <= 1) return 0;
+  let idx;
+  do { idx = Math.floor(Math.random() * MAGIC_MELODIES.length); } while (idx === magicLastMelodyIdx);
+  magicLastMelodyIdx = idx;
+  return idx;
+}
 
 function startMagicGame() {
   soloRetryHandler = startMagicGame;
@@ -2502,13 +2545,14 @@ function startMagicGame() {
   const field = document.getElementById("magic-field");
   field.querySelectorAll(".magic-tile").forEach(el => el.remove());
   magicState = {
-    melodyIdx: 0, noteIdx: 0, completedInMelody: 0,
+    melodyIdx: magicPickMelodyIdx(), noteIdx: 0, completedInMelody: 0,
     tiles: [], score: 0, ended: false, lastLane: -1,
     fallSpeed: 1.8, spawnTimer: 0, spawnInterval: 58,
   };
   document.getElementById("magic-score").textContent = "0";
   document.getElementById("magic-best").textContent = String(magicBest);
-  document.getElementById("magic-melody-name").textContent = magicCurrentMelody(magicState).name + " (1/10)";
+  document.getElementById("magic-melody-name").innerHTML =
+    '🎵 <span class="magic-melody-badge">' + magicCurrentMelody(magicState).name + '</span>';
   document.getElementById("magic-hint").style.display = "flex";
   showScreen("screen-solo-magic");
   if (magicRaf) cancelAnimationFrame(magicRaf);
@@ -2530,6 +2574,9 @@ function magicSpawnTile(s) {
   if (lane === s.lastLane && Math.random() < 0.7) lane = (lane + 1 + Math.floor(Math.random() * (MAGIC_LANES - 1))) % MAGIC_LANES;
   s.lastLane = lane;
   s.noteIdx++;
+  // le morceau est long (~50+ notes) : la cadence monte doucement du début à la fin.
+  s.fallSpeed = Math.min(4.2, s.fallSpeed + 0.03);
+  s.spawnInterval = Math.max(26, s.spawnInterval - 0.4);
 
   const field = document.getElementById("magic-field");
   const h = hold ? MAGIC_TILE_H + MAGIC_HOLD_EXTRA_H : MAGIC_TILE_H;
@@ -2585,25 +2632,18 @@ function magicTileSuccess(tile, s) {
 
   const melody = magicCurrentMelody(s);
   if (s.completedInMelody >= melody.notes.length) {
-    magicMelodyCleared(s);
+    magicMelodyWin(s);
   }
 }
 
-function magicMelodyCleared(s) {
-  if (s.melodyIdx >= MAGIC_MELODIES.length - 1) {
-    // les 10 mélodies ont été jouées jusqu'au bout : victoire !
-    s.ended = true;
-    if (magicRaf) cancelAnimationFrame(magicRaf);
-    if (s.score > magicBest) { magicBest = s.score; localStorage.setItem("capnaval-magic-best", String(magicBest)); }
-    setTimeout(() => showSoloEnd("win", "Bravo, marin rythmé !", `Les 10 mélodies jouées jusqu'au bout ! Score final : ${s.score}.`), 300);
-    return;
-  }
-  s.melodyIdx++;
-  s.noteIdx = 0;
-  s.completedInMelody = 0;
-  s.fallSpeed = Math.min(3.4, s.fallSpeed + 0.15);
-  s.spawnInterval = Math.max(30, s.spawnInterval - 2.5);
-  document.getElementById("magic-melody-name").textContent = magicCurrentMelody(s).name + ` (${s.melodyIdx + 1}/10)`;
+// La mélodie du jour est terminée sans faute : victoire immédiate (une partie = une mélodie).
+function magicMelodyWin(s) {
+  if (s.ended) return;
+  s.ended = true;
+  if (magicRaf) cancelAnimationFrame(magicRaf);
+  if (s.score > magicBest) { magicBest = s.score; localStorage.setItem("capnaval-magic-best", String(magicBest)); }
+  const melody = magicCurrentMelody(s);
+  setTimeout(() => showSoloEnd("win", "Mélodie jouée à la perfection !", `« ${melody.name} » jouée sans une fausse note. Score final : ${s.score}.`), 300);
 }
 
 function magicGameOver(s) {
@@ -2614,7 +2654,7 @@ function magicGameOver(s) {
   sfxKO();
   if (s.score > magicBest) { magicBest = s.score; localStorage.setItem("capnaval-magic-best", String(magicBest)); }
   const melody = magicCurrentMelody(s);
-  setTimeout(() => showSoloEnd("lose", "Rythme brisé !", `Arrêté sur la mélodie "${melody.name}" (${s.melodyIdx + 1}/10). Score final : ${s.score}.`), 250);
+  setTimeout(() => showSoloEnd("lose", "Rythme brisé !", `Arrêté en plein milieu de « ${melody.name} ». Score final : ${s.score}.`), 250);
 }
 
 function magicLoop() {

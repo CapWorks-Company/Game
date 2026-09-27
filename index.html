@@ -334,17 +334,17 @@
 <section id="screen-solo-magic" class="screen">
   <div class="card">
     <h2 class="lobby-title">🎹 Rythme des Vagues</h2>
-    <p class="hint" style="text-align:center">Score : <span id="magic-score">0</span> — Record : <span id="magic-best">0</span></p>
-    <p class="hint" style="text-align:center;font-weight:600" id="magic-melody-name">Vague (1/10)</p>
+    <p class="magic-scoreline">Score <strong id="magic-score">0</strong> <span class="magic-scoreline-sep">·</span> Record <strong id="magic-best">0</strong></p>
+    <p class="magic-melody-line" id="magic-melody-name">🎵 <span class="magic-melody-badge">Vague</span></p>
     <div class="magic-wrap">
       <div id="magic-field" class="magic-field">
         <div class="magic-lane-sep" style="left:25%"></div>
         <div class="magic-lane-sep" style="left:50%"></div>
         <div class="magic-lane-sep" style="left:75%"></div>
       </div>
-      <div id="magic-hint" class="flappy-tap-hint">Touche une case dès qu'elle tombe ! Les grandes cases dorées se tiennent appuyées.</div>
+      <div id="magic-hint" class="flappy-tap-hint">Touche une case dès qu'elle tombe ✦ tiens les cases dorées</div>
     </div>
-    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">10 mélodies à enchaîner. Touche une case avant qu'elle ne sorte de l'écran ; tiens les cases dorées jusqu'au bout. Un raté, et c'est terminé !</p>
+    <p class="magic-instructions">Une mélodie parmi <strong>10</strong> t'est tirée au sort à chaque partie. Touche une case avant qu'elle ne sorte de l'écran, et tiens les cases dorées jusqu'au bout — un raté, et c'est terminé !</p>
     <div class="solo-game-btns">
       <button type="button" id="btn-magic-restart" class="btn btn-secondary">Recommencer</button>
       <button type="button" id="btn-magic-quit" class="btn btn-secondary">Retour</button>
