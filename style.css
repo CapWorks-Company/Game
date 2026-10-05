@@ -667,8 +667,8 @@ html, body {
 .room-code-actions { display: flex; justify-content: center; margin: -8px 0 12px; }
 .room-code-action-btn { width: auto; padding: 8px 16px; font-size: 13px; }
 .room-qr-wrap { display: flex; flex-direction: column; align-items: center; margin-bottom: 16px; }
-.room-qr-wrap #room-qr { background: #fff; padding: 8px; border-radius: 10px; line-height: 0; width: 144px; height: 144px; box-sizing: border-box; overflow: hidden; }
-.room-qr-wrap #room-qr canvas, .room-qr-wrap #room-qr img { width: 128px !important; height: 128px !important; display: block; }
+.room-qr-wrap #room-qr, .room-qr-wrap #duo-qr { background: #fff; padding: 8px; border-radius: 10px; line-height: 0; width: 144px; height: 144px; box-sizing: border-box; overflow: hidden; }
+.room-qr-wrap #room-qr canvas, .room-qr-wrap #room-qr img, .room-qr-wrap #duo-qr canvas, .room-qr-wrap #duo-qr img { width: 128px !important; height: 128px !important; display: block; }
 
 .player-list { list-style: none; margin: 0 0 16px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .player-list li { display: flex; align-items: center; gap: 10px; background: var(--panel-2); padding: 8px 12px; border-radius: 8px; }
@@ -1692,4 +1692,18 @@ body.reduce-motion *, body.reduce-motion *::before, body.reduce-motion *::after 
 }
 @keyframes darts-popup-float {
   0% { opacity: 1; transform: translate(-50%, -50%); } 100% { opacity: 0; transform: translate(-50%, -50%) translateY(-34px); }
+}
+
+/* ---- Panneaux Créer / Rejoindre (Duo et Multijoueur) ---- */
+.cr-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 12px 0 10px; }
+.cr-tab {
+  padding: 10px 8px; font-size: 14px; font-weight: 700; font-family: var(--font-body);
+  background: var(--panel-2); color: var(--text-dim); border: 2px solid var(--line);
+  border-radius: 8px; cursor: pointer;
+}
+.cr-tab.active { color: var(--text); border-color: var(--accent); background: rgba(255,138,61,.12); }
+.cr-code-input {
+  width: 100%; padding: 12px; margin: 6px 0 10px; background: var(--panel);
+  border: 1px solid var(--line); border-radius: 8px; color: var(--text);
+  font-size: 18px; letter-spacing: 3px; text-align: center; text-transform: uppercase; box-sizing: border-box;
 }

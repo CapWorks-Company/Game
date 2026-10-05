@@ -2832,14 +2832,14 @@ document.getElementById("btn-darts-quit").addEventListener("click", () => {
 
 // ================= MODE DUO : BATAILLE NAVALE EN LIGNE, chacun sur son appareil =================
 const BS_GRID = 8;
-let duoWs = null, myDuoNum = null, duo = null;
+let duoWs = null, myDuoNum = null, duo = null, duoCode = null;
 let bsPlace = null; // état local du placement des navires, avant l'envoi au serveur
 let selectedDuoGame = "battleship"; // jeu choisi dans la modale, avant de créer un duel
 let duoGame = "battleship"; // jeu de la partie Duo en cours (confirmé par le serveur via duoWelcome)
 
 document.getElementById("btn-choose-duo").addEventListener("click", () => {
   document.getElementById("mode-choice-modal").style.display = "none";
-  document.getElementById("duo-choice-modal").style.display = "flex";
+  openCrModal("duo", "create");
 });
 document.getElementById("btn-close-duo-choice").addEventListener("click", () => {
   document.getElementById("duo-choice-modal").style.display = "none";
@@ -2902,7 +2902,10 @@ document.querySelectorAll(".rps-choice").forEach(btn => {
 });
 
 function connectDuo(code, pseudo, game) {
+  duoCode = code;
   document.getElementById("duo-wait-code").textContent = code;
+  document.getElementById("duo-qr-wrap").style.display = "none";
+  renderShareQR("duo-qr", duoShareLink());
   document.getElementById("duo-wait-status").textContent = "Connexion au serveur...";
   showScreen("screen-duo-wait");
   myDuoNum = null;
@@ -3552,20 +3555,73 @@ document.getElementById("btn-toggle-qr").addEventListener("click", () => {
 });
 
 // ---------- QR code du lien de partie (facultatif : dégradation silencieuse si indisponible) ----------
-function renderRoomQR(retriesLeft) {
-  const wrap = document.getElementById("room-qr-wrap");
-  const el = document.getElementById("room-qr");
-  if (!wrap || !el || !myCode) return;
+function renderShareQR(elId, link, retriesLeft) {
+  const el = document.getElementById(elId);
+  if (!el || !link) return;
   if (typeof QRCode === "undefined") {
     if (retriesLeft === undefined) retriesLeft = 4;
-    if (retriesLeft > 0) setTimeout(() => renderRoomQR(retriesLeft - 1), 400); // la librairie charge peut-être encore
+    if (retriesLeft > 0) setTimeout(() => renderShareQR(elId, link, retriesLeft - 1), 400); // la librairie charge peut-être encore
     return;
   }
   el.innerHTML = "";
   try {
-    new QRCode(el, { text: roomShareLink(), width: 128, height: 128, colorDark: "#10131a", colorLight: "#ffffff" });
+    new QRCode(el, { text: link, width: 128, height: 128, colorDark: "#10131a", colorLight: "#ffffff" });
   } catch (e) { /* pas grave, le code texte + le partage restent disponibles */ }
 }
+function renderRoomQR() { renderShareQR("room-qr", myCode ? roomShareLink() : null); }
+
+// ---------- Partage du code de duel (même principe que le multijoueur, lien ?duo=CODE) ----------
+function duoShareLink() { return duoCode ? `${GAME_SHARE_URL}/?duo=${duoCode}` : null; }
+function shareDuoCode() {
+  if (!duoCode) return;
+  const text = `Hey ! Rejoins mon duel CapNaval sur ${duoShareLink()} (code : ${duoCode}) !`;
+  if (navigator.share) { navigator.share({ text }).catch(() => {}); return; }
+  const btn = document.getElementById("duo-wait-code");
+  const flash = () => { btn.textContent = "Copié !"; setTimeout(() => { btn.textContent = duoCode; }, 1300); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(flash).catch(() => {});
+  else flash();
+}
+document.getElementById("duo-wait-code").addEventListener("click", shareDuoCode);
+document.getElementById("btn-duo-copy-code").addEventListener("click", () => {
+  if (!duoCode) return;
+  const btn = document.getElementById("btn-duo-copy-code");
+  const original = btn.textContent;
+  const flash = () => { btn.textContent = "✅ Copié !"; setTimeout(() => { btn.textContent = original; }, 1300); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(duoCode).then(flash).catch(() => {});
+  else flash();
+});
+document.getElementById("btn-duo-toggle-qr").addEventListener("click", () => {
+  const wrap = document.getElementById("duo-qr-wrap");
+  wrap.style.display = wrap.style.display === "none" ? "flex" : "none";
+});
+
+// Lien direct (?duo=XXXXX ou ?code=XXXXX) : connexion automatique à la partie
+function askPseudoForLink() {
+  let pseudo = document.getElementById("input-pseudo").value.trim();
+  if (!pseudo) pseudo = (window.prompt("Ton pseudo pour rejoindre la partie :", "") || "").trim();
+  if (!pseudo) return null;
+  document.getElementById("input-pseudo").value = pseudo;
+  saveLastPseudo(pseudo);
+  return pseudo;
+}
+(function autoJoinFromLink() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const duoC = (params.get("duo") || "").trim().toUpperCase();
+    const multiC = (params.get("code") || "").trim().toUpperCase();
+    if (!duoC && !multiC) return;
+    window.addEventListener("load", () => setTimeout(() => {
+      try { history.replaceState(null, "", window.location.pathname); } catch (e) { /* ignore */ }
+      const pseudo = askPseudoForLink();
+      if (duoC) {
+        if (!pseudo) return openCrModal("duo", "join", duoC);
+        connectDuo(duoC, pseudo);
+      } else if (pseudo) {
+        connect(multiC, pseudo);
+      }
+    }, 600));
+  } catch (e) { /* ignore */ }
+})();
 
 // ---------- Tutoriel rapide (au tout premier lancement, ou à la demande) ----------
 const TUTORIAL_KEY = "capnaval_tutorial_seen";
@@ -3825,12 +3881,19 @@ document.getElementById("btn-choose-solo").addEventListener("click", () => {
   document.getElementById("mode-choice-modal").style.display = "none";
   openSoloHub();
 });
-document.getElementById("btn-choose-multiplayer").addEventListener("click", async () => {
+document.getElementById("btn-choose-multiplayer").addEventListener("click", () => {
   document.getElementById("mode-choice-modal").style.display = "none";
+  openCrModal("multi", "create");
+});
+document.getElementById("btn-close-multi-choice").addEventListener("click", () => {
+  document.getElementById("multi-choice-modal").style.display = "none";
+});
+document.getElementById("btn-multi-create").addEventListener("click", async () => {
   const pseudo = document.getElementById("input-pseudo").value.trim();
-  if (!pseudo) return setHomeError("Entre un pseudo.");
+  if (!pseudo) { document.getElementById("multi-choice-modal").style.display = "none"; return setHomeError("Entre un pseudo."); }
+  document.getElementById("multi-choice-modal").style.display = "none";
   saveLastPseudo(pseudo);
-  const isPublic = document.getElementById("create-public-toggle").checked;
+  const isPublic = document.getElementById("multi-public-toggle").checked;
   const homeError = document.getElementById("home-error");
   const stopLog = runLoadingLog(homeError, ["Connexion avec le serveur...", "Création de la partie...", "En attente de la réponse du serveur..."], 650);
   try {
@@ -3848,16 +3911,29 @@ document.getElementById("btn-choose-multiplayer").addEventListener("click", asyn
     setHomeError("Impossible de joindre le serveur. Vérifie BACKEND_URL dans app.js.");
   }
 });
-
-document.getElementById("btn-join").addEventListener("click", () => {
+document.getElementById("btn-multi-join").addEventListener("click", () => {
   const pseudo = document.getElementById("input-pseudo").value.trim();
-  const code = document.getElementById("input-code").value.trim().toUpperCase();
+  const code = document.getElementById("multi-join-code").value.trim().toUpperCase();
+  document.getElementById("multi-choice-modal").style.display = "none";
   if (!pseudo) return setHomeError("Entre un pseudo.");
   if (!code) return setHomeError("Entre un code de partie.");
   saveLastPseudo(pseudo);
-  const homeError = document.getElementById("home-error");
-  runLoadingLog(homeError, ["Connexion avec le serveur...", "Connexion à la partie..."], 650);
+  runLoadingLog(document.getElementById("home-error"), ["Connexion avec le serveur...", "Connexion à la partie..."], 650);
   connect(code, pseudo);
+});
+
+// Panneaux Créer / Rejoindre (partagés par le Duo et le Multijoueur)
+function setCrTab(modal, tab) {
+  document.querySelectorAll(`.cr-tabs[data-modal="${modal}"] .cr-tab`).forEach(b => b.classList.toggle("active", b.dataset.tab === tab));
+  document.querySelectorAll(`.cr-panel[data-modal="${modal}"]`).forEach(p => { p.style.display = p.dataset.panel === tab ? "" : "none"; });
+}
+function openCrModal(modal, tab, code) {
+  setCrTab(modal, tab);
+  if (code) document.getElementById(`${modal}-join-code`).value = code;
+  document.getElementById(`${modal}-choice-modal`).style.display = "flex";
+}
+document.querySelectorAll(".cr-tab").forEach(btn => {
+  btn.addEventListener("click", () => setCrTab(btn.closest(".cr-tabs").dataset.modal, btn.dataset.tab));
 });
 
 function setHomeError(msg) { document.getElementById("home-error").textContent = msg; }
@@ -6001,7 +6077,10 @@ async function startArExperience(theme) {
   }
 
   const canvas = document.getElementById("ar-canvas");
-  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  // preserveDrawingBuffer: true est indispensable pour que la capture photo puisse relire ce
+  // canvas plus tard (sans ça, le navigateur peut vider le buffer WebGL juste après l'affichage
+  // et la photo capturée n'a que la caméra, sans le décor 3D par-dessus).
+  const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, preserveDrawingBuffer: true });
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
   renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
   renderer.setClearColor(0x000000, 0);
@@ -6015,7 +6094,9 @@ async function startArExperience(theme) {
 
   arState = {
     theme, stream, renderer, scene, camera, extras, raf: null,
-    yaw: 0, pitch: 0, dragging: false, lastX: 0, lastY: 0,
+    // on démarre en regardant légèrement vers le bas : le décor doit sembler posé au sol,
+    // pas flotter au milieu de l'écran comme si on regardait droit devant à hauteur d'yeux.
+    yaw: 0, pitch: -0.32, dragging: false, lastX: 0, lastY: 0,
     orientBase: null, useOrientation: false, startTime: performance.now(),
   };
 
@@ -6224,6 +6305,9 @@ function arLoop() {
 function arCapturePhoto() {
   const s = arState;
   if (!s) return;
+  // On force un rendu juste avant de lire le canvas : évite de capturer un buffer WebGL
+  // vidé entre deux images (même avec preserveDrawingBuffer, mieux vaut re-rendre juste avant).
+  s.renderer.render(s.scene, s.camera);
   const video = document.getElementById("ar-video");
   const canvas3d = document.getElementById("ar-canvas");
   const out = document.createElement("canvas");

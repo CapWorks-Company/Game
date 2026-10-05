@@ -39,10 +39,6 @@
     </label>
 
     <button id="btn-create" class="btn btn-primary">Créer une partie</button>
-    <label class="toggle-field" style="margin-top:6px">
-      <span class="toggle-text">Partie publique</span>
-      <span class="toggle-switch"><input type="checkbox" id="create-public-toggle"><span class="toggle-slider"></span></span>
-    </label>
 
     <button id="btn-general-settings" class="btn btn-secondary" style="margin-top:6px">⚙️ Paramètres généraux</button>
     <button id="btn-show-tutorial" class="btn btn-secondary" style="margin-top:6px">❓ Comment jouer</button>
@@ -871,22 +867,52 @@
   </div>
 </div>
 
+<div id="multi-choice-modal" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:340px">
+    <h2 class="lobby-title" style="font-size:19px">🎮 Multijoueur</h2>
+    <p class="hint" style="font-size:12px">Affronte tes amis en ligne, à plusieurs.</p>
+    <div class="cr-tabs" data-modal="multi">
+      <button type="button" class="cr-tab active" data-tab="create">Créer</button>
+      <button type="button" class="cr-tab" data-tab="join">Rejoindre</button>
+    </div>
+    <div class="cr-panel" data-modal="multi" data-panel="create">
+      <label class="toggle-field" style="margin:4px 0 10px">
+        <span class="toggle-text">Partie publique</span>
+        <span class="toggle-switch"><input type="checkbox" id="multi-public-toggle"><span class="toggle-slider"></span></span>
+      </label>
+      <button type="button" id="btn-multi-create" class="btn btn-primary">Créer la partie</button>
+    </div>
+    <div class="cr-panel" data-modal="multi" data-panel="join" style="display:none">
+      <input type="text" id="multi-join-code" maxlength="5" placeholder="Code de la partie" class="cr-code-input">
+      <button type="button" id="btn-multi-join" class="btn btn-primary">Rejoindre</button>
+    </div>
+    <button type="button" id="btn-close-multi-choice" class="btn btn-secondary" style="margin-top:10px">Annuler</button>
+  </div>
+</div>
+
 <div id="duo-choice-modal" class="ios-install-modal" style="display:none">
   <div class="card" style="max-width:340px">
     <h2 class="lobby-title" style="font-size:19px">🕹️ Duo en ligne</h2>
     <p class="hint" style="font-size:12px">Chacun sur son propre appareil, connectés ensemble.</p>
-    <p class="hint" style="font-size:12px;margin-top:10px">Pour créer un duel, choisis d'abord le jeu :</p>
-    <div id="duo-game-picker" class="duo-game-picker">
-      <button type="button" class="duo-game-choice active" data-game="battleship">⚓<br>Bataille Navale</button>
-      <button type="button" class="duo-game-choice" data-game="connect4">🔴<br>Puissance 4</button>
-      <button type="button" class="duo-game-choice" data-game="rps">✂️<br>Pierre-Feuille-Ciseaux</button>
-      <button type="button" class="duo-game-choice" data-game="checkers">⚫<br>Dames</button>
+    <div class="cr-tabs" data-modal="duo">
+      <button type="button" class="cr-tab active" data-tab="create">Créer</button>
+      <button type="button" class="cr-tab" data-tab="join">Rejoindre</button>
     </div>
-    <button type="button" id="btn-duo-create" class="btn btn-primary" style="margin-top:10px">Créer un duel</button>
-    <div class="divider" style="margin:14px 0"><span>ou</span></div>
-    <p class="hint" style="font-size:12px;margin-top:-6px">Rejoindre reprend automatiquement le jeu choisi par ton adversaire.</p>
-    <input type="text" id="duo-join-code" maxlength="5" placeholder="Code du duel" style="text-transform:uppercase; width:100%; padding:12px; margin-bottom:10px; background:var(--panel); border:1px solid var(--line); border-radius:8px; color:var(--text); font-size:16px; text-align:center; box-sizing:border-box">
-    <button type="button" id="btn-duo-join" class="btn btn-secondary">Rejoindre</button>
+    <div class="cr-panel" data-modal="duo" data-panel="create">
+      <p class="hint" style="font-size:12px;margin-top:6px">Choisis d'abord le jeu :</p>
+      <div id="duo-game-picker" class="duo-game-picker">
+        <button type="button" class="duo-game-choice active" data-game="battleship">⚓<br>Bataille Navale</button>
+        <button type="button" class="duo-game-choice" data-game="connect4">🔴<br>Puissance 4</button>
+        <button type="button" class="duo-game-choice" data-game="rps">✂️<br>Pierre-Feuille-Ciseaux</button>
+        <button type="button" class="duo-game-choice" data-game="checkers">⚫<br>Dames</button>
+      </div>
+      <button type="button" id="btn-duo-create" class="btn btn-primary" style="margin-top:10px">Créer un duel</button>
+    </div>
+    <div class="cr-panel" data-modal="duo" data-panel="join" style="display:none">
+      <p class="hint" style="font-size:12px;margin-top:6px">Rejoindre reprend automatiquement le jeu choisi par ton adversaire.</p>
+      <input type="text" id="duo-join-code" maxlength="5" placeholder="Code du duel" class="cr-code-input">
+      <button type="button" id="btn-duo-join" class="btn btn-primary">Rejoindre</button>
+    </div>
     <button type="button" id="btn-close-duo-choice" class="btn btn-secondary" style="margin-top:10px">Annuler</button>
   </div>
 </div>
@@ -895,8 +921,17 @@
 <section id="screen-duo-wait" class="screen">
   <div class="card">
     <h2 class="lobby-title">Duel en attente</h2>
-    <p class="hint">Partage ce code avec ton adversaire</p>
-    <p id="duo-wait-code" class="room-code" style="cursor:default">------</p>
+    <p class="room-code-label">Code du duel</p>
+    <button type="button" id="duo-wait-code" class="room-code" title="Partager le code">------</button>
+    <p class="hint">Tape le code pour le partager avec ton adversaire.</p>
+    <div class="room-code-actions">
+      <button type="button" id="btn-duo-copy-code" class="btn btn-secondary room-code-action-btn">📋 Copier le code</button>
+      <button type="button" id="btn-duo-toggle-qr" class="btn btn-secondary room-code-action-btn">📱 QR Code</button>
+    </div>
+    <div id="duo-qr-wrap" class="room-qr-wrap" style="display:none">
+      <div id="duo-qr" class="share-qr"></div>
+      <p class="hint" style="font-size:11px;margin-top:6px">Scanne pour rejoindre directement</p>
+    </div>
     <p class="hint" id="duo-wait-status">En attente qu'il/elle rejoigne...</p>
     <button type="button" id="btn-duo-wait-cancel" class="btn btn-secondary">Annuler</button>
   </div>
