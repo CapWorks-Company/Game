@@ -47,20 +47,8 @@
     <button id="btn-install" class="fab-install" style="display:none" aria-label="Installer l'app" title="Installer l'app">📲</button>
     <button id="btn-debug" class="fab-debug" aria-label="Debug" title="Debug">🐞</button>
 
-    <div class="divider"><span>ou</span></div>
-
-    <label class="field">
-      <span>Code de la partie</span>
-      <input id="input-code" maxlength="5" placeholder="Ex: 7XQ4P" style="text-transform:uppercase" />
-    </label>
-    <button id="btn-join" class="btn btn-secondary">Rejoindre</button>
-
     <p id="home-error" class="error"></p>
 
-    <div class="divider"><span>parties publiques</span></div>
-    <ul id="public-rooms-list" class="player-list"></ul>
-    <p id="public-rooms-empty" class="hint" style="display:none">Aucune partie publique en ce moment.</p>
-    <button id="btn-refresh-public" class="btn btn-secondary" style="font-size:13px;padding:10px">🔄 Actualiser la liste</button>
   </div>
 </section>
 
@@ -392,7 +380,7 @@
     <div id="duo-turn-banner" class="bs-turn-banner">C'est ton tour</div>
 
     <p class="bs-section-label">🌊 Eaux ennemies — touche pour tirer</p>
-    <p id="duo-opp-fleet-count" class="bs-fleet-count">🚢 5 / 5 navires adverses</p>
+    <p id="duo-opp-fleet-count" class="bs-fleet-count">🚢 6 / 6 navires adverses</p>
     <div id="duo-enemy-grid" class="bs-grid"></div>
 
     <p class="bs-section-label">⚓ Ta flotte</p>
@@ -435,8 +423,197 @@
     <h2 class="lobby-title" style="font-size:18px">⚫ Dames</h2>
     <div id="duo-ck-turn-banner" class="bs-turn-banner">C'est ton tour</div>
     <div id="duo-ck-grid" class="ck-grid"></div>
-    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche un pion puis une case pour le déplacer en diagonale. Saute par-dessus un pion adverse pour le prendre.</p>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche un pion puis une case. Prise obligatoire (rafles possibles), les pions prennent aussi en arrière, la dame (♛) se déplace et prend de loin.</p>
     <button type="button" id="btn-duo-ck-quit" class="btn btn-secondary" style="margin-top:12px">Abandonner</button>
+  </div>
+</section>
+
+<!-- ===== DUO : MEMORY / CORDE / MORPION 5 / PIGEONS ===== -->
+<section id="screen-duo-memory" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">🧠 Memory duel</h2>
+    <div id="duo-mem-banner" class="bs-turn-banner">C'est ton tour</div>
+    <p id="duo-mem-score" class="hint" style="text-align:center;font-weight:700"></p>
+    <div id="duo-mem-grid" class="mem-duo-grid"></div>
+    <button type="button" class="btn btn-secondary duo-quit-btn" style="margin-top:12px">Abandonner</button>
+  </div>
+</section>
+
+<section id="screen-duo-tug" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">🪢 Tir à la corde</h2>
+    <div id="duo-tug-banner" class="bs-turn-banner">Prépare-toi...</div>
+    <div class="tug-track"><div id="duo-tug-rope" class="tug-rope"><span class="tug-flag">🚩</span></div><div class="tug-mid"></div></div>
+    <div class="tug-names"><span id="duo-tug-left">Toi</span><span id="duo-tug-right">Adversaire</span></div>
+    <button type="button" id="duo-tug-btn" class="btn btn-primary tug-btn">TAPE ! TAPE ! TAPE !</button>
+    <p class="hint" style="font-size:12px;text-align:center">Tape le plus vite possible pour tirer la corde de ton côté !</p>
+    <button type="button" class="btn btn-secondary duo-quit-btn" style="margin-top:8px">Abandonner</button>
+  </div>
+</section>
+
+<section id="screen-duo-gomoku" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">⭕ Morpion 5</h2>
+    <div id="duo-go-banner" class="bs-turn-banner">C'est ton tour</div>
+    <div id="duo-go-grid" class="go-grid"></div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Aligne 5 pions (ligne, colonne ou diagonale) avant ton adversaire.</p>
+    <button type="button" class="btn btn-secondary duo-quit-btn" style="margin-top:8px">Abandonner</button>
+  </div>
+</section>
+
+<section id="screen-duo-pigeons" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">🎯 Tir aux pigeons</h2>
+    <div id="duo-pg-banner" class="bs-turn-banner">Prépare-toi...</div>
+    <p id="duo-pg-score" class="hint" style="text-align:center;font-weight:700"></p>
+    <div id="duo-pg-field" class="pg-field"></div>
+    <p class="hint" style="font-size:12px;text-align:center;margin-top:8px">Touche l'oiseau avant ton adversaire pour marquer.</p>
+    <button type="button" class="btn btn-secondary duo-quit-btn" style="margin-top:8px">Abandonner</button>
+  </div>
+</section>
+
+<!-- ===== MULTI (jeux de soirée) ===== -->
+<section id="screen-party-lobby" class="screen">
+  <div class="card">
+    <h2 class="lobby-title">🎉 Salon Multi</h2>
+    <p class="room-code-label">Code du salon</p>
+    <button type="button" id="party-code" class="room-code" title="Partager le code">------</button>
+    <div class="room-code-actions">
+      <button type="button" id="btn-party-copy-code" class="btn btn-secondary room-code-action-btn">📋 Copier le code</button>
+      <button type="button" id="btn-party-toggle-qr" class="btn btn-secondary room-code-action-btn">📱 QR Code</button>
+    </div>
+    <div id="party-qr-wrap" class="room-qr-wrap" style="display:none">
+      <div id="party-qr" class="share-qr"></div>
+      <p class="hint" style="font-size:11px;margin-top:6px">Scanne pour rejoindre directement</p>
+    </div>
+    <ul id="party-players" class="player-list" style="margin-top:12px"></ul>
+    <div id="party-host-zone">
+      <p class="hint" style="font-size:12px;margin-top:8px">Choisis le jeu :</p>
+      <div class="duo-game-picker">
+        <button type="button" class="duo-game-choice party-game-choice" data-game="simon">🟢<br>Simon</button>
+        <button type="button" class="duo-game-choice party-game-choice" data-game="potato">🥔<br>Patate chaude</button>
+        <button type="button" class="duo-game-choice party-game-choice" data-game="stop10">⏱️<br>Stop à 10</button>
+        <button type="button" class="duo-game-choice party-game-choice" data-game="memory">🧠<br>Memory</button>
+        <button type="button" class="duo-game-choice party-game-choice" data-game="taps">🏁<br>Course de taps</button>
+        <button type="button" class="duo-game-choice party-game-choice" data-game="vote">🗳️<br>Vote du plus…</button>
+      </div>
+      <button type="button" id="btn-party-start" class="btn btn-primary" style="margin-top:10px">Lancer la partie</button>
+    </div>
+    <p id="party-wait-host" class="hint" style="display:none">En attente que l'hôte lance la partie...</p>
+    <p id="party-status" class="hint"></p>
+    <button type="button" id="btn-party-leave" class="btn btn-secondary">Quitter le salon</button>
+  </div>
+</section>
+
+<section id="screen-party-simon" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">🟢 Simon</h2>
+    <div id="party-simon-banner" class="bs-turn-banner">...</div>
+    <p id="party-simon-info" class="hint" style="text-align:center"></p>
+    <div id="party-simon-pads" class="simon-grid">
+      <button type="button" class="simon-pad simon-pad-0" data-pad="0"></button>
+      <button type="button" class="simon-pad simon-pad-1" data-pad="1"></button>
+      <button type="button" class="simon-pad simon-pad-2" data-pad="2"></button>
+      <button type="button" class="simon-pad simon-pad-3" data-pad="3"></button>
+    </div>
+    <ul id="party-simon-players" class="party-chips"></ul>
+    <button type="button" class="btn btn-secondary party-quit-btn" style="margin-top:10px">Quitter</button>
+  </div>
+</section>
+
+<section id="screen-party-potato" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">🥔 Patate chaude</h2>
+    <div id="party-potato-banner" class="bs-turn-banner">...</div>
+    <div id="party-potato-ring" class="potato-ring"></div>
+    <p class="hint" style="font-size:12px;text-align:center">Quand tu as la patate, touche un joueur pour la lui passer. Elle explose quand on s'y attend le moins !</p>
+    <button type="button" class="btn btn-secondary party-quit-btn" style="margin-top:8px">Quitter</button>
+  </div>
+</section>
+
+<section id="screen-party-stop" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">⏱️ Stop à 10</h2>
+    <div id="party-stop-banner" class="bs-turn-banner">...</div>
+    <div id="party-stop-time" class="stop-time">0.00</div>
+    <p id="party-stop-hint" class="hint" style="text-align:center;font-size:12px"></p>
+    <button type="button" id="party-stop-btn" class="btn btn-primary stop-btn">STOP !</button>
+    <ul id="party-stop-players" class="player-list" style="margin-top:12px"></ul>
+    <button type="button" class="btn btn-secondary party-quit-btn" style="margin-top:6px">Quitter</button>
+  </div>
+</section>
+
+<section id="screen-party-memory" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">🧠 Memory</h2>
+    <div id="party-mem-banner" class="bs-turn-banner">...</div>
+    <div id="party-mem-grid" class="mem-duo-grid mem-party-grid"></div>
+    <ul id="party-mem-players" class="party-chips"></ul>
+    <button type="button" class="btn btn-secondary party-quit-btn" style="margin-top:10px">Quitter</button>
+  </div>
+</section>
+
+<section id="screen-party-taps" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">🏁 Course de taps</h2>
+    <div id="party-taps-banner" class="bs-turn-banner">...</div>
+    <ul id="party-taps-bars" class="taps-bars"></ul>
+    <button type="button" id="party-taps-btn" class="btn btn-primary tug-btn">TAPE !</button>
+    <button type="button" class="btn btn-secondary party-quit-btn" style="margin-top:8px">Quitter</button>
+  </div>
+</section>
+
+<section id="screen-duo-mines" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">💣 Bataille de mines</h2>
+    <div id="duo-mn-banner" class="bs-turn-banner">...</div>
+    <p class="bs-fleet-count" id="duo-mn-title-top">🏃 Terrain adverse : traverse-le jusqu'en haut</p>
+    <div id="duo-mn-top" class="mn-grid"></div>
+    <p class="bs-fleet-count" id="duo-mn-title-bot" style="margin-top:8px">🛡️ Ton terrain</p>
+    <div id="duo-mn-bot" class="mn-grid"></div>
+    <div id="duo-mn-place-zone" style="display:none">
+      <button type="button" id="btn-duo-mn-ready" class="btn btn-primary" style="margin-top:8px">Valider mes mines</button>
+    </div>
+    <div id="duo-mn-pad" class="mn-pad" style="display:none">
+      <button type="button" data-dir="up">⬆️</button>
+      <button type="button" data-dir="left">⬅️</button>
+      <button type="button" data-dir="down">⬇️</button>
+      <button type="button" data-dir="right">➡️</button>
+    </div>
+    <button type="button" class="btn btn-secondary duo-quit-btn" style="margin-top:10px">Abandonner</button>
+  </div>
+</section>
+
+<section id="screen-duo-pm" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">🔢 Plus ou moins</h2>
+    <div id="duo-pm-banner" class="bs-turn-banner">...</div>
+    <div id="duo-pm-secret-zone">
+      <p class="hint" style="text-align:center">Choisis ton nombre secret (1 à 100) :</p>
+      <input type="number" inputmode="numeric" id="duo-pm-secret" class="cr-code-input" min="1" max="100" placeholder="?">
+      <button type="button" id="btn-duo-pm-secret" class="btn btn-primary">Valider mon nombre</button>
+    </div>
+    <div id="duo-pm-guess-zone" style="display:none">
+      <p id="duo-pm-range" class="hint" style="text-align:center"></p>
+      <input type="number" inputmode="numeric" id="duo-pm-guess" class="cr-code-input" min="1" max="100" placeholder="Ton essai">
+      <button type="button" id="btn-duo-pm-guess" class="btn btn-primary">Proposer</button>
+    </div>
+    <div class="pm-cols">
+      <div><p class="bs-fleet-count">Tes essais</p><ul id="duo-pm-mine" class="pm-list"></ul></div>
+      <div><p class="bs-fleet-count">Ses essais</p><ul id="duo-pm-theirs" class="pm-list"></ul></div>
+    </div>
+    <button type="button" class="btn btn-secondary duo-quit-btn" style="margin-top:10px">Abandonner</button>
+  </div>
+</section>
+
+<section id="screen-party-vote" class="screen">
+  <div class="card">
+    <h2 class="lobby-title" style="font-size:18px">🗳️ Vote du plus…</h2>
+    <div id="party-vote-banner" class="bs-turn-banner">...</div>
+    <p id="party-vote-question" class="vote-question"></p>
+    <ul id="party-vote-list" class="vote-list"></ul>
+    <p id="party-vote-hint" class="hint" style="text-align:center;font-size:12px"></p>
+    <button type="button" class="btn btn-secondary party-quit-btn" style="margin-top:6px">Quitter</button>
   </div>
 </section>
 
@@ -448,6 +625,8 @@
     <h2 id="solo-end-title" class="lobby-title solo-end-title">?</h2>
     <p id="solo-end-text" class="hint"></p>
     <button type="button" id="btn-solo-retry" class="btn btn-primary">🔁 Réessayer</button>
+    <button type="button" id="btn-duo-change-game" class="btn btn-secondary" style="margin-top:8px;display:none">🎲 Changer de jeu</button>
+    <button type="button" id="btn-party-back-lobby" class="btn btn-secondary" style="margin-top:8px;display:none">↩ Retour au salon</button>
     <button type="button" id="btn-solo-end-home" class="btn btn-secondary" style="margin-top:8px">Retour à l'accueil</button>
   </div>
 </section>
@@ -857,19 +1036,60 @@
 <div id="mode-choice-modal" class="ios-install-modal" style="display:none">
   <div class="card" style="max-width:340px">
     <h2 class="lobby-title" style="font-size:19px">Comment veux-tu jouer ?</h2>
-    <button type="button" id="btn-choose-multiplayer" class="btn btn-primary" style="margin-top:10px">🎮 Multijoueur</button>
-    <p class="hint" style="font-size:12px;margin:4px 0 14px">Affronte tes amis en ligne, à plusieurs.</p>
+    <button type="button" id="btn-choose-multiplayer" class="btn btn-primary" style="margin-top:10px">⚔️ Fight</button>
+    <p class="hint" style="font-size:12px;margin:4px 0 14px">Combats en arène à plusieurs, avec modes, cartes et bots.</p>
+    <button type="button" id="btn-choose-party" class="btn btn-secondary">🎉 Multi</button>
+    <p class="hint" style="font-size:12px;margin:4px 0 14px">Des mini-jeux à 2-8 joueurs : Simon, Patate chaude...</p>
     <button type="button" id="btn-choose-duo" class="btn btn-secondary">🕹️ Duo</button>
-    <p class="hint" style="font-size:12px;margin:4px 0 14px">2 joueurs sur le même écran, chacun de son côté.</p>
+    <p class="hint" style="font-size:12px;margin:4px 0 14px">Des mini-jeux à 2 joueurs, chacun sur son téléphone.</p>
     <button type="button" id="btn-choose-solo" class="btn btn-secondary">👤 Solo</button>
     <p class="hint" style="font-size:12px;margin:4px 0 14px">Des mini-jeux à un joueur, sans connexion.</p>
     <button type="button" id="btn-close-mode-choice" class="btn btn-secondary">Annuler</button>
   </div>
 </div>
 
+<div id="duo-switch-modal" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:340px">
+    <h2 class="lobby-title" style="font-size:19px">🎲 Changer de jeu</h2>
+    <p class="hint" style="font-size:12px">Ton adversaire passera au nouveau jeu avec toi.</p>
+    <div class="duo-game-picker">
+      <button type="button" class="duo-game-choice duo-switch-choice" data-game="battleship">⚓<br>Bataille Navale</button>
+      <button type="button" class="duo-game-choice duo-switch-choice" data-game="connect4">🔴<br>Puissance 4</button>
+      <button type="button" class="duo-game-choice duo-switch-choice" data-game="rps">✂️<br>Pierre-Feuille-Ciseaux</button>
+      <button type="button" class="duo-game-choice duo-switch-choice" data-game="checkers">⚫<br>Dames</button>
+      <button type="button" class="duo-game-choice duo-switch-choice" data-game="memory">🧠<br>Memory duel</button>
+      <button type="button" class="duo-game-choice duo-switch-choice" data-game="tug">🪢<br>Tir à la corde</button>
+      <button type="button" class="duo-game-choice duo-switch-choice" data-game="gomoku">⭕<br>Morpion 5</button>
+      <button type="button" class="duo-game-choice duo-switch-choice" data-game="pigeons">🎯<br>Tir aux pigeons</button>
+      <button type="button" class="duo-game-choice duo-switch-choice" data-game="mines">💣<br>Bataille de mines</button>
+      <button type="button" class="duo-game-choice duo-switch-choice" data-game="plusmoins">🔢<br>Plus ou moins</button>
+    </div>
+    <button type="button" id="btn-close-duo-switch" class="btn btn-secondary" style="margin-top:10px">Annuler</button>
+  </div>
+</div>
+<div id="party-choice-modal" class="ios-install-modal" style="display:none">
+  <div class="card" style="max-width:340px">
+    <h2 class="lobby-title" style="font-size:19px">🎉 Multi</h2>
+    <p class="hint" style="font-size:12px">Des mini-jeux à 2-8 joueurs, chacun sur son téléphone.</p>
+    <div class="cr-tabs" data-modal="party">
+      <button type="button" class="cr-tab active" data-tab="create">Créer</button>
+      <button type="button" class="cr-tab" data-tab="join">Rejoindre</button>
+    </div>
+    <div class="cr-panel" data-modal="party" data-panel="create">
+      <p class="hint" style="font-size:12px;margin-top:6px">Tu crées un salon, tes amis le rejoignent avec le code, puis tu choisis le jeu et tu lances la partie.</p>
+      <button type="button" id="btn-party-create" class="btn btn-primary" style="margin-top:10px">Créer le salon</button>
+    </div>
+    <div class="cr-panel" data-modal="party" data-panel="join" style="display:none">
+      <input type="text" id="party-join-code" maxlength="5" placeholder="Code du salon" class="cr-code-input">
+      <button type="button" id="btn-party-join" class="btn btn-primary">Rejoindre</button>
+    </div>
+    <button type="button" id="btn-close-party-choice" class="btn btn-secondary" style="margin-top:10px">Annuler</button>
+  </div>
+</div>
+
 <div id="multi-choice-modal" class="ios-install-modal" style="display:none">
   <div class="card" style="max-width:340px">
-    <h2 class="lobby-title" style="font-size:19px">🎮 Multijoueur</h2>
+    <h2 class="lobby-title" style="font-size:19px">⚔️ Fight</h2>
     <p class="hint" style="font-size:12px">Affronte tes amis en ligne, à plusieurs.</p>
     <div class="cr-tabs" data-modal="multi">
       <button type="button" class="cr-tab active" data-tab="create">Créer</button>
@@ -885,6 +1105,11 @@
     <div class="cr-panel" data-modal="multi" data-panel="join" style="display:none">
       <input type="text" id="multi-join-code" maxlength="5" placeholder="Code de la partie" class="cr-code-input">
       <button type="button" id="btn-multi-join" class="btn btn-primary">Rejoindre</button>
+    <div class="divider" style="margin-top:12px"><span>parties publiques</span></div>
+    <ul id="public-rooms-list" class="player-list"></ul>
+    <p id="public-rooms-empty" class="hint" style="display:none">Aucune partie publique en ce moment.</p>
+    <button id="btn-refresh-public" class="btn btn-secondary" style="font-size:13px;padding:10px">🔄 Actualiser la liste</button>
+
     </div>
     <button type="button" id="btn-close-multi-choice" class="btn btn-secondary" style="margin-top:10px">Annuler</button>
   </div>
@@ -905,13 +1130,26 @@
         <button type="button" class="duo-game-choice" data-game="connect4">🔴<br>Puissance 4</button>
         <button type="button" class="duo-game-choice" data-game="rps">✂️<br>Pierre-Feuille-Ciseaux</button>
         <button type="button" class="duo-game-choice" data-game="checkers">⚫<br>Dames</button>
+        <button type="button" class="duo-game-choice" data-game="memory">🧠<br>Memory duel</button>
+        <button type="button" class="duo-game-choice" data-game="tug">🪢<br>Tir à la corde</button>
+        <button type="button" class="duo-game-choice" data-game="gomoku">⭕<br>Morpion 5</button>
+        <button type="button" class="duo-game-choice" data-game="pigeons">🎯<br>Tir aux pigeons</button>
+        <button type="button" class="duo-game-choice" data-game="mines">💣<br>Bataille de mines</button>
+        <button type="button" class="duo-game-choice" data-game="plusmoins">🔢<br>Plus ou moins</button>
       </div>
+      <label class="toggle-field" style="margin-top:6px">
+        <span class="toggle-text">Duel public</span>
+        <span class="toggle-switch"><input type="checkbox" id="duo-public-toggle"><span class="toggle-slider"></span></span>
+      </label>
       <button type="button" id="btn-duo-create" class="btn btn-primary" style="margin-top:10px">Créer un duel</button>
     </div>
     <div class="cr-panel" data-modal="duo" data-panel="join" style="display:none">
       <p class="hint" style="font-size:12px;margin-top:6px">Rejoindre reprend automatiquement le jeu choisi par ton adversaire.</p>
       <input type="text" id="duo-join-code" maxlength="5" placeholder="Code du duel" class="cr-code-input">
       <button type="button" id="btn-duo-join" class="btn btn-primary">Rejoindre</button>
+      <div class="divider" style="margin-top:12px"><span>duels publics</span></div>
+      <ul id="duo-public-list" class="player-list"></ul>
+      <p id="duo-public-empty" class="hint" style="display:none">Aucun duel public en ce moment.</p>
     </div>
     <button type="button" id="btn-close-duo-choice" class="btn btn-secondary" style="margin-top:10px">Annuler</button>
   </div>

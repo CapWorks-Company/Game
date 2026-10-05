@@ -580,6 +580,9 @@ function showSoloEnd(outcome, title, text) {
   icon.style.animation = "none"; void icon.offsetWidth; icon.style.animation = "";
   titleEl.textContent = title;
   document.getElementById("solo-end-text").textContent = text;
+  document.getElementById("btn-duo-change-game").style.display = "none";
+  document.getElementById("btn-party-back-lobby").style.display = "none";
+  document.getElementById("btn-solo-retry").style.display = "";
   showScreen("screen-solo-end");
   if (outcome === "win") { vibrate([40, 30, 40, 30, 90]); spawnConfetti("confetti-layer-solo"); sfxFanfare(); }
 }
@@ -2547,7 +2550,7 @@ function startMagicGame() {
   magicState = {
     melodyIdx: magicPickMelodyIdx(), noteIdx: 0, completedInMelody: 0,
     tiles: [], score: 0, ended: false, lastLane: -1,
-    fallSpeed: 1.8, spawnTimer: 0, spawnInterval: 58,
+    fallSpeed: 2.7, spawnTimer: 0, spawnInterval: 44,
   };
   document.getElementById("magic-score").textContent = "0";
   document.getElementById("magic-best").textContent = String(magicBest);
@@ -2575,8 +2578,8 @@ function magicSpawnTile(s) {
   s.lastLane = lane;
   s.noteIdx++;
   // le morceau est long (~50+ notes) : la cadence monte doucement du début à la fin.
-  s.fallSpeed = Math.min(4.2, s.fallSpeed + 0.03);
-  s.spawnInterval = Math.max(26, s.spawnInterval - 0.4);
+  s.fallSpeed = Math.min(6.4, s.fallSpeed + 0.045);
+  s.spawnInterval = Math.max(24, s.spawnInterval - 0.55);
 
   const field = document.getElementById("magic-field");
   const h = hold ? MAGIC_TILE_H + MAGIC_HOLD_EXTRA_H : MAGIC_TILE_H;
@@ -2831,7 +2834,7 @@ document.getElementById("btn-darts-quit").addEventListener("click", () => {
 });
 
 // ================= MODE DUO : BATAILLE NAVALE EN LIGNE, chacun sur son appareil =================
-const BS_GRID = 8;
+const BS_GRID = 9;
 let duoWs = null, myDuoNum = null, duo = null, duoCode = null;
 let bsPlace = null; // état local du placement des navires, avant l'envoi au serveur
 let selectedDuoGame = "battleship"; // jeu choisi dans la modale, avant de créer un duel
@@ -2844,10 +2847,10 @@ document.getElementById("btn-choose-duo").addEventListener("click", () => {
 document.getElementById("btn-close-duo-choice").addEventListener("click", () => {
   document.getElementById("duo-choice-modal").style.display = "none";
 });
-document.querySelectorAll(".duo-game-choice").forEach(btn => {
+document.querySelectorAll(".duo-game-choice:not(.duo-switch-choice)").forEach(btn => {
   btn.addEventListener("click", () => {
     selectedDuoGame = btn.dataset.game;
-    document.querySelectorAll(".duo-game-choice").forEach(b => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".duo-game-choice:not(.duo-switch-choice)").forEach(b => b.classList.toggle("active", b === btn));
   });
 });
 document.getElementById("btn-duo-create").addEventListener("click", async () => {
@@ -2857,7 +2860,7 @@ document.getElementById("btn-duo-create").addEventListener("click", async () => 
     const res = await fetch(`${BACKEND_URL}/api/duo-create`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ game: selectedDuoGame }),
+      body: JSON.stringify({ game: selectedDuoGame, isPublic: document.getElementById("duo-public-toggle").checked }),
     });
     const data = await res.json();
     connectDuo(data.code, pseudo, selectedDuoGame);
@@ -2865,6 +2868,36 @@ document.getElementById("btn-duo-create").addEventListener("click", async () => 
     alert("Impossible de joindre le serveur. Vérifie ta connexion.");
   }
 });
+// Liste des duels publics (affichée dans l'onglet Rejoindre, rafraîchie tant que la fenêtre est ouverte)
+const DUO_GAME_LABELS = { battleship: "⚓ Bataille Navale", connect4: "🔴 Puissance 4", rps: "✂️ Pierre-Feuille-Ciseaux", checkers: "⚫ Dames", memory: "🧠 Memory duel", tug: "🪢 Tir à la corde", gomoku: "⭕ Morpion 5", pigeons: "🎯 Tir aux pigeons", mines: "💣 Bataille de mines", plusmoins: "🔢 Plus ou moins" };
+let duoPublicTimer = null;
+async function refreshDuoPublic() {
+  const modal = document.getElementById("duo-choice-modal");
+  if (modal.style.display === "none") { clearInterval(duoPublicTimer); duoPublicTimer = null; return; }
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/duo-public-rooms`);
+    const rooms = await res.json();
+    const list = document.getElementById("duo-public-list");
+    const empty = document.getElementById("duo-public-empty");
+    list.innerHTML = "";
+    empty.style.display = rooms.length ? "none" : "block";
+    rooms.forEach(r => {
+      const li = document.createElement("li");
+      li.innerHTML = `<span class="pname">Duel de ${escapeHtml(r.hostPseudo)}</span><span class="room-meta">${escapeHtml(DUO_GAME_LABELS[r.game] || r.game)}</span>`;
+      li.addEventListener("click", () => {
+        const pseudo = document.getElementById("input-pseudo").value.trim() || "Joueur";
+        modal.style.display = "none";
+        connectDuo(r.code, pseudo);
+      });
+      list.appendChild(li);
+    });
+  } catch (e) { /* silencieux */ }
+}
+function startDuoPublicPolling() {
+  refreshDuoPublic();
+  if (duoPublicTimer) clearInterval(duoPublicTimer);
+  duoPublicTimer = setInterval(refreshDuoPublic, 5000);
+}
 document.getElementById("btn-duo-join").addEventListener("click", () => {
   const code = document.getElementById("duo-join-code").value.trim().toUpperCase();
   if (!code) return;
@@ -2922,7 +2955,7 @@ function connectDuo(code, pseudo, game) {
   duoWs.onerror = () => { document.getElementById("duo-wait-status").textContent = "Erreur de connexion au serveur."; };
   duoWs.onclose = () => {
     const active = document.querySelector(".screen.active").id;
-    if (["screen-duo-battle", "screen-duo-place", "screen-duo-connect4", "screen-duo-rps", "screen-duo-checkers"].includes(active)) {
+    if (["screen-duo-battle", "screen-duo-place", "screen-duo-connect4", "screen-duo-rps", "screen-duo-checkers", "screen-duo-memory", "screen-duo-tug", "screen-duo-gomoku", "screen-duo-pigeons", "screen-duo-mines", "screen-duo-pm"].includes(active)) {
       showSoloEnd("neutral", "Connexion perdue", "La connexion avec ton adversaire a été coupée.");
       soloRetryHandler = null;
     }
@@ -2937,6 +2970,12 @@ function onDuoMessage(msg) {
     duo = msg;
     if (msg.game) duoGame = msg.game;
     if (msg.status === "waiting") { showScreen("screen-duo-wait"); return; }
+    const newRender = DUO_NEW_RENDERERS[duoGame];
+    if (newRender) {
+      newRender();
+      if (msg.status === "ended") scheduleDuoGenericEnd(); else clearTimeout(duoEndTimer);
+      return;
+    }
     if (msg.status === "placing") { renderDuoPlace(prevStatus); return; }
     if (msg.status === "playing") {
       if (duoGame === "connect4") { renderDuoConnect4(); return; }
@@ -2960,7 +2999,26 @@ function renderDuoGenericEnd() {
     draw ? "Personne ne l'emporte cette fois. Une revanche ?" :
       (won ? "Bien joué, tu remportes ce duel !" : "Ton adversaire l'emporte cette fois. Une revanche ?"));
   soloRetryHandler = () => sendDuo({ type: "duoRestart" });
+  showDuoChangeGameBtn();
 }
+function showDuoChangeGameBtn() {
+  const ok = !(duo && duo.opponent && duo.opponent.connected === false);
+  document.getElementById("btn-duo-change-game").style.display = ok ? "" : "none";
+}
+document.getElementById("btn-duo-change-game").addEventListener("click", () => {
+  document.querySelectorAll(".duo-switch-choice").forEach(b => b.classList.toggle("active", b.dataset.game === duoGame));
+  document.getElementById("duo-switch-modal").style.display = "flex";
+});
+document.getElementById("btn-close-duo-switch").addEventListener("click", () => {
+  document.getElementById("duo-switch-modal").style.display = "none";
+});
+document.querySelectorAll(".duo-switch-choice").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.getElementById("duo-switch-modal").style.display = "none";
+    if (btn.dataset.game === duoGame) { sendDuo({ type: "duoRestart" }); return; }
+    sendDuo({ type: "duoChangeGame", game: btn.dataset.game });
+  });
+});
 
 function sendDuo(payload) { if (duoWs && duoWs.readyState === 1) duoWs.send(JSON.stringify(payload)); }
 
@@ -3222,25 +3280,108 @@ function renderDuoBattle() {
   renderBsEnemyGrid(myTurn);
   renderBsMyGrid();
 }
-function bsFireFeedback(prevGrid, nowGrid, isOwnFleetHit) {
+// ---------- Effets visuels (explosions, éclaboussures, bannières) ----------
+const FX_REDUCED = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+function fxLayer() {
+  let l = document.getElementById("fx-layer");
+  if (!l) { l = document.createElement("div"); l.id = "fx-layer"; l.style.cssText = "position:fixed;inset:0;pointer-events:none;z-index:9000;overflow:hidden"; document.body.appendChild(l); }
+  return l;
+}
+function fxAdd(el, keyframes, opts) {
+  fxLayer().appendChild(el);
+  const anim = el.animate(keyframes, Object.assign({ fill: "forwards", easing: "cubic-bezier(.2,.8,.3,1)" }, opts));
+  anim.onfinish = () => el.remove();
+  return anim;
+}
+// kind : "miss" (éclaboussure), "hit" (explosion), "sunk" (grosse explosion), "spark" (étincelles dorées)
+function fxBurst(target, kind) {
+  if (FX_REDUCED || !target || !target.getBoundingClientRect) return;
+  const rect = target.getBoundingClientRect();
+  if (!rect.width) return;
+  const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2, size = Math.max(rect.width, 20);
+  const mk = (css) => { const d = document.createElement("div"); d.style.cssText = "position:absolute;border-radius:50%;" + css; return d; };
+  const cfg = {
+    miss:  { ring: "rgba(160,215,255,.9)", n: 6,  colors: ["#bfe6ff", "#8fd0ff", "#ffffff"], dist: 1.1, scale: 2.4 },
+    hit:   { ring: "rgba(255,160,60,.95)", n: 10, colors: ["#ffd24a", "#ff8a1f", "#ff4b2b"], dist: 1.7, scale: 3 },
+    sunk:  { ring: "rgba(255,90,40,.95)",  n: 16, colors: ["#fff3b0", "#ffb52e", "#ff4b2b", "#555"], dist: 2.6, scale: 4.5 },
+    spark: { ring: "rgba(255,225,120,.9)", n: 12, colors: ["#fff3b0", "#ffd24a", "#ffffff"], dist: 1.8, scale: 3 },
+  }[kind] || null;
+  if (!cfg) return;
+  const ring = mk(`left:${cx - size / 2}px;top:${cy - size / 2}px;width:${size}px;height:${size}px;border:3px solid ${cfg.ring}`);
+  fxAdd(ring, [{ transform: "scale(.2)", opacity: 1 }, { transform: `scale(${cfg.scale})`, opacity: 0 }], { duration: kind === "sunk" ? 700 : 450 });
+  if (kind !== "miss") {
+    const flash = mk(`left:${cx - size}px;top:${cy - size}px;width:${size * 2}px;height:${size * 2}px;background:radial-gradient(circle,#fff 0%,${cfg.colors[1]} 40%,transparent 70%)`);
+    fxAdd(flash, [{ transform: "scale(.2)", opacity: 1 }, { transform: "scale(1.3)", opacity: 0 }], { duration: kind === "sunk" ? 520 : 320 });
+  }
+  for (let i = 0; i < cfg.n; i++) {
+    const ang = (Math.PI * 2 * i) / cfg.n + Math.random() * 0.5;
+    const d = size * cfg.dist * (0.6 + Math.random() * 0.7);
+    const p = Math.max(3, size * (kind === "sunk" ? 0.2 : 0.14));
+    const dot = mk(`left:${cx - p / 2}px;top:${cy - p / 2}px;width:${p}px;height:${p}px;background:${cfg.colors[i % cfg.colors.length]}`);
+    const dx = Math.cos(ang) * d, dy = Math.sin(ang) * d + (kind === "miss" ? size * 0.4 : 0);
+    fxAdd(dot, [{ transform: "translate(0,0) scale(1)", opacity: 1 }, { transform: `translate(${dx}px,${dy}px) scale(.2)`, opacity: 0 }],
+      { duration: 450 + Math.random() * 350 });
+  }
+}
+function fxShake(el, strong) {
+  if (FX_REDUCED || !el) return;
+  const a = strong ? 7 : 4;
+  el.animate([
+    { transform: "translate(0,0)" }, { transform: `translate(${-a}px,${a / 2}px)` }, { transform: `translate(${a}px,${-a / 2}px)` },
+    { transform: `translate(${-a / 2}px,${-a}px)` }, { transform: `translate(${a / 2}px,${a}px)` }, { transform: "translate(0,0)" },
+  ], { duration: strong ? 480 : 320, easing: "ease-out" });
+}
+function fxScreenFlash(color) {
+  if (FX_REDUCED) return;
+  const d = document.createElement("div");
+  d.style.cssText = `position:absolute;inset:0;background:${color}`;
+  fxAdd(d, [{ opacity: 0.55 }, { opacity: 0 }], { duration: 420, easing: "ease-out" });
+}
+function fxBanner(text, color) {
+  if (FX_REDUCED) return;
+  document.querySelectorAll("#fx-layer .fx-banner").forEach(e => e.remove()); // une seule bannière à la fois
+  const d = document.createElement("div");
+  d.className = "fx-banner";
+  d.textContent = text;
+  d.style.cssText = `position:absolute;left:50%;top:34%;transform:translate(-50%,-50%);font-weight:900;font-size:${text.length > 14 ? 22 : 34}px;letter-spacing:1px;max-width:96vw;text-align:center;color:${color};text-shadow:0 0 14px ${color},0 3px 0 rgba(0,0,0,.6);white-space:nowrap`;
+  fxAdd(d, [
+    { transform: "translate(-50%,-50%) scale(.3) rotate(-6deg)", opacity: 0 },
+    { transform: "translate(-50%,-50%) scale(1.15) rotate(2deg)", opacity: 1, offset: 0.25 },
+    { transform: "translate(-50%,-50%) scale(1) rotate(0deg)", opacity: 1, offset: 0.7 },
+    { transform: "translate(-50%,-80%) scale(1)", opacity: 0 },
+  ], { duration: 1300, easing: "ease-out" });
+}
+
+function bsFireFeedback(prevGrid, nowGrid, isOwnFleetHit, gridId) {
   // Compare l'ancien et le nouvel état des tirs pour ne déclencher son/vibration que sur les
   // cases qui viennent tout juste de changer (évite de rejouer les effets à chaque re-render).
   if (!prevGrid) return;
+  const cells = document.getElementById(gridId).children;
+  let sunkNow = false, hitNow = false;
   for (let r = 0; r < BS_GRID; r++) {
     for (let c = 0; c < BS_GRID; c++) {
       const prev = prevGrid[r][c], now = nowGrid[r][c];
       if (prev === now) continue;
-      if (now === "sunk") { sfxExplosion(); vibrate(isOwnFleetHit ? [50, 40, 50, 40, 120] : [40, 30, 40, 30, 90]); }
-      else if (now === "hit") { isOwnFleetHit ? sfxKO() : sfxImpact(); vibrate(isOwnFleetHit ? [30, 20, 30] : 25); }
-      else if (now === "miss" && !isOwnFleetHit) { vibrate(8); }
+      const cell = cells[r * BS_GRID + c];
+      if (now === "sunk") { sfxExplosion(); vibrate(isOwnFleetHit ? [50, 40, 50, 40, 120] : [40, 30, 40, 30, 90]); fxBurst(cell, "sunk"); sunkNow = true; }
+      else if (now === "hit") { isOwnFleetHit ? sfxKO() : sfxImpact(); vibrate(isOwnFleetHit ? [30, 20, 30] : 25); fxBurst(cell, "hit"); hitNow = true; }
+      else if (now === "miss") { if (!isOwnFleetHit) vibrate(8); fxBurst(cell, "miss"); }
     }
+  }
+  const grid = document.getElementById(gridId);
+  if (sunkNow) {
+    fxShake(grid, true); fxScreenFlash(isOwnFleetHit ? "rgba(239,68,68,.6)" : "rgba(255,170,60,.5)");
+    fxBanner(isOwnFleetHit ? "💥 COULÉ !" : "💥 COULÉ !", isOwnFleetHit ? "#ff6b5a" : "#ffd24a");
+  } else if (hitNow) {
+    fxShake(grid, false); if (isOwnFleetHit) fxScreenFlash("rgba(239,68,68,.35)");
+    fxBanner("🔥 TOUCHÉ !", isOwnFleetHit ? "#ff8a6b" : "#ffb52e");
   }
 }
 let bsPrevMyShots = null, bsPrevReceived = null;
 function renderBsEnemyGrid(myTurn) {
   const grid = ensureBsGridCells("duo-enemy-grid");
   const shots = duo.myShots;
-  bsFireFeedback(bsPrevMyShots, shots, false);
+  bsFireFeedback(bsPrevMyShots, shots, false, "duo-enemy-grid");
   bsPrevMyShots = shots.map(row => row.slice());
   // La grille adverse est cachée : on ne connaît la forme d'un navire que lorsqu'il est
   // entièrement coulé (état "sunk" sur toutes ses cases) — on la reconstruit par cases adjacentes.
@@ -3264,7 +3405,7 @@ function renderBsEnemyGrid(myTurn) {
 function renderBsMyGrid() {
   const grid = ensureBsGridCells("duo-my-grid");
   const board = duo.me.board, received = duo.me.shotsReceived;
-  bsFireFeedback(bsPrevReceived, received, true);
+  bsFireFeedback(bsPrevReceived, received, true, "duo-my-grid");
   bsPrevReceived = received.map(row => row.slice());
   const shapeByCell = bsShapeMapForShips([...bsGroupShipCells(board).values()]);
   const cells = grid.children;
@@ -3287,6 +3428,7 @@ function renderDuoEnd() {
   showSoloEnd(won ? "win" : "lose", won ? "Victoire !" : "Défaite...",
     won ? "Tu as coulé toute la flotte adverse. GG !" : "Ta flotte a été entièrement coulée. Une revanche ?");
   soloRetryHandler = () => sendDuo({ type: "duoRestart" });
+  showDuoChangeGameBtn();
 }
 
 // ---- Puissance 4 (Connect 4) ----
@@ -3308,6 +3450,7 @@ function c4FindWinningLine(board, num) {
   return [];
 }
 let c4LastFilledCount = 0;
+let c4WinFxShown = false;
 function renderDuoConnect4() {
   if (!duo || myDuoNum === null) return;
   if (document.querySelector(".screen.active").id !== "screen-duo-connect4") showScreen("screen-duo-connect4");
@@ -3354,6 +3497,10 @@ function renderDuoConnect4() {
     }
   }
   if (filled > c4LastFilledCount) { playTone(220, 0.05, "square", 0.1); playTone(150, 0.08, "square", 0.08); vibrate(10); }
+  if (winLine.length && !c4WinFxShown) {
+    c4WinFxShown = true;
+    winLine.forEach(([wr, wc], i) => setTimeout(() => fxBurst(cols2[wc].children[wr], "spark"), i * 120));
+  } else if (!winLine.length) c4WinFxShown = false;
   c4LastFilledCount = filled;
 }
 
@@ -3382,9 +3529,9 @@ function renderDuoRps() {
       rpsLastResultKey = duo.lastResult;
       resultEl.classList.remove("rps-result-win", "rps-result-lose");
       void resultEl.offsetWidth;
-      if (rw === myDuoNum) { resultEl.classList.add("rps-result-win"); playTone(700, 0.1, "triangle", 0.14); setTimeout(() => playTone(1000, 0.14, "triangle", 0.14), 90); vibrate(20); }
+      if (rw === myDuoNum) { fxBurst(resultEl, "spark"); resultEl.classList.add("rps-result-win"); playTone(700, 0.1, "triangle", 0.14); setTimeout(() => playTone(1000, 0.14, "triangle", 0.14), 90); vibrate(20); }
       else if (rw === null) { playTone(440, 0.12, "sine", 0.1); }
-      else { resultEl.classList.add("rps-result-lose"); playTone(220, 0.18, "sawtooth", 0.13); vibrate([15, 15, 15]); }
+      else { fxShake(resultEl, false); resultEl.classList.add("rps-result-lose"); playTone(220, 0.18, "sawtooth", 0.13); vibrate([15, 15, 15]); }
     }
   } else {
     resultEl.style.display = "none";
@@ -3399,21 +3546,25 @@ function renderDuoRps() {
 }
 
 // ---- Dames (Checkers) ----
-let ckSelected = null; // {r,c} case sélectionnée en attente d'une destination
-let ckPrevBoard = null; // dernier plateau affiché, pour détecter déplacement/prise et jouer le bon effet
+let ckSelected = null; // {r,c} pièce sélectionnée en attente d'une destination
+let ckLastSeq = 0, ckSeqInit = false; // numéro du dernier coup déjà animé
 function renderDuoCheckers() {
   if (!duo || myDuoNum === null) return;
   if (document.querySelector(".screen.active").id !== "screen-duo-checkers") showScreen("screen-duo-checkers");
   const myTurn = duo.turn === myDuoNum && duo.status === "playing";
+  const legal = myTurn ? (duo.legal || []) : [];
+  const mandatory = legal.some(m => m.capture);
   const banner = document.getElementById("duo-ck-turn-banner");
-  banner.textContent = myTurn ? "⚫ À toi de jouer !" : `En attente de ${duo.opponent ? duo.opponent.pseudo : "l'adversaire"}...`;
+  banner.textContent = !myTurn ? `En attente de ${duo.opponent ? duo.opponent.pseudo : "l'adversaire"}...`
+    : duo.chain ? "⚔️ Continue ta rafle !" : mandatory ? "⚠️ Prise obligatoire !" : "⚫ À toi de jouer !";
   banner.classList.toggle("bs-my-turn", myTurn);
   if (!myTurn) ckSelected = null;
+  else if (duo.chain) ckSelected = { r: duo.chain.r, c: duo.chain.c };
+  else if (ckSelected && !legal.some(m => m.fr === ckSelected.r && m.fc === ckSelected.c)) ckSelected = null;
   const grid = document.getElementById("duo-ck-grid");
   const size = duo.board.length;
   if (grid.children.length !== size * size) {
     grid.innerHTML = "";
-    ckPrevBoard = null;
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
         const cell = document.createElement("div");
@@ -3423,43 +3574,39 @@ function renderDuoCheckers() {
       }
     }
   }
-  // Détecte ce qui a changé depuis le dernier rendu (case vidée / case occupée) pour savoir
-  // si un pion vient de se poser (son + petit "pop") et si une prise a eu lieu (son plus grave + flash).
-  let movedTo = null, captureHappened = false;
-  if (ckPrevBoard) {
-    let prevCount = 0, newCount = 0;
-    const appeared = [];
-    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) {
-      if (ckPrevBoard[r][c]) prevCount++;
-      if (duo.board[r][c]) newCount++;
-      if (!ckPrevBoard[r][c] && duo.board[r][c]) appeared.push([r, c]);
-    }
-    if (newCount <= prevCount && appeared.length === 1) {
-      movedTo = appeared[0];
-      captureHappened = newCount < prevCount;
-    }
-  }
+  const lm = duo.lastMove;
+  const seq = lm ? lm.seq : 0;
+  const fresh = ckSeqInit && lm && seq !== ckLastSeq;
+  ckLastSeq = seq; ckSeqInit = true;
+  const movable = new Set(legal.map(m => m.fr + "," + m.fc));
+  const targets = new Map();
+  if (ckSelected) legal.filter(m => m.fr === ckSelected.r && m.fc === ckSelected.c).forEach(m => targets.set(m.tr + "," + m.tc, m.capture));
   const cells = grid.children;
   for (let r = 0; r < size; r++) {
     for (let c = 0; c < size; c++) {
       const piece = duo.board[r][c];
       const dark = (r + c) % 2 === 1;
+      const key = r + "," + c;
       let cls = "ck-cell " + (dark ? "ck-dark" : "ck-light");
       if (ckSelected && ckSelected.r === r && ckSelected.c === c) cls += " ck-selected";
+      if (targets.has(key)) cls += targets.get(key) ? " ck-target ck-target-cap" : " ck-target";
       const cell = cells[r * size + c];
       cell.className = cls;
       cell.innerHTML = "";
       if (piece) {
         const el = document.createElement("div");
-        el.className = "ck-piece " + (piece.owner === myDuoNum ? "ck-piece-mine" : "ck-piece-theirs") + (piece.king ? " ck-piece-king" : "");
-        if (movedTo && movedTo[0] === r && movedTo[1] === c) el.className += " ck-piece-pop";
-        el.textContent = piece.king ? "♛" : "●";
+        el.className = "ck-piece " + (piece.owner === myDuoNum ? "ck-piece-mine" : "ck-piece-theirs") + (piece.king ? " ck-piece-king" : "")
+          + (piece.taken ? " ck-piece-taken" : "") + (movable.has(key) && !ckSelected ? " ck-piece-movable" : "");
+        if (fresh && lm.tr === r && lm.tc === c) el.className += " ck-piece-pop";
+        el.textContent = piece.taken ? "✖" : (piece.king ? "♛" : "●");
         cell.appendChild(el);
       }
     }
   }
-  if (movedTo) {
-    if (captureHappened) {
+  if (fresh) {
+    if (lm.capture) {
+      // la pièce prise est sur le trajet : on fait exploser la case d'arrivée et on secoue le plateau
+      fxBurst(cells[lm.tr * size + lm.tc], "hit"); fxShake(grid, false);
       playTone(180, 0.14, "sawtooth", 0.14);
       setTimeout(() => playTone(120, 0.16, "sawtooth", 0.12), 90);
       vibrate([20, 20, 20]);
@@ -3468,22 +3615,729 @@ function renderDuoCheckers() {
       vibrate(10);
     }
   }
-  ckPrevBoard = duo.board.map(row => row.map(cell => cell ? { owner: cell.owner, king: cell.king } : null));
 }
 function onCkCellTap(r, c) {
   if (!duo || duo.status !== "playing" || duo.turn !== myDuoNum) return;
+  const legal = duo.legal || [];
   const piece = duo.board[r][c];
-  if (piece && piece.owner === myDuoNum) {
+  if (piece && piece.owner === myDuoNum && !piece.taken) {
+    if (duo.chain) return; // pendant une rafle, seule la pièce qui prend peut jouer
+    if (!legal.some(m => m.fr === r && m.fc === c)) {
+      const mand = legal.some(m => m.capture);
+      if (mand) { fxShake(document.getElementById("duo-ck-grid"), false); vibrate(30); }
+      return;
+    }
     ckSelected = (ckSelected && ckSelected.r === r && ckSelected.c === c) ? null : { r, c };
     renderDuoCheckers();
     return;
   }
-  if (ckSelected) {
+  if (ckSelected && legal.some(m => m.fr === ckSelected.r && m.fc === ckSelected.c && m.tr === r && m.tc === c)) {
     sendDuo({ type: "duoMove", fr: ckSelected.r, fc: ckSelected.c, tr: r, tc: c });
-    ckSelected = null;
+    if (!duo.chain) ckSelected = null;
   }
 }
 
+
+
+// =====================================================================
+// ===== DUO : MEMORY / TIR À LA CORDE / MORPION 5 / TIR AUX PIGEONS =====
+// =====================================================================
+let duoEndTimer = null;
+function scheduleDuoGenericEnd() {
+  clearTimeout(duoEndTimer);
+  duoEndTimer = setTimeout(() => { if (duo && duo.status === "ended") renderDuoGenericEnd(); }, 1400);
+}
+document.querySelectorAll(".duo-quit-btn").forEach(btn => btn.addEventListener("click", () => {
+  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  clearTimeout(duoEndTimer);
+  showScreen("screen-home");
+}));
+function duoShowScreen(id) { if (document.querySelector(".screen.active").id !== id) showScreen(id); }
+
+// ---- Memory duel ----
+(function buildMemGrid() {
+  const grid = document.getElementById("duo-mem-grid");
+  for (let i = 0; i < 24; i++) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "mem-duo-card"; b.textContent = "?";
+    b.addEventListener("click", () => {
+      if (!duo || duo.status !== "playing" || duo.turn !== myDuoNum || duo.locked) return;
+      if (duo.cards[i].state !== "down") return;
+      sendDuo({ type: "duoFlip", i }); vibrate(8);
+    });
+    grid.appendChild(b);
+  }
+})();
+let memPrevMatched = 0;
+function renderDuoMemory() {
+  duoShowScreen("screen-duo-memory");
+  const myTurn = duo.turn === myDuoNum && duo.status === "playing";
+  const banner = document.getElementById("duo-mem-banner");
+  banner.textContent = duo.status === "ended" ? "Partie terminée" : myTurn ? "🧠 À toi de retourner une carte !" : `En attente de ${duo.opponent ? duo.opponent.pseudo : "l'adversaire"}...`;
+  banner.classList.toggle("bs-my-turn", myTurn);
+  const opp = myDuoNum === 1 ? 2 : 1;
+  document.getElementById("duo-mem-score").textContent = `Toi ${duo.scores[myDuoNum]} — ${duo.scores[opp]} ${duo.opponent ? duo.opponent.pseudo : "Adversaire"}`;
+  const cells = document.getElementById("duo-mem-grid").children;
+  let matched = 0;
+  duo.cards.forEach((c, i) => {
+    const el = cells[i];
+    let cls = "mem-duo-card";
+    if (c.state === "up") cls += " up";
+    else if (c.state === "matched") { cls += c.owner === myDuoNum ? " matched-mine" : " matched-theirs"; matched++; }
+    if (el.className !== cls) el.className = cls;
+    el.textContent = c.state === "down" ? "?" : c.s;
+  });
+  if (matched > memPrevMatched) { sfxImpact(); vibrate([15, 10, 15]); }
+  memPrevMatched = matched;
+}
+
+// ---- Tir à la corde ----
+let tugGoAt = 0, tugEndAt = 0, tugTimer = null;
+document.getElementById("duo-tug-btn").addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  if (!duo || duo.status !== "playing" || Date.now() < tugGoAt) return;
+  sendDuo({ type: "duoTap" });
+  vibrate(5);
+});
+function tugTick() {
+  if (!duo || duo.game !== "tug") { clearInterval(tugTimer); tugTimer = null; return; }
+  const banner = document.getElementById("duo-tug-banner");
+  const now = Date.now();
+  if (duo.status !== "playing") { banner.textContent = "Partie terminée"; return; }
+  if (now < tugGoAt) banner.textContent = `Prêt ? ${Math.ceil((tugGoAt - now) / 1000)}...`;
+  else banner.textContent = `🪢 TIRE ! ⏱ ${Math.max(0, Math.ceil((tugEndAt - now) / 1000))} s`;
+}
+function renderDuoTug() {
+  duoShowScreen("screen-duo-tug");
+  tugGoAt = Date.now() + duo.countdownMs;
+  tugEndAt = Date.now() + duo.timeLeftMs;
+  const myPos = myDuoNum === 1 ? duo.pos : -duo.pos;
+  document.getElementById("duo-tug-rope").style.transform = `translateX(${(-myPos / duo.target) * 40}%)`;
+  document.getElementById("duo-tug-left").textContent = "Toi";
+  document.getElementById("duo-tug-right").textContent = duo.opponent ? duo.opponent.pseudo : "Adversaire";
+  if (!tugTimer) tugTimer = setInterval(tugTick, 150);
+  tugTick();
+}
+
+// ---- Morpion 5 ----
+(function buildGoGrid() {
+  const grid = document.getElementById("duo-go-grid");
+  for (let r = 0; r < 12; r++) for (let c = 0; c < 12; c++) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "go-cell";
+    b.addEventListener("click", () => {
+      if (!duo || duo.status !== "playing" || duo.turn !== myDuoNum || duo.board[r][c]) return;
+      sendDuo({ type: "duoPlace", r, c }); vibrate(8);
+    });
+    grid.appendChild(b);
+  }
+})();
+let goPrevCount = 0;
+function renderDuoGomoku() {
+  duoShowScreen("screen-duo-gomoku");
+  const myTurn = duo.turn === myDuoNum && duo.status === "playing";
+  const banner = document.getElementById("duo-go-banner");
+  banner.textContent = duo.status === "ended" ? "Partie terminée" : myTurn ? "⭕ À toi de jouer !" : `En attente de ${duo.opponent ? duo.opponent.pseudo : "l'adversaire"}...`;
+  banner.classList.toggle("bs-my-turn", myTurn);
+  const cells = document.getElementById("duo-go-grid").children;
+  const win = new Set((duo.winLine || []).map(([r, c]) => r * 12 + c));
+  let count = 0;
+  for (let r = 0; r < 12; r++) for (let c = 0; c < 12; c++) {
+    const v = duo.board[r][c], el = cells[r * 12 + c], idx = r * 12 + c;
+    let cls = "go-cell" + (v ? " filled" : "") + (duo.lastMove && duo.lastMove.r === r && duo.lastMove.c === c ? " last" : "") + (win.has(idx) ? " win" : "");
+    if (v) count++;
+    if (el.className !== cls) el.className = cls;
+    const has = el.firstChild;
+    if (v && !has) { const st = document.createElement("div"); st.className = "go-stone " + (v === myDuoNum ? "go-stone-mine" : "go-stone-theirs"); el.appendChild(st); }
+    else if (!v && has) el.removeChild(has);
+  }
+  if (count > goPrevCount) { playTone(v0(), 0.05, "square", 0.08); vibrate(8); }
+  goPrevCount = count;
+  if (duo.winLine && duo.winLine.length && duo.status === "ended") duo.winLine.forEach(([r, c], i) => setTimeout(() => fxBurst(cells[r * 12 + c], "spark"), i * 100));
+}
+function v0() { return 330; }
+
+// ---- Tir aux pigeons ----
+let pgGoAt = 0, pgTimer = null, pgLastHitId = null, pgShotId = null;
+function pgTick() {
+  const f = document.getElementById("duo-pg-field");
+  let over = f.querySelector(".pg-count");
+  const left = pgGoAt - Date.now();
+  if (duo && duo.game === "pigeons" && duo.status === "playing" && left > 0) {
+    if (!over) { over = document.createElement("div"); over.className = "pg-count"; f.appendChild(over); }
+    over.textContent = Math.ceil(left / 1000);
+  } else {
+    if (over) over.remove();
+    if (!duo || duo.game !== "pigeons") { clearInterval(pgTimer); pgTimer = null; }
+  }
+}
+function renderDuoPigeons() {
+  duoShowScreen("screen-duo-pigeons");
+  pgGoAt = Date.now() + duo.countdownMs;
+  if (!duo.round) { pgShotId = null; pgLastHitId = null; }
+  const field = document.getElementById("duo-pg-field");
+  const opp = myDuoNum === 1 ? 2 : 1;
+  document.getElementById("duo-pg-score").textContent = `Toi ${duo.scores[myDuoNum]} — ${duo.scores[opp]} ${duo.opponent ? duo.opponent.pseudo : "Adversaire"}`;
+  document.getElementById("duo-pg-banner").textContent = duo.status === "ended" ? "Partie terminée" : duo.round ? `🎯 Oiseau ${duo.round} / ${duo.total}` : "Prépare-toi...";
+  field.querySelectorAll(".pg-target").forEach(e => e.remove());
+  if (duo.target && duo.target.id !== pgShotId) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "pg-target"; b.textContent = duo.target.emoji;
+    b.style.left = duo.target.x + "%"; b.style.top = duo.target.y + "%";
+    const id = duo.target.id;
+    b.addEventListener("pointerdown", (e) => { e.preventDefault(); pgShotId = id; b.remove(); sendDuo({ type: "duoShoot", id }); vibrate(10); });
+    field.appendChild(b);
+  }
+  const lh = duo.lastHit;
+  if (lh && lh.by && lh.id !== pgLastHitId) {
+    pgLastHitId = lh.id;
+    const spot = document.createElement("div");
+    spot.style.cssText = `position:absolute;left:${lh.x}%;top:${lh.y}%;width:44px;height:44px;transform:translate(-50%,-50%)`;
+    field.appendChild(spot);
+    fxBurst(spot, lh.by === myDuoNum ? "spark" : "hit");
+    setTimeout(() => spot.remove(), 100);
+    if (lh.by === myDuoNum) { sfxImpact(); vibrate([10, 10, 10]); } else playTone(200, 0.1, "sawtooth", 0.1);
+  }
+  if (!pgTimer) pgTimer = setInterval(pgTick, 200);
+  pgTick();
+}
+
+// ---- Bataille de mines ----
+let mnPlaceMines = [], mnPrevEvent = 0, mnLastPhase = "";
+const mnHas = (list, r, c) => list.some(p => p[0] === r && p[1] === c);
+(function buildMnGrids() {
+  for (const id of ["duo-mn-top", "duo-mn-bot"]) {
+    const g = document.getElementById(id);
+    for (let i = 0; i < 36; i++) {
+      const b = document.createElement("button");
+      b.type = "button"; b.className = "mn-cell";
+      const r = Math.floor(i / 6), c = i % 6;
+      b.addEventListener("click", () => onMnCell(id, r, c));
+      g.appendChild(b);
+    }
+  }
+})();
+function onMnCell(gridId, r, c) {
+  if (!duo || duo.status !== "playing") return;
+  if (duo.phase === "placing" && gridId === "duo-mn-bot" && !duo.myReady) {
+    if (r < 1 || r > 4) return; // pas sur la ligne d'arrivée ni de départ
+    const i = mnPlaceMines.findIndex(p => p[0] === r && p[1] === c);
+    if (i >= 0) mnPlaceMines.splice(i, 1);
+    else if (mnPlaceMines.length < duo.mineCount) mnPlaceMines.push([r, c]);
+    vibrate(6); renderDuoMines();
+  } else if (duo.phase === "racing" && gridId === "duo-mn-top" && duo.turn === myDuoNum) {
+    const p = duo.my.pawn;
+    const dir = (r === p.r - 1 && c === p.c) ? "up" : (r === p.r + 1 && c === p.c) ? "down" : (r === p.r && c === p.c - 1) ? "left" : (r === p.r && c === p.c + 1) ? "right" : null;
+    if (dir) sendDuo({ type: "duoStep", dir });
+  }
+}
+document.getElementById("btn-duo-mn-ready").addEventListener("click", () => {
+  if (!duo || mnPlaceMines.length !== duo.mineCount) return;
+  sendDuo({ type: "duoMines", mines: mnPlaceMines });
+});
+document.querySelectorAll("#duo-mn-pad button").forEach(b => b.addEventListener("click", () => {
+  if (duo && duo.phase === "racing" && duo.turn === myDuoNum) sendDuo({ type: "duoStep", dir: b.dataset.dir });
+}));
+function renderDuoMines() {
+  duoShowScreen("screen-duo-mines");
+  const n = duo.size, myTurn = duo.turn === myDuoNum && duo.status === "playing";
+  if (duo.phase === "placing" && mnLastPhase !== "placing") mnPlaceMines = [];
+  mnLastPhase = duo.phase;
+  if (duo.phase === "racing" || duo.myReady) mnPlaceMines = duo.my.mines.slice();
+  const banner = document.getElementById("duo-mn-banner");
+  const placing = duo.phase === "placing";
+  banner.textContent = duo.status === "ended" ? "Partie terminée"
+    : placing ? (duo.myReady ? "Mines posées, en attente de l'adversaire..." : `Pose tes ${duo.mineCount} mines (${mnPlaceMines.length}/${duo.mineCount})`)
+    : myTurn ? "🏃 À toi d'avancer !" : `En attente de ${duo.opponent ? duo.opponent.pseudo : "l'adversaire"}...`;
+  banner.classList.toggle("bs-my-turn", myTurn && !placing);
+  document.getElementById("duo-mn-place-zone").style.display = placing && !duo.myReady ? "block" : "none";
+  document.getElementById("btn-duo-mn-ready").disabled = mnPlaceMines.length !== duo.mineCount;
+  document.getElementById("duo-mn-pad").style.display = !placing && duo.status === "playing" ? "grid" : "none";
+  document.querySelectorAll("#duo-mn-pad button").forEach(b => { b.disabled = !myTurn; });
+  const top = document.getElementById("duo-mn-top").children, bot = document.getElementById("duo-mn-bot").children;
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    const i = r * n + c;
+    // terrain adverse (je le traverse)
+    let t = "mn-cell" + (r === 0 ? " goal" : r === n - 1 ? " start" : "");
+    let tt = r === 0 ? "🏁" : "";
+    if (mnHas(duo.my.visited, r, c)) { t += " safe"; tt = ""; }
+    if (mnHas(duo.my.revealed, r, c)) { t += " boom"; tt = "💥"; }
+    if (duo.my.pawn.r === r && duo.my.pawn.c === c) tt = "🏃";
+    if (!placing && myTurn && Math.abs(duo.my.pawn.r - r) + Math.abs(duo.my.pawn.c - c) === 1) t += " clickable";
+    top[i].className = t; top[i].textContent = tt;
+    // mon terrain (l'adversaire le traverse)
+    let b = "mn-cell" + (r === 0 ? " goal" : r === n - 1 ? " start" : "");
+    let bt = "";
+    const mine = placing ? mnHas(mnPlaceMines, r, c) : mnHas(duo.my.mines, r, c);
+    if (mine) { b += " mine-mine"; bt = "💣"; }
+    if (mnHas(duo.opp.revealed, r, c)) { b += " boom"; bt = "💥"; }
+    if (duo.opp.pawn.r === r && duo.opp.pawn.c === c && !placing) bt = "👣";
+    if (placing && !duo.myReady && r >= 1 && r <= n - 2) b += " clickable";
+    bot[i].className = b; bot[i].textContent = bt;
+  }
+  const ev = duo.lastEvent;
+  if (!ev) mnPrevEvent = 0;
+  if (ev && ev.n !== mnPrevEvent) {
+    {
+      if (ev.type === "boom") {
+        const mineOnMine = ev.by !== myDuoNum; // l'adversaire a sauté sur MA mine
+        fxBurst((mineOnMine ? bot : top)[ev.r * n + ev.c], "sunk"); fxShake(document.getElementById(mineOnMine ? "duo-mn-bot" : "duo-mn-top"), true);
+        fxBanner(mineOnMine ? "💥 Il a sauté sur ta mine !" : "💥 BOUM ! Retour au départ", mineOnMine ? "#ffd24a" : "#ff6b5a");
+        sfxExplosion(); vibrate([50, 30, 80]);
+      } else if (ev.by === myDuoNum) { playTone(420, 0.05, "sine", 0.08); vibrate(6); }
+    }
+    mnPrevEvent = ev.n;
+  }
+}
+
+// ---- Plus ou moins ----
+document.getElementById("btn-duo-pm-secret").addEventListener("click", () => {
+  const n = parseInt(document.getElementById("duo-pm-secret").value, 10);
+  if (!Number.isInteger(n) || n < 1 || n > 100) return;
+  sendDuo({ type: "duoSecret", n });
+});
+function pmSendGuess() {
+  const inp = document.getElementById("duo-pm-guess");
+  const n = parseInt(inp.value, 10);
+  if (!duo || duo.turn !== myDuoNum || duo.phase !== "racing" || !Number.isInteger(n) || n < 1 || n > 100) return;
+  sendDuo({ type: "duoGuess", n }); inp.value = "";
+}
+document.getElementById("btn-duo-pm-guess").addEventListener("click", pmSendGuess);
+document.getElementById("duo-pm-guess").addEventListener("keydown", (e) => { if (e.key === "Enter") pmSendGuess(); });
+function renderDuoPm() {
+  duoShowScreen("screen-duo-pm");
+  const placing = duo.phase === "placing", myTurn = duo.turn === myDuoNum && duo.status === "playing" && !placing;
+  const banner = document.getElementById("duo-pm-banner");
+  banner.textContent = duo.status === "ended" ? "Partie terminée"
+    : placing ? (duo.myReady ? "Nombre choisi, en attente de l'adversaire..." : "Choisis ton nombre secret")
+    : myTurn ? "🔢 À toi de deviner !" : `En attente de ${duo.opponent ? duo.opponent.pseudo : "l'adversaire"}...`;
+  banner.classList.toggle("bs-my-turn", myTurn);
+  document.getElementById("duo-pm-secret-zone").style.display = placing && !duo.myReady ? "block" : "none";
+  document.getElementById("duo-pm-guess-zone").style.display = !placing && duo.status === "playing" ? "block" : "none";
+  document.getElementById("btn-duo-pm-guess").disabled = !myTurn;
+  let lo = 1, hi = 100;
+  duo.myGuesses.forEach(g => { if (g.res === "plus") lo = Math.max(lo, g.n + 1); else if (g.res === "moins") hi = Math.min(hi, g.n - 1); });
+  document.getElementById("duo-pm-range").textContent = `Son nombre est entre ${lo} et ${hi}` + (duo.mySecret ? ` · le tien : ${duo.mySecret}` : "");
+  const fill = (id, list, mine) => {
+    const ul = document.getElementById(id); ul.innerHTML = "";
+    list.forEach(g => {
+      const li = document.createElement("li"); li.className = g.res;
+      li.innerHTML = `<span>${g.n}</span><span>${g.res === "ok" ? "✅ trouvé !" : g.res === "plus" ? "⬆️ plus" : "⬇️ moins"}</span>`;
+      ul.appendChild(li);
+    });
+    ul.scrollTop = ul.scrollHeight;
+  };
+  fill("duo-pm-mine", duo.myGuesses, true); fill("duo-pm-theirs", duo.oppGuesses, false);
+}
+const DUO_NEW_RENDERERS = { memory: renderDuoMemory, tug: renderDuoTug, gomoku: renderDuoGomoku, pigeons: renderDuoPigeons, mines: renderDuoMines, plusmoins: renderDuoPm };
+
+// =====================================================================
+// ===== MULTI : JEUX DE SOIRÉE (Simon, Patate chaude) =================
+// =====================================================================
+let partyWs = null, party = null, partyCode = null, partyLeaving = false, partyEndTimer = null;
+const PARTY_GAME_LABELS = { simon: "Simon", potato: "Patate chaude", stop10: "Stop à 10", memory: "Memory", taps: "la Course de taps", vote: "le Vote du plus…" };
+function partyShareLink() { return partyCode ? `${GAME_SHARE_URL}/?party=${partyCode}` : null; }
+function sendParty(payload) { if (partyWs && partyWs.readyState === 1) partyWs.send(JSON.stringify(payload)); }
+function partyAct(act, extra) { sendParty(Object.assign({ type: "partyAct", act }, extra || {})); }
+function leaveParty() {
+  partyLeaving = true;
+  if (partyWs) { try { partyWs.close(); } catch (e) { /* ignore */ } }
+  clearTimeout(partyEndTimer);
+  party = null; partyCode = null;
+  showScreen("screen-home");
+}
+function connectParty(code, pseudo) {
+  partyLeaving = false;
+  partyCode = code; party = null;
+  document.getElementById("party-code").textContent = code;
+  document.getElementById("party-qr-wrap").style.display = "none";
+  document.getElementById("party-status").textContent = "Connexion au serveur...";
+  renderShareQR("party-qr", partyShareLink());
+  showScreen("screen-party-lobby");
+  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?party=1&code=${code}&pseudo=${encodeURIComponent(pseudo)}`;
+  let ws;
+  try { ws = new WebSocket(wsUrl); } catch (e) { document.getElementById("party-status").textContent = "Connexion impossible."; return; }
+  partyWs = ws;
+  ws.onopen = () => { document.getElementById("party-status").textContent = ""; };
+  ws.onmessage = (ev) => {
+    let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    onPartyMessage(msg);
+  };
+  ws.onerror = () => { document.getElementById("party-status").textContent = "Erreur de connexion au serveur."; };
+  ws.onclose = () => {
+    if (partyLeaving || ws !== partyWs) return;
+    const active = document.querySelector(".screen.active").id;
+    if (["screen-party-lobby", "screen-party-simon", "screen-party-potato", "screen-party-stop", "screen-party-memory", "screen-party-taps", "screen-party-vote"].includes(active)) {
+      showSoloEnd("neutral", "Connexion perdue", "La connexion avec le salon a été coupée.");
+      soloRetryHandler = null;
+      document.getElementById("btn-solo-retry").style.display = "none";
+    }
+  };
+}
+function onPartyMessage(msg) {
+  if (msg.type === "error") { partyLeaving = true; alert(msg.message); showScreen("screen-home"); return; }
+  if (msg.type === "partyError") { document.getElementById("party-status").textContent = "⚠️ " + msg.message; return; }
+  if (msg.type !== "partyState") return;
+  party = msg;
+  if (msg.status === "lobby") { clearTimeout(partyEndTimer); duoShowScreen("screen-party-lobby"); renderPartyLobby(); return; }
+  const g = msg.game;
+  const PR = { simon: renderPartySimon, potato: renderPartyPotato, stop10: renderPartyStop, memory: renderPartyMemory, taps: renderPartyTaps, vote: renderPartyVote };
+  if (g && PR[g.game]) PR[g.game]();
+  if (msg.status === "ended") {
+    clearTimeout(partyEndTimer);
+    partyEndTimer = setTimeout(showPartyEnd, 1600);
+  }
+}
+function partyName(id) { const p = party && party.players.find(x => x.id === id); return p ? p.pseudo : "?"; }
+function partyRankingText(g) {
+  const unit = g.game === "stop10" ? (v => `${(v / 1000).toFixed(2)} s d'écart`) : g.game === "memory" ? (v => `${v} paire${v > 1 ? "s" : ""}`) : g.game === "vote" ? (v => `${v} vote${v > 1 ? "s" : ""}`) : (v => `${v} taps`);
+  const medals = ["🥇", "🥈", "🥉"];
+  return g.ranking.map((r, i) => `${medals[i] || (i + 1) + "."} ${partyName(r.id)} — ${unit(r.score)}`).join("\n");
+}
+function showPartyEnd() {
+  if (!party || party.status !== "ended") return;
+  const won = party.winnerId === party.myId;
+  const isHost = party.hostId === party.myId;
+  const label = PARTY_GAME_LABELS[party.selectedGame] || "";
+  showSoloEnd(party.winnerId === null ? "draw" : (won ? "win" : "lose"),
+    party.winnerId === null ? "Match nul" : (won ? "Victoire !" : `${partyName(party.winnerId)} gagne`),
+    party.game && party.game.ranking ? partyRankingText(party.game) : (won ? `Bien joué, tu remportes ${label} !` : `Dernier debout : ${partyName(party.winnerId)}.`));
+  soloRetryHandler = () => sendParty({ type: "partyStart" });
+  document.getElementById("btn-solo-retry").style.display = isHost ? "" : "none";
+  document.getElementById("btn-party-back-lobby").style.display = isHost ? "" : "none";
+}
+document.getElementById("btn-party-back-lobby").addEventListener("click", () => sendParty({ type: "partyBack" }));
+
+function renderPartyLobby() {
+  const isHost = party.hostId === party.myId;
+  const list = document.getElementById("party-players");
+  list.innerHTML = "";
+  party.players.forEach(p => {
+    const li = document.createElement("li");
+    li.innerHTML = `<span class="pname">${p.id === party.hostId ? "👑 " : ""}${escapeHtml(p.pseudo)}${p.id === party.myId ? " (toi)" : ""}</span>`;
+    list.appendChild(li);
+  });
+  document.getElementById("party-host-zone").style.display = isHost ? "block" : "none";
+  document.getElementById("party-wait-host").style.display = isHost ? "none" : "block";
+  document.querySelectorAll(".party-game-choice").forEach(b => b.classList.toggle("active", b.dataset.game === party.selectedGame));
+  const enough = party.players.filter(p => p.connected).length >= 2;
+  const startBtn = document.getElementById("btn-party-start");
+  startBtn.disabled = !enough;
+  startBtn.textContent = enough ? `Lancer ${PARTY_GAME_LABELS[party.selectedGame]}` : "Il faut au moins 2 joueurs";
+}
+document.querySelectorAll(".party-game-choice").forEach(b => b.addEventListener("click", () => sendParty({ type: "partySelect", game: b.dataset.game })));
+document.getElementById("btn-party-start").addEventListener("click", () => sendParty({ type: "partyStart" }));
+document.getElementById("btn-party-leave").addEventListener("click", leaveParty);
+document.querySelectorAll(".party-quit-btn").forEach(b => b.addEventListener("click", leaveParty));
+function shareText(code, link, what) { return `Hey ! Rejoins mon ${what} CapNaval sur ${link} (code : ${code}) !`; }
+document.getElementById("party-code").addEventListener("click", () => {
+  if (!partyCode) return;
+  const text = shareText(partyCode, partyShareLink(), "salon");
+  if (navigator.share) { navigator.share({ text }).catch(() => {}); return; }
+  const btn = document.getElementById("party-code");
+  const flash = () => { btn.textContent = "Copié !"; setTimeout(() => { btn.textContent = partyCode; }, 1300); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(flash).catch(() => {}); else flash();
+});
+document.getElementById("btn-party-copy-code").addEventListener("click", () => {
+  if (!partyCode) return;
+  const btn = document.getElementById("btn-party-copy-code"), original = btn.textContent;
+  const flash = () => { btn.textContent = "✅ Copié !"; setTimeout(() => { btn.textContent = original; }, 1300); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(partyCode).then(flash).catch(() => {}); else flash();
+});
+document.getElementById("btn-party-toggle-qr").addEventListener("click", () => {
+  const wrap = document.getElementById("party-qr-wrap");
+  wrap.style.display = wrap.style.display === "none" ? "flex" : "none";
+});
+
+// menu : créer / rejoindre un salon Multi
+document.getElementById("btn-choose-party").addEventListener("click", () => {
+  document.getElementById("mode-choice-modal").style.display = "none";
+  openCrModal("party", "create");
+});
+document.getElementById("btn-close-party-choice").addEventListener("click", () => { document.getElementById("party-choice-modal").style.display = "none"; });
+document.getElementById("btn-party-create").addEventListener("click", async () => {
+  const pseudo = document.getElementById("input-pseudo").value.trim() || "Joueur";
+  document.getElementById("party-choice-modal").style.display = "none";
+  saveLastPseudo(pseudo);
+  try {
+    const res = await fetch(`${BACKEND_URL}/api/party-create`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const data = await res.json();
+    connectParty(data.code, pseudo);
+  } catch (e) { alert("Impossible de joindre le serveur. Vérifie ta connexion."); }
+});
+document.getElementById("btn-party-join").addEventListener("click", () => {
+  const code = document.getElementById("party-join-code").value.trim().toUpperCase();
+  if (!code) return;
+  const pseudo = document.getElementById("input-pseudo").value.trim() || "Joueur";
+  document.getElementById("party-choice-modal").style.display = "none";
+  saveLastPseudo(pseudo);
+  connectParty(code, pseudo);
+});
+
+// ---- Simon (Multi) ----
+let simonShowSeen = -1, simonTapSeen = 0, simonEventSeen = 0;
+const SIMON_TONES = [330, 440, 550, 660];
+function simonLight(pad, ms) {
+  const el = document.querySelector(`#party-simon-pads .simon-pad-${pad}`);
+  if (!el) return;
+  el.classList.add("simon-pad-lit");
+  playTone(SIMON_TONES[pad], 0.18, "sine", 0.12);
+  setTimeout(() => el.classList.remove("simon-pad-lit"), ms || 380);
+}
+document.querySelectorAll("#party-simon-pads .simon-pad").forEach(btn => btn.addEventListener("click", () => {
+  const g = party && party.game;
+  if (!g || g.game !== "simon" || party.status !== "playing" || g.phase !== "input" || g.turnId !== party.myId) return;
+  partyAct("simonTap", { pad: parseInt(btn.dataset.pad, 10) });
+}));
+function renderPartySimon() {
+  duoShowScreen("screen-party-simon");
+  const g = party.game, me = party.myId;
+  const myTurn = g.turnId === me && party.status === "playing";
+  const banner = document.getElementById("party-simon-banner");
+  const info = document.getElementById("party-simon-info");
+  if (party.status === "ended") { banner.textContent = "Partie terminée"; info.textContent = ""; }
+  else if (g.phase === "show") { banner.textContent = `👀 Mémorise la séquence (${g.seqLen})`; info.textContent = `Ensuite, ${g.turnId === me ? "c'est à toi" : partyName(g.turnId) + " rejoue"} !`; }
+  else if (myTurn) {
+    banner.textContent = g.input < g.seqLen ? `🎯 À toi ! Rejoue la séquence (${g.input}/${g.seqLen})` : "➕ Ajoute une nouvelle couleur !";
+    info.textContent = "Tu as 12 secondes entre chaque touche.";
+  } else { banner.textContent = `Au tour de ${partyName(g.turnId)}...`; info.textContent = g.seqLen ? `Séquence : ${g.seqLen}` : "Il lance la séquence."; }
+  banner.classList.toggle("bs-my-turn", myTurn && g.phase === "input");
+  document.querySelectorAll("#party-simon-pads .simon-pad").forEach(p => p.classList.toggle("disabled", !(myTurn && g.phase === "input")));
+  const chips = document.getElementById("party-simon-players");
+  chips.innerHTML = "";
+  party.players.forEach(p => {
+    const li = document.createElement("li");
+    li.textContent = p.pseudo;
+    if (g.eliminated.includes(p.id)) li.className = "out";
+    else if (p.id === g.turnId) li.className = "active";
+    if (p.id === me) li.classList.add("me");
+    chips.appendChild(li);
+  });
+  // animation de la séquence à mémoriser
+  if (g.phase === "show" && g.seq && g.showId !== simonShowSeen) {
+    simonShowSeen = g.showId;
+    g.seq.forEach((pad, i) => setTimeout(() => simonLight(pad, 420), 500 + i * 650));
+  }
+  // les touches des autres joueurs s'allument aussi
+  if (g.lastTap && g.lastTap.n !== simonTapSeen) {
+    if (g.lastTap.id !== me && g.phase === "input") simonLight(g.lastTap.pad, 280);
+    else if (g.lastTap.id === me) simonLight(g.lastTap.pad, 200);
+    simonTapSeen = g.lastTap.n;
+  }
+  if (g.lastEvent && g.lastEvent.n !== simonEventSeen) {
+    simonEventSeen = g.lastEvent.n;
+    if (g.lastEvent.type === "out") { fxBanner(g.lastEvent.id === me ? "❌ Raté !" : `❌ ${partyName(g.lastEvent.id)} est éliminé`, "#ff6b5a"); fxShake(document.getElementById("party-simon-pads"), true); sfxKO(); vibrate([40, 30, 40]); }
+  }
+}
+
+// ---- Patate chaude (Multi) ----
+let potatoBoomSeen = 0, potatoPassSeen = 0;
+function renderPartyPotato() {
+  duoShowScreen("screen-party-potato");
+  const g = party.game, me = party.myId;
+  const iHold = g.holderId === me && party.status === "playing";
+  const banner = document.getElementById("party-potato-banner");
+  banner.textContent = party.status === "ended" ? "Partie terminée" : iHold ? "🥔 Tu as la patate ! Passe-la vite !" : `🥔 ${partyName(g.holderId)} a la patate...`;
+  banner.classList.toggle("bs-my-turn", iHold);
+  const ring = document.getElementById("party-potato-ring");
+  ring.innerHTML = "";
+  const n = party.players.length;
+  party.players.forEach((p, i) => {
+    const ang = (Math.PI * 2 * i) / n - Math.PI / 2;
+    const out = g.eliminated.includes(p.id);
+    const seat = document.createElement("button");
+    seat.type = "button"; seat.dataset.id = p.id;
+    seat.className = "potato-seat" + (p.id === me ? " me" : "") + (p.id === g.holderId && !out ? " holder" : "") + (out ? " out" : "");
+    seat.style.left = (50 + 40 * Math.cos(ang)) + "%"; seat.style.top = (50 + 40 * Math.sin(ang)) + "%";
+    seat.innerHTML = `<span class="pt-emoji">${out ? "💀" : (p.id === g.holderId ? "💣" : "🙂")}</span><span class="pt-name">${escapeHtml(p.pseudo)}</span>`;
+    seat.addEventListener("click", () => {
+      if (!iHold || out || p.id === me) return;
+      partyAct("potatoPass", { to: p.id }); vibrate(10);
+    });
+    ring.appendChild(seat);
+  });
+  if (g.lastPass && g.lastPass.n !== potatoPassSeen) { potatoPassSeen = g.lastPass.n; playTone(520, 0.06, "triangle", 0.1); }
+  if (g.lastEvent && g.lastEvent.n !== potatoBoomSeen) {
+    potatoBoomSeen = g.lastEvent.n;
+    const seat = ring.querySelector(`.potato-seat[data-id="${g.lastEvent.id}"]`);
+    if (seat) fxBurst(seat, "sunk");
+    fxBanner(g.lastEvent.id === me ? "💥 BOUM ! Tu es out" : `💥 ${partyName(g.lastEvent.id)} explose !`, "#ffb52e");
+    sfxExplosion(); vibrate([60, 40, 100]);
+  }
+}
+
+
+// ---- Stop à 10 (Multi) ----
+let stopStart = 0, stopTimer = null, stopTapped = false, stopRoundSeen = 0, stopPhaseSeen = "";
+document.getElementById("party-stop-btn").addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  const g = party && party.game;
+  if (!g || g.game !== "stop10" || g.phase !== "running" || stopTapped) return;
+  stopTapped = true;
+  document.getElementById("party-stop-btn").disabled = true;
+  partyAct("stopTap"); vibrate(20);
+});
+function stopTick() {
+  const g = party && party.game;
+  const el = document.getElementById("party-stop-time");
+  if (!g || g.game !== "stop10") { clearInterval(stopTimer); stopTimer = null; return; }
+  if (g.phase === "running" && !stopTapped) {
+    const t = (performance.now() - stopStart) / 1000;
+    if (t < 3) { el.textContent = t.toFixed(2); el.classList.remove("hidden-time"); }
+    else { el.textContent = "?.??"; el.classList.add("hidden-time"); }
+  }
+}
+function renderPartyStop() {
+  duoShowScreen("screen-party-stop");
+  const g = party.game, me = party.myId;
+  if (g.round !== stopRoundSeen || (g.phase === "countdown" && stopPhaseSeen !== "countdown")) { stopTapped = false; stopRoundSeen = g.round; }
+  if (g.phase === "running" && stopPhaseSeen !== "running") stopStart = performance.now() - g.elapsedMs;
+  stopPhaseSeen = g.phase;
+  const banner = document.getElementById("party-stop-banner"), time = document.getElementById("party-stop-time"), hint = document.getElementById("party-stop-hint");
+  const btn = document.getElementById("party-stop-btn");
+  banner.textContent = party.status === "ended" ? "Partie terminée" : `Manche ${g.round} / ${g.rounds}`;
+  if (g.phase === "countdown") { time.textContent = Math.max(1, Math.ceil(g.countdownMs / 1000)); time.classList.remove("hidden-time"); hint.textContent = "Prépare-toi : le chrono démarre bientôt..."; btn.disabled = true; }
+  else if (g.phase === "running") {
+    hint.textContent = stopTapped ? "Bien joué ! En attente des autres..." : "Le chrono disparaît après 3 s. Appuie quand tu penses être à 10,00 s !";
+    btn.disabled = stopTapped;
+  } else { // results
+    btn.disabled = true;
+    const myErr = g.errors && g.errors[me];
+    time.textContent = myErr !== undefined ? `${(myErr / 1000).toFixed(2)} s` : "";
+    time.classList.remove("hidden-time");
+    hint.textContent = "Écart avec 10,00 s (le plus petit gagne)";
+  }
+  if (!stopTimer) stopTimer = setInterval(stopTick, 40);
+  const list = document.getElementById("party-stop-players");
+  list.innerHTML = "";
+  party.players.forEach(p => {
+    const li = document.createElement("li");
+    let right = "";
+    if (g.phase === "results" || party.status === "ended") right = `${((g.errors || {})[p.id] / 1000).toFixed(2)} s · total ${((g.totals || {})[p.id] / 1000).toFixed(2)}`;
+    else right = g.tapped[p.id] ? "✅" : "⏳";
+    li.innerHTML = `<span class="pname">${escapeHtml(p.pseudo)}${p.id === me ? " (toi)" : ""}${g.left.includes(p.id) ? " 🚪" : ""}</span><span class="stop-err">${right}</span>`;
+    list.appendChild(li);
+  });
+}
+
+// ---- Memory à plusieurs ----
+(function buildPartyMem() {
+  const grid = document.getElementById("party-mem-grid");
+  for (let i = 0; i < 30; i++) {
+    const b = document.createElement("button");
+    b.type = "button"; b.className = "mem-duo-card"; b.textContent = "?";
+    b.addEventListener("click", () => {
+      const g = party && party.game;
+      if (!g || g.game !== "memory" || party.status !== "playing" || g.turnId !== party.myId || g.locked || g.cards[i].state !== "down") return;
+      partyAct("memFlip", { i }); vibrate(8);
+    });
+    grid.appendChild(b);
+  }
+})();
+let pmemPrevMatched = 0;
+function renderPartyMemory() {
+  duoShowScreen("screen-party-memory");
+  const g = party.game, me = party.myId;
+  const myTurn = g.turnId === me && party.status === "playing";
+  const banner = document.getElementById("party-mem-banner");
+  banner.textContent = party.status === "ended" ? "Partie terminée" : myTurn ? "🧠 À toi de retourner une carte !" : `Au tour de ${partyName(g.turnId)}...`;
+  banner.classList.toggle("bs-my-turn", myTurn);
+  const cells = document.getElementById("party-mem-grid").children;
+  let matched = 0;
+  g.cards.forEach((c, i) => {
+    const el = cells[i];
+    let cls = "mem-duo-card";
+    if (c.state === "up") cls += " up";
+    else if (c.state === "matched") { cls += c.owner === me ? " matched-mine" : " matched-theirs"; matched++; }
+    if (el.className !== cls) el.className = cls;
+    el.textContent = c.state === "down" ? "?" : c.s;
+  });
+  if (matched > pmemPrevMatched) { sfxImpact(); vibrate([15, 10, 15]); }
+  pmemPrevMatched = matched;
+  const chips = document.getElementById("party-mem-players");
+  chips.innerHTML = "";
+  party.players.forEach(p => {
+    const li = document.createElement("li");
+    li.textContent = `${p.pseudo} · ${g.scores[p.id] || 0}`;
+    if (g.left.includes(p.id)) li.className = "out"; else if (p.id === g.turnId) li.className = "active";
+    if (p.id === me) li.classList.add("me");
+    chips.appendChild(li);
+  });
+}
+
+// ---- Course de taps ----
+let tapsGoAt = 0, tapsEndAt = 0, tapsTimer = null, tapsPhaseSeen = "";
+document.getElementById("party-taps-btn").addEventListener("pointerdown", (e) => {
+  e.preventDefault();
+  const g = party && party.game;
+  if (!g || g.game !== "taps" || g.phase !== "running") return;
+  partyAct("tapTap"); vibrate(4);
+});
+function tapsTick() {
+  const g = party && party.game;
+  if (!g || g.game !== "taps") { clearInterval(tapsTimer); tapsTimer = null; return; }
+  const banner = document.getElementById("party-taps-banner"), now = Date.now();
+  if (party.status === "ended") banner.textContent = "Terminé !";
+  else if (g.phase === "countdown") banner.textContent = `Prêt ? ${Math.max(1, Math.ceil((tapsGoAt - now) / 1000))}...`;
+  else banner.textContent = `🏁 TAPE ! ⏱ ${Math.max(0, (tapsEndAt - now) / 1000).toFixed(1)} s`;
+}
+function renderPartyTaps() {
+  duoShowScreen("screen-party-taps");
+  const g = party.game, me = party.myId;
+  tapsGoAt = Date.now() + g.countdownMs; tapsEndAt = Date.now() + g.timeLeftMs;
+  const list = document.getElementById("party-taps-bars");
+  const max = Math.max(20, ...Object.values(g.counts));
+  list.innerHTML = "";
+  party.players.forEach(p => {
+    const li = document.createElement("li");
+    if (p.id === me) li.className = "me";
+    const n = g.counts[p.id] || 0;
+    li.innerHTML = `<div class="fill" style="width:${Math.round(n / max * 100)}%"></div><span>${escapeHtml(p.pseudo)}${p.id === me ? " (toi)" : ""}${g.left.includes(p.id) ? " 🚪" : ""}</span><span>${n}</span>`;
+    list.appendChild(li);
+  });
+  document.getElementById("party-taps-btn").disabled = g.phase !== "running";
+  if (!tapsTimer) tapsTimer = setInterval(tapsTick, 100);
+  tapsTick();
+}
+
+
+// ---- Vote du plus… (Multi) ----
+let voteChosen = null, voteRoundSeen = 0, voteTimer = null, voteEndAt = 0;
+function voteTick() {
+  const g = party && party.game;
+  if (!g || g.game !== "vote") { clearInterval(voteTimer); voteTimer = null; return; }
+  const banner = document.getElementById("party-vote-banner");
+  if (party.status === "ended") banner.textContent = "Terminé !";
+  else if (g.phase === "voting") banner.textContent = `Question ${g.round} / ${g.rounds} · ⏱ ${Math.max(0, Math.ceil((voteEndAt - Date.now()) / 1000))} s`;
+  else banner.textContent = `Résultats · question ${g.round} / ${g.rounds}`;
+}
+function renderPartyVote() {
+  duoShowScreen("screen-party-vote");
+  const g = party.game, me = party.myId;
+  if (g.round !== voteRoundSeen) { voteChosen = null; voteRoundSeen = g.round; }
+  voteEndAt = Date.now() + g.timeLeftMs;
+  document.getElementById("party-vote-question").textContent = g.question;
+  const list = document.getElementById("party-vote-list");
+  list.innerHTML = "";
+  const results = g.phase === "results" || party.status === "ended";
+  const maxRound = results ? Math.max(0, ...Object.values(g.roundCounts || {})) : 0;
+  party.players.forEach(p => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const out = g.left.includes(p.id);
+    const cnt = results && g.roundCounts ? g.roundCounts[p.id] || 0 : null;
+    btn.innerHTML = `<span>${escapeHtml(p.pseudo)}${p.id === me ? " (toi)" : ""}${out ? " 🚪" : ""}</span><span>${cnt !== null ? `${cnt} vote${cnt > 1 ? "s" : ""}${g.totals ? " · total " + g.totals[p.id] : ""}` : (g.voted[p.id] ? "✅" : "")}</span>`;
+    if (voteChosen === p.id) btn.classList.add("chosen");
+    if (results && cnt === maxRound && maxRound > 0) btn.classList.add("top");
+    btn.disabled = results || p.id === me || out || voteChosen !== null || g.voted[me];
+    btn.addEventListener("click", () => { voteChosen = p.id; partyAct("voteFor", { to: p.id }); vibrate(10); renderPartyVote(); });
+    li.appendChild(btn); list.appendChild(li);
+  });
+  document.getElementById("party-vote-hint").textContent = results ? "Le plus voté de la manche est entouré en or." : (voteChosen !== null || g.voted[me] ? "Vote enregistré, en attente des autres..." : "Vote pour la personne qui correspond le mieux (pas toi !).");
+  if (!voteTimer) voteTimer = setInterval(voteTick, 250);
+  voteTick();
+}
 
 // ---------- Pseudo mémorisé ----------
 const PSEUDO_KEY = "capnaval_pseudo";
@@ -3495,22 +4349,7 @@ function saveLastPseudo(pseudo) {
   try { localStorage.setItem(PSEUDO_KEY, pseudo); } catch (e) { /* ignore */ }
 }
 
-// ---------- Lien direct (?code=XXXXX) : pré-remplit le code depuis un lien partagé ----------
-(function prefillCodeFromLink() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const code = (params.get("code") || "").trim().toUpperCase();
-    if (!code) return;
-    const codeInput = document.getElementById("input-code");
-    codeInput.value = code;
-    const pseudoInput = document.getElementById("input-pseudo");
-    if (!pseudoInput.value) pseudoInput.focus();
-    codeInput.scrollIntoView({ block: "center" });
-    // Ne nettoie pas l'URL tout de suite : l'enregistrement du service worker peut
-    // déclencher un rechargement juste après le tout premier chargement, et il faut
-    // que le code reste dans l'URL pour être repris correctement à ce moment-là.
-  } catch (e) { /* ignore */ }
-})();
+
 
 // ---------- Partage du code de partie ----------
 const GAME_SHARE_URL = "https://capworks-company.github.io/Game";
@@ -3609,11 +4448,15 @@ function askPseudoForLink() {
     const params = new URLSearchParams(window.location.search);
     const duoC = (params.get("duo") || "").trim().toUpperCase();
     const multiC = (params.get("code") || "").trim().toUpperCase();
-    if (!duoC && !multiC) return;
+    const partyC = (params.get("party") || "").trim().toUpperCase();
+    if (!duoC && !multiC && !partyC) return;
     window.addEventListener("load", () => setTimeout(() => {
       try { history.replaceState(null, "", window.location.pathname); } catch (e) { /* ignore */ }
       const pseudo = askPseudoForLink();
-      if (duoC) {
+      if (partyC) {
+        if (!pseudo) return openCrModal("party", "join", partyC);
+        connectParty(partyC, pseudo);
+      } else if (duoC) {
         if (!pseudo) return openCrModal("duo", "join", duoC);
         connectDuo(duoC, pseudo);
       } else if (pseudo) {
@@ -3931,6 +4774,7 @@ function openCrModal(modal, tab, code) {
   setCrTab(modal, tab);
   if (code) document.getElementById(`${modal}-join-code`).value = code;
   document.getElementById(`${modal}-choice-modal`).style.display = "flex";
+  if (modal === "duo") startDuoPublicPolling();
 }
 document.querySelectorAll(".cr-tab").forEach(btn => {
   btn.addEventListener("click", () => setCrTab(btn.closest(".cr-tabs").dataset.modal, btn.dataset.tab));
@@ -4265,6 +5109,9 @@ function onMessage(msg) {
     showScreen("screen-home");
     startPublicRoomsPolling();
     setHomeError("Tu as été exclu de la partie par l'hôte.");
+  } else if (msg.type === "startRefused") {
+    if (lobbyStartLogStop) { lobbyStartLogStop(); lobbyStartLogStop = null; }
+    document.getElementById("lobby-status").textContent = "⚠️ " + msg.message;
   } else if (msg.type === "error") {
     setHomeError(msg.message);
   }
