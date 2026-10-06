@@ -565,9 +565,52 @@ const SOLO_GAMES = [
 ];
 let soloRetryHandler = null;
 
+// ---------- Statistiques (locales à l'appareil) ----------
+const STATS_KEY = "capnaval_stats";
+let statsCtx = null; // { cat: "solo"|"duo"|"party"|"fight", label }
+function loadStats() {
+  try { const s = JSON.parse(localStorage.getItem(STATS_KEY) || "null"); if (s && s.games) return s; } catch (e) { /* ignore */ }
+  return { games: {}, streak: 0, bestStreak: 0 };
+}
+function recordStat(cat, label, outcome) {
+  if (!["win", "lose", "draw"].includes(outcome)) return;
+  const s = loadStats();
+  const key = cat + "|" + label;
+  const g = s.games[key] || (s.games[key] = { p: 0, w: 0, l: 0, d: 0 });
+  g.p++; if (outcome === "win") g.w++; else if (outcome === "lose") g.l++; else g.d++;
+  if (outcome === "win") { s.streak++; s.bestStreak = Math.max(s.bestStreak, s.streak); }
+  else if (outcome === "lose") s.streak = 0;
+  try { localStorage.setItem(STATS_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ }
+}
+function renderStats() {
+  const s = loadStats();
+  const rows = Object.entries(s.games).map(([k, g]) => { const i = k.indexOf("|"); return { cat: k.slice(0, i), label: k.slice(i + 1), ...g }; });
+  const tot = rows.reduce((t, r) => ({ p: t.p + r.p, w: t.w + r.w, l: t.l + r.l, d: t.d + r.d }), { p: 0, w: 0, l: 0, d: 0 });
+  const rate = tot.p ? Math.round(tot.w / tot.p * 100) + "%" : "–";
+  document.getElementById("stats-summary").innerHTML =
+    `<div><b>${tot.p}</b><span>Parties</span></div><div><b>${tot.w}</b><span>Victoires</span></div><div><b>${rate}</b><span>Réussite</span></div><div><b>${s.streak}</b><span>Série (max ${s.bestStreak})</span></div>`;
+  const CATS = [["solo", "🎮 Solo"], ["duo", "🤝 Duo"], ["party", "🎉 Multi"], ["fight", "⚔️ Fight"]];
+  let html = "";
+  CATS.forEach(([cat, title]) => {
+    const rs = rows.filter(r => r.cat === cat).sort((a, b) => b.p - a.p);
+    if (!rs.length) return;
+    html += `<div class="stats-section">${title}</div>` + rs.map(r =>
+      `<div class="stats-row"><span>${escapeHtml(r.label)}</span><small>${r.p} parties · ${r.w}V ${r.l}D${r.d ? " " + r.d + "N" : ""}</small></div>`).join("");
+  });
+  document.getElementById("stats-list").innerHTML = html || `<div class="stats-empty">Aucune partie terminée pour l'instant. Lance un jeu !</div>`;
+}
+document.getElementById("btn-open-stats").addEventListener("click", () => { renderStats(); document.getElementById("stats-modal").style.display = "flex"; });
+document.getElementById("btn-close-stats").addEventListener("click", () => { document.getElementById("stats-modal").style.display = "none"; });
+document.getElementById("btn-stats-reset").addEventListener("click", () => {
+  if (!confirm("Effacer toutes les statistiques ?")) return;
+  try { localStorage.removeItem(STATS_KEY); } catch (e) { /* ignore */ }
+  renderStats();
+});
+
 // Panel de fin partagé par tous les mini-jeux (solo et duo) : icône, mise en
 // valeur colorée selon le résultat, confettis en cas de victoire.
 function showSoloEnd(outcome, title, text) {
+  if (statsCtx && !document.getElementById("screen-solo-end").classList.contains("active")) recordStat(statsCtx.cat, statsCtx.label, outcome);
   const card = document.getElementById("solo-end-card");
   const icon = document.getElementById("solo-end-icon");
   const titleEl = document.getElementById("solo-end-title");
@@ -597,6 +640,7 @@ function openSoloHub() {
   list.querySelectorAll(".solo-game-card").forEach(btn => {
     const g = SOLO_GAMES.find(x => x.id === btn.dataset.id);
     btn.addEventListener("click", () => {
+      statsCtx = { cat: "solo", label: g.label };
       if (g.kind === "battle") startSoloBattle(g.enemy);
       else if (g.kind === "tubes") startTubesGame();
       else if (g.kind === "2048") start2048Game();
@@ -612,6 +656,7 @@ function openSoloHub() {
       else if (g.kind === "peche") startPecheGame();
       else if (g.kind === "magic") startMagicGame();
       else if (g.kind === "darts") startDartsGame();
+      else if (typeof SOLO_EXTRA !== "undefined" && SOLO_EXTRA[g.kind]) SOLO_EXTRA[g.kind]();
     });
   });
   showScreen("screen-solo-hub");
@@ -2847,10 +2892,10 @@ document.getElementById("btn-choose-duo").addEventListener("click", () => {
 document.getElementById("btn-close-duo-choice").addEventListener("click", () => {
   document.getElementById("duo-choice-modal").style.display = "none";
 });
-document.querySelectorAll(".duo-game-choice:not(.duo-switch-choice)").forEach(btn => {
+document.querySelectorAll(".duo-game-choice:not(.duo-switch-choice):not(.party-game-choice)").forEach(btn => {
   btn.addEventListener("click", () => {
     selectedDuoGame = btn.dataset.game;
-    document.querySelectorAll(".duo-game-choice:not(.duo-switch-choice)").forEach(b => b.classList.toggle("active", b === btn));
+    document.querySelectorAll(".duo-game-choice:not(.duo-switch-choice):not(.party-game-choice)").forEach(b => b.classList.toggle("active", b === btn));
   });
 });
 document.getElementById("btn-duo-create").addEventListener("click", async () => {
@@ -2955,7 +3000,7 @@ function connectDuo(code, pseudo, game) {
   duoWs.onerror = () => { document.getElementById("duo-wait-status").textContent = "Erreur de connexion au serveur."; };
   duoWs.onclose = () => {
     const active = document.querySelector(".screen.active").id;
-    if (["screen-duo-battle", "screen-duo-place", "screen-duo-connect4", "screen-duo-rps", "screen-duo-checkers", "screen-duo-memory", "screen-duo-tug", "screen-duo-gomoku", "screen-duo-pigeons", "screen-duo-mines", "screen-duo-pm"].includes(active)) {
+    if (["screen-duo-battle", "screen-duo-place", "screen-duo-connect4", "screen-duo-rps", "screen-duo-checkers", "screen-duo-memory", "screen-duo-tug", "screen-duo-gomoku", "screen-duo-pigeons", "screen-duo-mines", "screen-duo-pm"].includes(active) || document.getElementById(active).classList.contains("net-duo")) {
       showSoloEnd("neutral", "Connexion perdue", "La connexion avec ton adversaire a été coupée.");
       soloRetryHandler = null;
     }
@@ -2992,6 +3037,7 @@ function onDuoMessage(msg) {
   }
 }
 function renderDuoGenericEnd() {
+  statsCtx = { cat: "duo", label: (DUO_GAME_LABELS[duoGame] || duoGame || "Duo").replace(/^\S+\s/, "") };
   const draw = duo.winner === null;
   const won = duo.winner === myDuoNum;
   showSoloEnd(draw ? "draw" : (won ? "win" : "lose"),
@@ -3424,6 +3470,7 @@ function renderBsMyGrid() {
   }
 }
 function renderDuoEnd() {
+  statsCtx = { cat: "duo", label: DUO_GAME_LABELS.battleship.replace(/^\S+\s/, "") };
   const won = duo.winner === myDuoNum;
   showSoloEnd(won ? "win" : "lose", won ? "Victoire !" : "Défaite...",
     won ? "Tu as coulé toute la flotte adverse. GG !" : "Ta flotte a été entièrement coulée. Une revanche ?");
@@ -3967,7 +4014,7 @@ function connectParty(code, pseudo) {
   ws.onclose = () => {
     if (partyLeaving || ws !== partyWs) return;
     const active = document.querySelector(".screen.active").id;
-    if (["screen-party-lobby", "screen-party-simon", "screen-party-potato", "screen-party-stop", "screen-party-memory", "screen-party-taps", "screen-party-vote"].includes(active)) {
+    if (["screen-party-lobby", "screen-party-simon", "screen-party-potato", "screen-party-stop", "screen-party-memory", "screen-party-taps", "screen-party-vote"].includes(active) || document.getElementById(active).classList.contains("net-party")) {
       showSoloEnd("neutral", "Connexion perdue", "La connexion avec le salon a été coupée.");
       soloRetryHandler = null;
       document.getElementById("btn-solo-retry").style.display = "none";
@@ -3977,11 +4024,12 @@ function connectParty(code, pseudo) {
 function onPartyMessage(msg) {
   if (msg.type === "error") { partyLeaving = true; alert(msg.message); showScreen("screen-home"); return; }
   if (msg.type === "partyError") { document.getElementById("party-status").textContent = "⚠️ " + msg.message; return; }
+  if (msg.type === "partyDraw") { if (typeof partyDrawMessage === "function") partyDrawMessage(msg); return; }
   if (msg.type !== "partyState") return;
   party = msg;
   if (msg.status === "lobby") { clearTimeout(partyEndTimer); duoShowScreen("screen-party-lobby"); renderPartyLobby(); return; }
   const g = msg.game;
-  const PR = { simon: renderPartySimon, potato: renderPartyPotato, stop10: renderPartyStop, memory: renderPartyMemory, taps: renderPartyTaps, vote: renderPartyVote };
+  const PR = { simon: renderPartySimon, potato: renderPartyPotato, stop10: renderPartyStop, memory: renderPartyMemory, taps: renderPartyTaps, vote: renderPartyVote, ...(typeof PARTY_EXTRA_RENDERERS !== "undefined" ? PARTY_EXTRA_RENDERERS : {}) };
   if (g && PR[g.game]) PR[g.game]();
   if (msg.status === "ended") {
     clearTimeout(partyEndTimer);
@@ -3990,18 +4038,19 @@ function onPartyMessage(msg) {
 }
 function partyName(id) { const p = party && party.players.find(x => x.id === id); return p ? p.pseudo : "?"; }
 function partyRankingText(g) {
-  const unit = g.game === "stop10" ? (v => `${(v / 1000).toFixed(2)} s d'écart`) : g.game === "memory" ? (v => `${v} paire${v > 1 ? "s" : ""}`) : g.game === "vote" ? (v => `${v} vote${v > 1 ? "s" : ""}`) : (v => `${v} taps`);
+  const unit = g.game === "stop10" ? (v => `${(v / 1000).toFixed(2)} s d'écart`) : g.game === "memory" ? (v => `${v} paire${v > 1 ? "s" : ""}`) : g.game === "vote" ? (v => `${v} vote${v > 1 ? "s" : ""}`) : (g.game === "draw" || g.game === "liar") ? (v => `${v} pt${v > 1 ? "s" : ""}`) : g.game === "reflex" ? (v => `${v} pt${v > 1 ? "s" : ""}`) : (v => `${v} taps`);
   const medals = ["🥇", "🥈", "🥉"];
   return g.ranking.map((r, i) => `${medals[i] || (i + 1) + "."} ${partyName(r.id)} — ${unit(r.score)}`).join("\n");
 }
 function showPartyEnd() {
   if (!party || party.status !== "ended") return;
-  const won = party.winnerId === party.myId;
+  const won = (party.winnerIds && party.winnerIds.length) ? party.winnerIds.includes(party.myId) : party.winnerId === party.myId;
   const isHost = party.hostId === party.myId;
   const label = PARTY_GAME_LABELS[party.selectedGame] || "";
-  showSoloEnd(party.winnerId === null ? "draw" : (won ? "win" : "lose"),
-    party.winnerId === null ? "Match nul" : (won ? "Victoire !" : `${partyName(party.winnerId)} gagne`),
-    party.game && party.game.ranking ? partyRankingText(party.game) : (won ? `Bien joué, tu remportes ${label} !` : `Dernier debout : ${partyName(party.winnerId)}.`));
+  statsCtx = { cat: "party", label: (PARTY_GAME_LABELS[party.selectedGame] || "Multi").replace(/^(la |le )/, "").replace(/^./, c => c.toUpperCase()) };
+  showSoloEnd(party.winnerId === null && !(party.winnerIds && party.winnerIds.length) ? "draw" : (won ? "win" : "lose"),
+    party.winnerId === null && !(party.winnerIds && party.winnerIds.length) ? "Match nul" : (won ? "Victoire !" : (party.game && party.game.game === "impostor" ? "Défaite..." : `${partyName(party.winnerId)} gagne`)),
+    party.game && party.game.endText ? party.game.endText : party.game && party.game.ranking ? partyRankingText(party.game) : (won ? `Bien joué, tu remportes ${label} !` : `Dernier debout : ${partyName(party.winnerId)}.`));
   soloRetryHandler = () => sendParty({ type: "partyStart" });
   document.getElementById("btn-solo-retry").style.display = isHost ? "" : "none";
   document.getElementById("btn-party-back-lobby").style.display = isHost ? "" : "none";
@@ -4020,10 +4069,11 @@ function renderPartyLobby() {
   document.getElementById("party-host-zone").style.display = isHost ? "block" : "none";
   document.getElementById("party-wait-host").style.display = isHost ? "none" : "block";
   document.querySelectorAll(".party-game-choice").forEach(b => b.classList.toggle("active", b.dataset.game === party.selectedGame));
-  const enough = party.players.filter(p => p.connected).length >= 2;
+  const minP = party.selectedGame === "impostor" ? 3 : 2;
+  const enough = party.players.filter(p => p.connected).length >= minP;
   const startBtn = document.getElementById("btn-party-start");
   startBtn.disabled = !enough;
-  startBtn.textContent = enough ? `Lancer ${PARTY_GAME_LABELS[party.selectedGame]}` : "Il faut au moins 2 joueurs";
+  startBtn.textContent = enough ? `Lancer ${PARTY_GAME_LABELS[party.selectedGame]}` : `Il faut au moins ${minP} joueurs`;
 }
 document.querySelectorAll(".party-game-choice").forEach(b => b.addEventListener("click", () => sendParty({ type: "partySelect", game: b.dataset.game })));
 document.getElementById("btn-party-start").addEventListener("click", () => sendParty({ type: "partyStart" }));
@@ -4539,10 +4589,15 @@ function loadGeneralSettings() {
       vibrationEnabled: raw.vibrationEnabled !== false,
       colorblind: !!raw.colorblind,
       showAdjacentCells: raw.showAdjacentCells !== false,
+      theme: ["classic", "ocean", "nuit", "retro"].includes(raw.theme) ? raw.theme : "classic",
+      volume: typeof raw.volume === "number" ? Math.max(0, Math.min(100, raw.volume)) : 100,
+      soundNotes: raw.soundNotes !== false,
+      soundImpacts: raw.soundImpacts !== false,
+      vibrationLevel: ["low", "normal", "high"].includes(raw.vibrationLevel) ? raw.vibrationLevel : "normal",
       reactionEmojis: Array.isArray(raw.reactionEmojis) && raw.reactionEmojis.length ? raw.reactionEmojis.slice(0, 6) : DEFAULT_REACTION_EMOJIS,
     };
   } catch (e) {
-    return { reduceMotion: false, soundEnabled: true, vibrationEnabled: true, colorblind: false, showAdjacentCells: true, reactionEmojis: DEFAULT_REACTION_EMOJIS };
+    return { reduceMotion: false, soundEnabled: true, vibrationEnabled: true, colorblind: false, showAdjacentCells: true, theme: "classic", volume: 100, soundNotes: true, soundImpacts: true, vibrationLevel: "normal", reactionEmojis: DEFAULT_REACTION_EMOJIS };
   }
 }
 function saveGeneralSettings(s) { try { localStorage.setItem(GENERAL_SETTINGS_KEY, JSON.stringify(s)); } catch (e) { /* ignore */ } }
@@ -4550,6 +4605,12 @@ function saveGeneralSettings(s) { try { localStorage.setItem(GENERAL_SETTINGS_KE
 let generalSettings = loadGeneralSettings();
 function applyGeneralSettingsToDOM() {
   document.body.classList.toggle("reduce-motion", generalSettings.reduceMotion);
+  const theme = generalSettings.theme || "classic";
+  if (theme === "classic") document.documentElement.removeAttribute("data-theme");
+  else document.documentElement.setAttribute("data-theme", theme);
+  const bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta && bg) meta.setAttribute("content", bg);
 }
 applyGeneralSettingsToDOM();
 
@@ -4582,11 +4643,44 @@ function openGeneralSettings() {
   document.getElementById("gs-colorblind").checked = generalSettings.colorblind;
   document.getElementById("gs-adjacent-cells").checked = generalSettings.showAdjacentCells;
   buildReactionEmojiGrid("gs-emoji-grid");
+  syncGsExtras();
   document.getElementById("general-settings-modal").style.display = "flex";
 }
 document.getElementById("btn-general-settings").addEventListener("click", openGeneralSettings);
 document.getElementById("btn-close-general-settings").addEventListener("click", () => {
   document.getElementById("general-settings-modal").style.display = "none";
+});
+function syncGsExtras() {
+  document.querySelectorAll("#gs-theme-picker button").forEach(b => b.classList.toggle("active", b.dataset.theme === generalSettings.theme));
+  document.getElementById("gs-volume").value = generalSettings.volume;
+  document.getElementById("gs-volume-out").textContent = generalSettings.volume + "%";
+  document.getElementById("gs-sound-notes").checked = generalSettings.soundNotes;
+  document.getElementById("gs-sound-impacts").checked = generalSettings.soundImpacts;
+  document.querySelectorAll("#gs-vib-level .cr-tab").forEach(b => b.classList.toggle("active", b.dataset.level === generalSettings.vibrationLevel));
+  document.getElementById("gs-sound-opts").classList.toggle("disabled", !generalSettings.soundEnabled);
+  document.getElementById("gs-vib-opts").classList.toggle("disabled", !generalSettings.vibrationEnabled);
+}
+document.querySelectorAll("#gs-theme-picker button").forEach(b => b.addEventListener("click", () => {
+  generalSettings.theme = b.dataset.theme; saveGeneralSettings(generalSettings); applyGeneralSettingsToDOM(); syncGsExtras();
+}));
+document.getElementById("gs-volume").addEventListener("input", (e) => {
+  generalSettings.volume = Number(e.target.value); document.getElementById("gs-volume-out").textContent = generalSettings.volume + "%";
+  saveGeneralSettings(generalSettings);
+});
+document.getElementById("gs-volume").addEventListener("change", () => playTone(660, 0.12, "sine", 0.15));
+[["gs-sound-notes", "soundNotes"], ["gs-sound-impacts", "soundImpacts"]].forEach(([id, key]) => {
+  document.getElementById(id).addEventListener("change", (e) => { generalSettings[key] = e.target.checked; saveGeneralSettings(generalSettings); });
+});
+document.querySelectorAll("#gs-vib-level .cr-tab").forEach(b => b.addEventListener("click", () => {
+  generalSettings.vibrationLevel = b.dataset.level; saveGeneralSettings(generalSettings); syncGsExtras(); vibrate([60]);
+}));
+document.getElementById("btn-gs-test-sound").addEventListener("click", () => {
+  playTone(523, 0.12, "sine", 0.15); setTimeout(() => playTone(784, 0.15, "sine", 0.15), 120);
+  setTimeout(() => sfxExplosion(), 320);
+});
+document.getElementById("btn-gs-test-vib").addEventListener("click", () => {
+  if (!navigator.vibrate) { alert("La vibration n'est pas prise en charge par cet appareil / navigateur."); return; }
+  vibrate([80, 60, 160]);
 });
 const GS_TOGGLE_KEYS = { "gs-reduce-motion": "reduceMotion", "gs-sound": "soundEnabled", "gs-vibration": "vibrationEnabled", "gs-colorblind": "colorblind", "gs-adjacent-cells": "showAdjacentCells" };
 Object.keys(GS_TOGGLE_KEYS).forEach(id => {
@@ -4594,6 +4688,7 @@ Object.keys(GS_TOGGLE_KEYS).forEach(id => {
     generalSettings[GS_TOGGLE_KEYS[id]] = e.target.checked;
     saveGeneralSettings(generalSettings);
     applyGeneralSettingsToDOM();
+    syncGsExtras();
     if (lastState && lastState.status === "playing") renderBoard(); // reflète le changement tout de suite en partie
   });
 });
@@ -4870,6 +4965,70 @@ function setFab(mode) {
   if (document.readyState === "complete") play();
   else window.addEventListener("load", play);
 })();
+
+
+// ---------- Fiches de jeu : appui long sur un jeu → capture animée + règles ----------
+const GAME_INFO = {"solo:crab": {"icon": "🦀", "name": "Le Crabe Bougon", "what": "Un combat façon jeu de rôle : tu esquives les attaques du crabe, puis tu choisis ton camp.", "goal": "Le vaincre… ou le calmer pour obtenir sa grâce.", "how": "Déplace ton cœur pour esquiver les projectiles. À ton tour, choisis Attaquer, Agir (observer, discuter), Objet ou Épargner. Épargner ne marche que si le crabe est calmé."}, "solo:tubes": {"icon": "🧪", "name": "Tri des Tubes", "what": "Un casse-tête de tri de billes colorées.", "goal": "Qu'un seul tube contienne chaque couleur.", "how": "Touche un tube pour prendre sa bille du dessus, puis touche un autre tube pour la déposer. Tu ne peux poser que sur une bille de même couleur ou dans un tube vide, tant qu'il y a de la place."}, "solo:2048": {"icon": "🔢", "name": "2048", "what": "Le classique des tuiles numérotées.", "goal": "Fusionner jusqu'à obtenir une tuile 2048.", "how": "Glisse le doigt (haut, bas, gauche, droite) : toutes les tuiles bougent. Deux tuiles identiques qui se touchent fusionnent et s'additionnent. Une nouvelle tuile apparaît à chaque coup. Perdu si la grille est bloquée."}, "solo:memory": {"icon": "🧠", "name": "Mémoire", "what": "Retrouve les paires de cartes cachées.", "goal": "Découvrir toutes les paires en un minimum de coups.", "how": "Retourne deux cartes. Si elles sont identiques, elles restent visibles, sinon elles se recachent : retiens leur position !"}, "solo:snake": {"icon": "🐍", "name": "Serpent des Mers", "what": "Le snake revisité : un serpent qui mange des crevettes.", "goal": "Manger un maximum de crevettes sans te heurter.", "how": "Glisse ou touche les directions pour tourner. Chaque crevette allonge ton serpent. Tu perds si tu touches un mur ou ta propre queue."}, "solo:taquin": {"icon": "🧩", "name": "Taquin", "what": "Le puzzle coulissant à numéros.", "goal": "Remettre les tuiles dans l'ordre.", "how": "Touche une tuile voisine de la case vide pour la faire glisser dedans. Ordonne les nombres de 1 jusqu'au dernier, case vide en bas à droite."}, "solo:morpion": {"icon": "⭕", "name": "Morpion contre IA", "what": "Le morpion contre l'ordinateur.", "goal": "Aligner 3 symboles avant l'IA.", "how": "Touche une case vide pour poser ton symbole. Aligne trois symboles en ligne, colonne ou diagonale. L'IA joue bien : bloque-la aussi !"}, "solo:flappy": {"icon": "🐦", "name": "Envol Marin", "what": "Un jeu d'endurance à un doigt.", "goal": "Franchir un maximum de récifs.", "how": "Touche l'écran pour battre des ailes et monter, relâche pour descendre. Passe dans les ouvertures entre les récifs sans les toucher."}, "solo:sudoku": {"icon": "🔢", "name": "Sudoku", "what": "La grille de logique classique 9×9.", "goal": "Remplir la grille avec les chiffres de 1 à 9.", "how": "Chaque ligne, chaque colonne et chaque bloc 3×3 doit contenir 1 à 9 une seule fois. Sélectionne une case puis un chiffre. Les erreurs sont comptées."}, "solo:mines": {"icon": "💣", "name": "Démineur", "what": "Découvre le terrain sans sauter sur une mine.", "goal": "Révéler toutes les cases sûres.", "how": "Touche une case pour la révéler. Un chiffre indique combien de mines sont dans les cases voisines. Pose un drapeau sur les cases que tu penses minées."}, "solo:breakout": {"icon": "🧱", "name": "Casse-briques", "what": "Le grand classique des briques.", "goal": "Casser toutes les briques sans perdre ta balle.", "how": "Fais glisser ta raquette pour renvoyer la balle. Chaque brique touchée disparaît. Tu as plusieurs vies : rater la balle en coûte une."}, "solo:simon": {"icon": "🎵", "name": "Simon", "what": "Un jeu de mémoire de séquences lumineuses.", "goal": "Aller le plus loin possible dans la séquence.", "how": "Regarde les bouées s'allumer, puis reproduis la séquence dans le même ordre. Elle s'allonge d'un élément à chaque tour. Une erreur et c'est fini."}, "solo:peche": {"icon": "🎣", "name": "Pêche", "what": "Un jeu d'arcade : attrape ce qui passe.", "goal": "Marquer un maximum de points avant la fin du temps.", "how": "Touche les poissons pour les attraper. Évite les déchets : ils te coûtent des vies. Certains poissons rapportent plus de points."}, "solo:magic": {"icon": "🎹", "name": "Rythme des Vagues", "what": "Un jeu de rythme façon tuiles musicales.", "goal": "Jouer toute la mélodie sans fausse note.", "how": "Touche les tuiles dans les bonnes colonnes, au bon moment, avant qu'elles ne sortent de l'écran. La vitesse augmente peu à peu."}, "solo:darts": {"icon": "🎯", "name": "Fléchettes", "what": "Un jeu d'adresse sur une cible mobile.", "goal": "Atteindre le score cible avec un nombre limité de fléchettes.", "how": "La cible bouge : touche l'écran au bon moment pour lancer. Plus tu es près du centre, plus tu marques."}, "duo:battleship": {"icon": "⚓", "name": "Bataille Navale", "what": "Le jeu de flotte classique, en grille 9×9.", "goal": "Couler toute la flotte adverse avant la tienne.", "how": "Place tes 6 bateaux (5, 4, 3, 3, 2, 2 cases). À tour de rôle, tire sur une case de la grille adverse : Touché, Coulé ou À l'eau. Le premier qui coule tout gagne."}, "duo:connect4": {"icon": "🔴", "name": "Puissance 4", "what": "Le jeu de pions qui tombent.", "goal": "Aligner 4 pions de ta couleur.", "how": "À tour de rôle, choisis une colonne : ton pion tombe tout en bas. Aligne 4 pions à l'horizontale, à la verticale ou en diagonale."}, "duo:rps": {"icon": "✂️", "name": "Pierre-Feuille-Ciseaux", "what": "Le duel de bluff le plus rapide du monde.", "goal": "Gagner plus de manches que l'adversaire.", "how": "Chacun choisit en secret pierre, feuille ou ciseaux. La pierre bat les ciseaux, les ciseaux battent la feuille, la feuille bat la pierre."}, "duo:checkers": {"icon": "⚫", "name": "Dames", "what": "Les vraies dames, règles brésiliennes (8×8).", "goal": "Capturer ou bloquer tous les pions adverses.", "how": "Les pions avancent en diagonale. Prendre est obligatoire, y compris en arrière et en rafale. Si plusieurs prises sont possibles, tu choisis. Un pion qui atteint le fond devient dame."}, "duo:memory": {"icon": "🧠", "name": "Memory duel", "what": "Le Memory à deux.", "goal": "Trouver plus de paires que l'adversaire.", "how": "À ton tour, retourne deux cartes. Paire trouvée : tu marques et tu rejoues. Sinon, la main passe à l'adversaire."}, "duo:tug": {"icon": "🪢", "name": "Tir à la corde", "what": "Un duel d'endurance en temps réel.", "goal": "Tirer la corde jusqu'à ton camp.", "how": "Tape le plus vite possible sur ton bouton : chaque tape tire la corde de ton côté. Le premier qui l'amène à sa ligne gagne."}, "duo:gomoku": {"icon": "⭕", "name": "Morpion 5", "what": "Le morpion sur grande grille.", "goal": "Aligner 5 pions.", "how": "À tour de rôle, pose un pion sur une case libre. Le premier qui aligne 5 pions (ligne, colonne ou diagonale) gagne."}, "duo:pigeons": {"icon": "🎯", "name": "Tir aux pigeons", "what": "Un duel d'adresse sur cibles volantes.", "goal": "Marquer plus de points que l'adversaire.", "how": "Un oiseau apparaît à la fois, à un endroit aléatoire. Le premier des deux qui le touche marque 1 point. 15 oiseaux par partie : le meilleur score gagne."}, "duo:mines": {"icon": "💣", "name": "Bataille de mines", "what": "Une traversée de champ de mines piégé par ton adversaire.", "goal": "Atteindre le premier la rangée du haut.", "how": "Chacun cache 8 mines sur son terrain. Ensuite, à tour de rôle, avance ton pion d'une case dans le terrain adverse. Une mine te renvoie au départ (et elle est dévoilée : retiens-la !)."}, "duo:plusmoins": {"icon": "🔢", "name": "Plus ou moins", "what": "Un duel de déduction de nombres.", "goal": "Trouver le nombre secret avant l'adversaire.", "how": "Chacun choisit en secret un nombre entre 1 et 100. À tour de rôle, propose un nombre pour deviner celui de l'adversaire : on te répond « plus » ou « moins ». Le premier qui trouve gagne."}, "party:simon": {"icon": "🟢", "name": "Simon (Multi)", "what": "Un Simon où chacun ajoute son maillon.", "goal": "Rester le dernier joueur sans erreur.", "how": "À tour de rôle, refais toute la séquence de l'adversaire précédent, puis ajoute une case. Une erreur et tu es éliminé."}, "party:potato": {"icon": "🥔", "name": "Patate chaude", "what": "Une bombe qui passe de main en main.", "goal": "Ne pas être celui qui l'a quand elle explose.", "how": "La patate explose au bout d'un temps aléatoire. Si tu la détiens, passe-la à un joueur de ton choix. Celui qui l'a quand elle explose est éliminé : le dernier en vie gagne."}, "party:stop10": {"icon": "⏱️", "name": "Stop à 10", "what": "Un jeu de timing à l'instinct.", "goal": "Arrêter le chrono au plus près de 10 secondes.", "how": "3 manches. Un chrono démarre puis se cache : appuie sur Stop quand tu penses être à 10,00 s. Ton écart avec 10 s est additionné, le total le plus faible gagne."}, "party:memory": {"icon": "🧠", "name": "Memory (Multi)", "what": "Le Memory à plusieurs joueurs.", "goal": "Avoir trouvé le plus de paires.", "how": "À tour de rôle, retourne deux cartes. Paire trouvée : tu marques et tu rejoues, sinon c'est au suivant."}, "party:taps": {"icon": "🏁", "name": "Course de taps", "what": "Une course de rapidité.", "goal": "Atteindre la ligne d'arrivée le premier.", "how": "Tape le plus vite possible sur l'écran : chaque tap fait avancer ton bateau. Le premier arrivé gagne."}, "party:vote": {"icon": "🗳️", "name": "Vote du plus…", "what": "Un jeu de vote entre amis.", "goal": "Voir qui est désigné « le plus… » par le groupe.", "how": "Une question s'affiche (ex. : « le plus susceptible de… »). Vote pour un joueur. Le plus voté marque le point. 8 questions par partie."}};
+(function setupGameInfo() {
+  const modal = document.getElementById("game-info-modal");
+  function keyFor(el) {
+    if (el.classList.contains("solo-game-card")) return "solo:" + el.dataset.id;
+    if (el.classList.contains("party-game-choice")) return "party:" + el.dataset.game;
+    return "duo:" + el.dataset.game;
+  }
+  function open(key) {
+    const g = GAME_INFO[key]; if (!g) return;
+    document.getElementById("gi-icon").textContent = g.icon;
+    document.getElementById("gi-name").textContent = g.name;
+    document.getElementById("gi-what").textContent = g.what;
+    document.getElementById("gi-goal").textContent = g.goal;
+    document.getElementById("gi-how").textContent = g.how;
+    const img = document.getElementById("gi-shot");
+    img.src = "previews/" + key.replace(":", "-") + ".webp";
+    const mode = key.split(":")[0];
+    document.getElementById("gi-mode").textContent = mode === "solo" ? "🎮 Solo" : mode === "duo" ? "🤝 Duo · 2 joueurs" : "🎉 Multi · 2 à 8 joueurs";
+    modal.style.display = "flex";
+    const card = modal.querySelector(".card"); card.classList.remove("gi-pop"); void card.offsetWidth; card.classList.add("gi-pop");
+    vibrate([25]);
+  }
+  function close() { modal.style.display = "none"; }
+  document.getElementById("btn-close-game-info").addEventListener("click", close);
+  modal.addEventListener("click", (e) => { if (e.target === modal) close(); });
+  let timer = null, sx = 0, sy = 0, fired = false;
+  const SEL = ".solo-game-card, .duo-game-choice";
+  document.addEventListener("pointerdown", (e) => {
+    const el = e.target.closest && e.target.closest(SEL); if (!el) return;
+    fired = false; sx = e.clientX; sy = e.clientY;
+    clearTimeout(timer);
+    timer = setTimeout(() => { fired = true; el.classList.add("gi-pressed"); open(keyFor(el)); setTimeout(() => el.classList.remove("gi-pressed"), 300); }, 500);
+    el.classList.add("gi-holding");
+  }, true);
+  const cancel = () => { clearTimeout(timer); document.querySelectorAll(".gi-holding").forEach(x => x.classList.remove("gi-holding")); };
+  document.addEventListener("pointerup", cancel, true);
+  document.addEventListener("pointercancel", cancel, true);
+  document.addEventListener("pointermove", (e) => { if (Math.abs(e.clientX - sx) > 12 || Math.abs(e.clientY - sy) > 12) cancel(); }, true);
+  // Après un appui long, le "click" qui suit ne doit pas lancer le jeu.
+  document.addEventListener("click", (e) => {
+    if (fired && e.target.closest && e.target.closest(SEL)) { e.stopPropagation(); e.preventDefault(); fired = false; }
+  }, true);
+  document.addEventListener("contextmenu", (e) => {
+    const el = e.target.closest && e.target.closest(SEL); if (el) { e.preventDefault(); if (!fired) open(keyFor(el)); }
+  });
+})();
+
+// ---------- Mode hors-ligne : seul le Solo reste jouable ----------
+function updateOnlineState() {
+  const online = navigator.onLine !== false;
+  ["btn-choose-duo", "btn-choose-party", "btn-choose-multiplayer"].forEach(id => {
+    const b = document.getElementById(id); if (b) b.disabled = !online;
+  });
+  const note = document.getElementById("mode-offline-note");
+  if (note) note.style.display = online ? "none" : "block";
+  document.body.classList.toggle("is-offline", !online);
+}
+window.addEventListener("online", updateOnlineState);
+window.addEventListener("offline", updateOnlineState);
+updateOnlineState();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
@@ -5793,8 +5952,10 @@ function renderEndScreen() {
       ? `🏆 ${names.join(" et ")} remporte la partie !`
       : "Partie terminée.";
     if (!wasAlreadyEnded && names.length) celebrateVictory();
+    if (!wasAlreadyEnded) recordStat("fight", "Fight", w.ids.includes(myId) ? "win" : "lose");
   } else {
     winnerEl.textContent = "Match nul — personne ne l'emporte.";
+    if (!wasAlreadyEnded) recordStat("fight", "Fight", "draw");
   }
 
   const list = document.getElementById("end-stats");
@@ -6361,7 +6522,9 @@ function renderPlayersPanel() {
 let audioCtx = null;
 function vibrate(pattern) {
   if (generalSettings.reduceMotion || !generalSettings.vibrationEnabled || !navigator.vibrate) return;
-  try { navigator.vibrate(pattern); } catch (e) { /* ignore */ }
+  const k = { low: 0.5, normal: 1, high: 1.8 }[generalSettings.vibrationLevel] || 1;
+  const p = Array.isArray(pattern) ? pattern.map((v, i) => i % 2 === 0 ? Math.round(v * k) : v) : Math.round(pattern * k);
+  try { navigator.vibrate(p); } catch (e) { /* ignore */ }
 }
 function ensureAudio() {
   if (!generalSettings.soundEnabled) return null;
@@ -6371,29 +6534,32 @@ function ensureAudio() {
   if (audioCtx.state === "suspended") { audioCtx.resume().catch(() => {}); }
   return audioCtx;
 }
+let sfxImpactTone = false;
 function playTone(freq, duration, type, gainVal) {
+  if (sfxImpactTone ? !generalSettings.soundImpacts : !generalSettings.soundNotes) return;
   const ctx = ensureAudio(); if (!ctx) return;
   const osc = ctx.createOscillator(); const gain = ctx.createGain();
   osc.type = type || "sine"; osc.frequency.value = freq;
-  gain.gain.value = gainVal || 0.15;
+  gain.gain.value = (gainVal || 0.15) * (generalSettings.volume / 100);
   osc.connect(gain); gain.connect(ctx.destination);
   osc.start();
   gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
   osc.stop(ctx.currentTime + duration + 0.02);
 }
 function playNoise(duration, gainVal) {
+  if (!generalSettings.soundImpacts) return;
   const ctx = ensureAudio(); if (!ctx) return;
   const bufferSize = Math.max(1, Math.floor(ctx.sampleRate * duration));
   const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
   const data = buffer.getChannelData(0);
   for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
   const src = ctx.createBufferSource(); src.buffer = buffer;
-  const gain = ctx.createGain(); gain.gain.value = gainVal || 0.2;
+  const gain = ctx.createGain(); gain.gain.value = (gainVal || 0.2) * (generalSettings.volume / 100);
   src.connect(gain); gain.connect(ctx.destination);
   src.start();
 }
 function sfxImpact() { playNoise(0.15, 0.22); }
-function sfxExplosion() { playNoise(0.35, 0.32); playTone(80, 0.3, "sawtooth", 0.18); }
+function sfxExplosion() { playNoise(0.35, 0.32); sfxImpactTone = true; playTone(80, 0.3, "sawtooth", 0.18); sfxImpactTone = false; }
 function sfxKO() { playTone(220, 0.15, "square", 0.18); setTimeout(() => playTone(140, 0.25, "square", 0.18), 120); }
 function sfxPickup() { playTone(660, 0.08, "sine", 0.14); setTimeout(() => playTone(880, 0.12, "sine", 0.14), 80); }
 function sfxWheelTick() { playTone(1400, 0.025, "square", 0.09); }
