@@ -742,3 +742,188 @@ PARTY_EXTRA_RENDERERS.liar = renderPartyLiar;
 Object.assign(PARTY_GAME_LABELS, { draw: "Dessine-moi", impostor: "l'Imposteur", reflex: "la Course de réflexes", liar: "Qui ment ?" });
 
 Object.assign(GAME_INFO, {"solo:lights": {"icon": "💡", "name": "Lights Out", "what": "Un casse-tête de lumières à éteindre.", "goal": "Éteindre toutes les lumières de la grille.", "how": "Touche une case : elle et ses 4 voisines (haut, bas, gauche, droite) changent d'état. Trouve la bonne suite de coups pour tout éteindre, avec le moins de coups possible."}, "solo:ice": {"icon": "🧊", "name": "Pierres glissantes", "what": "Un puzzle de glisse sur la glace.", "goal": "Atteindre l'étoile ⭐ sur 3 niveaux, avec le moins de coups possible.", "how": "Glisse (ou utilise les flèches) : le pingouin file tout droit jusqu'à heurter une pierre ou un bord. Il ne s'arrête qu'aux obstacles… sauf sur l'étoile qui l'arrête toujours. Chaque niveau est généré et toujours résoluble."}, "solo:dolphin": {"icon": "🐬", "name": "Course de dauphins", "what": "Un jeu de course infinie à un doigt.", "goal": "Nager le plus loin possible (400 m pour gagner).", "how": "Touche l'écran pour sauter par-dessus les rochers 🪨. Attention aux aigles 🦅 qui volent bas : ne saute pas quand l'un d'eux approche ! La vitesse augmente avec la distance."}, "solo:bubbles": {"icon": "🫧", "name": "Éclate-bulles", "what": "Un jeu de combos de bulles chronométré.", "goal": "Atteindre 1000 points en 60 secondes.", "how": "Touche un groupe de 2 bulles ou plus de même couleur (adjacentes) pour les faire éclater. Un groupe de n bulles rapporte n² points : vise les gros groupes ! Les bulles retombent et de nouvelles apparaissent."}, "duo:hex": {"icon": "⬡", "name": "Hex", "what": "Un jeu de stratégie à 2, sans match nul possible.", "goal": "Relier ses deux bords du plateau avec une chaîne de pions.", "how": "🔴 doit relier le haut et le bas, 🔵 la gauche et la droite. À tour de rôle, pose un pion sur une case libre. Bloque l'adversaire tout en construisant ton propre chemin."}, "duo:dice": {"icon": "🎲", "name": "Dés menteurs", "what": "Un jeu de bluff avec 5 dés cachés chacun.", "goal": "Faire perdre tous les dés de l'adversaire.", "how": "Chacun voit ses dés seulement. Annonce « il y a au moins N dés de valeur X » (dés des 2 joueurs additionnés). L'autre surenchérit (plus de dés ou une valeur plus haute) ou crie « Menteur ! ». On révèle : le perdant de la manche perd un dé."}, "duo:pong": {"icon": "🏓", "name": "Pong à 2", "what": "Le classique du ping-pong, en temps réel.", "goal": "Marquer 5 points avant l'adversaire.", "how": "Fais glisser ton doigt pour déplacer ta raquette en bas. Renvoie la balle : plus tu la touches vers le bord de la raquette, plus l'angle est fort. La balle accélère à chaque rebond."}, "duo:maths": {"icon": "➗", "name": "Duel de maths", "what": "Un duel de calcul mental.", "goal": "Marquer le plus de points sur 10 questions.", "how": "Une opération s'affiche pour les deux joueurs. Le premier qui tape le bon résultat marque le point. Une mauvaise réponse te bloque jusqu'à la question suivante."}, "duo:hangman": {"icon": "🔤", "name": "Pendu duo", "what": "Le pendu où chacun choisit le mot de l'autre.", "goal": "Deviner le mot avec le moins d'erreurs possible.", "how": "Manche 1 : le joueur 1 choisit un mot, le joueur 2 devine lettre par lettre (7 erreurs maximum). Manche 2 : on inverse. Celui qui fait le moins d'erreurs gagne."}, "party:draw": {"icon": "🎨", "name": "Dessine-moi", "what": "Un jeu de dessin et de devinettes (2 à 8).", "goal": "Faire deviner son dessin et deviner celui des autres.", "how": "Chaque joueur dessine à son tour (60 s) un mot secret. Les autres tapent leurs propositions : plus tu trouves vite, plus tu marques. Le dessinateur gagne aussi des points quand on le devine."}, "party:impostor": {"icon": "🕵️", "name": "Imposteur", "what": "Un jeu de déduction (3 à 8 joueurs).", "goal": "Démasquer l'imposteur… ou ne pas se faire repérer.", "how": "Tout le monde reçoit le même mot, sauf l'imposteur qui en a un proche. Chacun donne un indice d'un mot, puis tout le monde vote. Les civils gagnent s'ils désignent l'imposteur, sinon c'est lui qui gagne."}, "party:reflex": {"icon": "⚡", "name": "Course de réflexes", "what": "Un duel de rapidité (2 à 8).", "goal": "Totaliser le plus de points sur 5 manches.", "how": "L'écran est rouge : ne touche pas ! Dès qu'il passe au vert, tape le plus vite possible. Taper trop tôt ne rapporte rien. Le plus rapide de la manche marque le plus de points."}, "party:liar": {"icon": "🤥", "name": "Qui ment ?", "what": "Un jeu de bluff entre amis (2 à 8).", "goal": "Savoir deviner qui dit vrai… et tromper les autres.", "how": "À tour de rôle, un joueur écrit une affirmation sur lui et choisit en secret si elle est vraie ou fausse. Les autres votent vrai ou faux. Bonne réponse : +1 point. Tu trompes un joueur : +1 point pour toi."}});
+
+// ------------------------------- REVERSI -------------------------------
+g2DuoShell("reversi", "⚫ Reversi", `<div class="rv-score"><span id="rv-b">⚫ 2</span><span id="rv-w">⚪ 2</span></div><div id="rv-board" class="rv-board"></div>
+  <p id="rv-info" class="hint" style="text-align:center;font-size:12px"></p>
+  <p class="hint" style="font-size:11px;text-align:center">Encadre les pions adverses pour les retourner. Les points verts montrent tes coups possibles. Le plus de pions à la fin gagne.</p>`);
+let rvPrev = null;
+(function buildRv() {
+  const bd = $g("rv-board");
+  for (let i = 0; i < 64; i++) {
+    const b = document.createElement("button"); b.type = "button"; b.className = "rv-cell";
+    b.addEventListener("click", () => { if (duo && duo.game === "reversi" && duo.status === "playing" && duo.turn === myDuoNum) { sendDuo({ type: "duoReversi", r: Math.floor(i / 8), c: i % 8 }); vibrate(8); } });
+    bd.appendChild(b);
+  }
+})();
+function renderDuoReversi() {
+  duoShowScreen("screen-duo-reversi");
+  const myTurn = duo.status === "playing" && duo.turn === myDuoNum, cells = $g("rv-board").children;
+  const legal = new Set(duo.legal.map(p => p.join(",")));
+  let changed = 0;
+  for (let r = 0; r < 8; r++) for (let c = 0; c < 8; c++) {
+    const v = duo.board[r][c], el = cells[r * 8 + c], pv = rvPrev ? rvPrev[r][c] : 0;
+    let html = "";
+    if (v) { const flip = pv && pv !== v; if (flip || (!pv && rvPrev)) changed++; html = `<i class="rv-disc ${v === 1 ? "b" : "w"}${flip ? " flip" : (!pv && rvPrev ? " drop" : "")}"></i>`; }
+    else if (legal.has(r + "," + c)) html = `<i class="rv-hint"></i>`;
+    el.innerHTML = html; el.classList.toggle("last", !!duo.last && duo.last[0] === r && duo.last[1] === c);
+  }
+  if (changed) playTone(myTurn ? 360 : 300, 0.08, "triangle", 0.12);
+  rvPrev = duo.board.map(row => row.slice());
+  $g("rv-b").textContent = "⚫ " + duo.counts[1] + (myDuoNum === 1 ? " (toi)" : ""); $g("rv-w").textContent = "⚪ " + duo.counts[2] + (myDuoNum === 2 ? " (toi)" : "");
+  g2Banner("duo-reversi-banner", duo.status === "ended" ? "Partie terminée" : myTurn ? "⚫ À toi de jouer !" : `En attente de ${oppName()}...`, myTurn);
+  $g("rv-info").textContent = duo.passed ? (duo.passed === myDuoNum ? "Tu n'as aucun coup : tu passes ton tour." : `${oppName()} n'a aucun coup et passe son tour.`) : "";
+}
+DUO_GAME_LABELS.reversi = "⚫ Reversi"; DUO_NEW_RENDERERS.reversi = renderDuoReversi;
+GAME_INFO["duo:reversi"] = { icon: "⚫", name: "Reversi", what: "Le jeu de stratégie Othello, sur plateau 8×8.", goal: "Avoir plus de pions de ta couleur que l'adversaire à la fin.", how: "À tour de rôle, pose un pion de façon à encadrer en ligne (horizontale, verticale ou diagonale) des pions adverses : ils sont retournés. Les points verts indiquent tes coups possibles. Sans coup possible, tu passes. La partie finit quand plus personne ne peut jouer." };
+
+// ============================= RUBIK'S CUBE =============================
+g2SoloShell("rubik", "🧊 Rubik's Cube", `Coups : <span id="rb-moves">0</span> · ⏱️ <span id="rb-time">0:00</span>`,
+  `<div id="rb-stage" class="rb-stage"><div id="rb-scene" class="rb-scene"></div></div>
+   <p class="hint" style="font-size:12px;text-align:center;margin:4px 0">Glisse sur une face pour la tourner · glisse à côté du cube pour le faire pivoter.</p>
+   <div class="rb-btns" id="rb-face-btns">
+     <button type="button" data-f="U">Haut</button><button type="button" data-f="D">Bas</button><button type="button" data-f="L">Gauche</button>
+     <button type="button" data-f="R">Droite</button><button type="button" data-f="F">Avant</button><button type="button" data-f="B">Arrière</button>
+   </div>
+   <div class="rb-btns"><button type="button" id="rb-dir">↻ Sens horaire</button><button type="button" id="rb-undo">↶ Annuler</button><button type="button" id="rb-scramble">🔀 Mélanger</button></div>`);
+const RB_S = 62; // taille d'un petit cube (px)
+const RB_COL = { "0,-1,0": "#f8fafc", "0,1,0": "#facc15", "0,0,1": "#22c55e", "0,0,-1": "#2563eb", "-1,0,0": "#f97316", "1,0,0": "#dc2626" };
+const RB_FACES = [[0, 0, 1], [0, 0, -1], [1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0]];
+const RB_FTR = { "0,0,1": "", "0,0,-1": "rotateY(180deg)", "1,0,0": "rotateY(90deg)", "-1,0,0": "rotateY(-90deg)", "0,1,0": "rotateX(-90deg)", "0,-1,0": "rotateX(90deg)" };
+let rb = null;
+function rbMat(a, d) { // rotation de d*90° autour de l'axe a (convention CSS)
+  const s = d, c = 0;
+  if (a === 0) return [[1, 0, 0], [0, c, -s], [0, s, c]];
+  if (a === 1) return [[c, 0, s], [0, 1, 0], [-s, 0, c]];
+  return [[c, -s, 0], [s, c, 0], [0, 0, 1]];
+}
+const rbMul = (A, B) => A.map((_, i) => B[0].map((__, j) => A[i][0] * B[0][j] + A[i][1] * B[1][j] + A[i][2] * B[2][j]));
+const rbApply = (M, v) => M.map(r => r[0] * v[0] + r[1] * v[1] + r[2] * v[2]);
+function rbTf(cb) {
+  const R = cb.R, S = RB_S;
+  return `translate3d(${cb.p[0] * S}px,${cb.p[1] * S}px,${cb.p[2] * S}px) matrix3d(${R[0][0]},${R[1][0]},${R[2][0]},0,${R[0][1]},${R[1][1]},${R[2][1]},0,${R[0][2]},${R[1][2]},${R[2][2]},0,0,0,0,1)`;
+}
+function rbBuild() {
+  const scene = $g("rb-scene"); scene.innerHTML = "";
+  const cubies = [];
+  for (let x = -1; x <= 1; x++) for (let y = -1; y <= 1; y++) for (let z = -1; z <= 1; z++) {
+    const el = document.createElement("div"); el.className = "rb-cubie";
+    const cb = { p: [x, y, z], R: [[1, 0, 0], [0, 1, 0], [0, 0, 1]], el, faces: [] };
+    RB_FACES.forEach(n => {
+      const f = document.createElement("div"); f.className = "rb-face";
+      const outer = (n[0] && n[0] === x) || (n[1] && n[1] === y) || (n[2] && n[2] === z);
+      const key = n.join(",");
+      f.style.transform = `${RB_FTR[key]} translateZ(${RB_S / 2}px)`.trim();
+      f.style.background = outer ? RB_COL[key] : "#0b0b0f";
+      if (outer) { f.dataset.n = key; f.dataset.i = cubies.length; f.classList.add("st"); cb.faces.push({ n, c: RB_COL[key] }); }
+      el.appendChild(f);
+    });
+    el.style.transform = rbTf(cb); scene.appendChild(el); cubies.push(cb);
+  }
+  return cubies;
+}
+function rbViewTf() { return `rotateX(${rb.rx}deg) rotateY(${rb.ry}deg)`; }
+function rbMove(a, l, d, opts) {
+  rb.queue.push({ a, l, d, user: !(opts && opts.silent), undo: !!(opts && opts.undo), ms: (opts && opts.ms) || 220 });
+  if (!rb.busy) rbNext();
+}
+function rbNext() {
+  const m = rb.queue.shift(); if (!m) { rb.busy = false; return; }
+  rb.busy = true;
+  const layer = rb.cubies.filter(c => c.p[m.a] === m.l);
+  const ax = [0, 0, 0]; ax[m.a] = 1;
+  layer.forEach(c => { c.el.style.transition = `transform ${m.ms}ms ease-in-out`; c.el.style.transform = `rotate3d(${ax[0]},${ax[1]},${ax[2]},${m.d * 90}deg) ` + rbTf(c); });
+  const me = rb;
+  setTimeout(() => {
+    if (rb !== me) return;
+    const Q = rbMat(m.a, m.d);
+    layer.forEach(c => { c.p = rbApply(Q, c.p).map(Math.round); c.R = rbMul(Q, c.R); c.el.style.transition = "none"; c.el.style.transform = rbTf(c); });
+    if (m.user) {
+      if (m.undo) { rb.moves = Math.max(0, rb.moves - 1); }
+      else { rb.moves++; rb.history.push({ a: m.a, l: m.l, d: m.d }); if (!rb.t0) rb.t0 = Date.now(); }
+      $g("rb-moves").textContent = rb.moves;
+      playTone(220 + (m.a * 3 + m.l + 1) * 40, 0.05, "triangle", 0.1); vibrate(6);
+      if (rb.scrambled && rbSolved()) rbWin();
+    }
+    rbNext();
+  }, m.ms + 25);
+}
+function rbSolved() {
+  const map = {};
+  rb.cubies.forEach(c => c.faces.forEach(f => {
+    const wn = rbApply(c.R, f.n).map(Math.round);
+    if (c.p[0] * wn[0] + c.p[1] * wn[1] + c.p[2] * wn[2] === 1) { const k = wn.join(","); (map[k] = map[k] || new Set()).add(f.c); }
+  }));
+  return Object.keys(map).length === 6 && Object.values(map).every(s => s.size === 1);
+}
+function rbWin() {
+  const me = rb, secs = Math.round((Date.now() - me.t0) / 1000);
+  rb.scrambled = false; rb.t0 = 0;
+  setTimeout(() => { if (rb === me) showSoloEnd("win", "Cube résolu !", `Bravo, résolu en ${me.moves} coups et ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}.`); }, 500);
+}
+function rbScramble() {
+  rb.history = []; rb.scrambleMoves = []; rb.moves = 0; rb.t0 = 0; $g("rb-moves").textContent = 0; $g("rb-time").textContent = "0:00";
+  let lastA = -1;
+  for (let i = 0; i < 18; i++) {
+    let a; do { a = Math.floor(Math.random() * 3); } while (a === lastA); lastA = a;
+    const l = [-1, 1][Math.floor(Math.random() * 2)], d = Math.random() < 0.5 ? 1 : -1; (rb.scrambleMoves = rb.scrambleMoves || []).push({ a, l, d }); rbMove(a, l, d, { silent: true, ms: 90 });
+  }
+}
+function startRubikGame() {
+  soloRetryHandler = startRubikGame;
+  rb = { cubies: null, queue: [], busy: false, moves: 0, history: [], rx: -26, ry: -34, t0: 0, cw: true, scrambled: false };
+  rb.cubies = rbBuild();
+  $g("rb-scene").style.transform = rbViewTf();
+  $g("rb-moves").textContent = 0; $g("rb-time").textContent = "0:00";
+  showScreen("screen-solo-rubik");
+  setTimeout(() => { if (rb) { rbScramble(); rb.scrambled = true; } }, 350);
+}
+const RB_FACE_MOVE = { U: [1, -1], D: [1, 1], L: [0, -1], R: [0, 1], F: [2, 1], B: [2, -1] };
+$g("rb-face-btns").querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+  if (!rb) return; const [a, l] = RB_FACE_MOVE[b.dataset.f]; const sigma = l; // horaire = +90° autour de la normale sortante
+  rbMove(a, l, rb.cw ? sigma : -sigma);
+}));
+$g("rb-dir").addEventListener("click", () => { if (!rb) return; rb.cw = !rb.cw; $g("rb-dir").textContent = rb.cw ? "↻ Sens horaire" : "↺ Sens anti-horaire"; });
+$g("rb-undo").addEventListener("click", () => { if (!rb || !rb.history.length || rb.queue.length) return; const h = rb.history.pop(); rbMove(h.a, h.l, -h.d, { undo: true }); });
+$g("rb-scramble").addEventListener("click", () => { if (!rb || rb.busy) return; rbScramble(); rb.scrambled = true; });
+$g("btn-rubik-restart").addEventListener("click", startRubikGame);
+g2SoloLeave("rubik", () => { rb = null; });
+G2_TICKS.push(() => { if (rb && rb.t0 && g2Active("screen-solo-rubik")) { const s = Math.round((Date.now() - rb.t0) / 1000); $g("rb-time").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; } });
+(function rbPointer() {
+  const stage = $g("rb-stage"); stage.style.touchAction = "none";
+  let down = null;
+  stage.addEventListener("pointerdown", (e) => {
+    if (!rb) return; stage.setPointerCapture(e.pointerId);
+    const t = e.target.closest && e.target.closest(".rb-face.st");
+    down = { x: e.clientX, y: e.clientY, st: t ? { i: Number(t.dataset.i), n: t.dataset.n } : null, rx: rb.rx, ry: rb.ry, done: false };
+  });
+  stage.addEventListener("pointermove", (e) => {
+    if (!down || !rb || down.done) return;
+    const dx = e.clientX - down.x, dy = e.clientY - down.y;
+    if (!down.st) { rb.ry = down.ry + dx * 0.5; rb.rx = Math.max(-80, Math.min(80, down.rx - dy * 0.5)); $g("rb-scene").style.transform = rbViewTf(); return; }
+    if (Math.hypot(dx, dy) < 22) return;
+    down.done = true;
+    const cb = rb.cubies[down.st.i], ln = down.st.n.split(",").map(Number), wn = rbApply(cb.R, ln).map(Math.round);
+    const q = cb.p.map((v, i) => v + 0.5 * wn[i]);
+    const V = rbMul(rbRotDeg(0, rb.rx), rbRotDeg(1, rb.ry));
+    let best = null;
+    [0, 1, 2].filter(a => wn[a] === 0).forEach(a => {
+      const e = [0, 0, 0]; e[a] = 1;
+      const v = [e[1] * q[2] - e[2] * q[1], e[2] * q[0] - e[0] * q[2], e[0] * q[1] - e[1] * q[0]];
+      const sv = rbApply(V, v), dot = sv[0] * dx + sv[1] * dy;
+      if (!best || Math.abs(dot) > Math.abs(best.dot)) best = { a, dot };
+    });
+    if (best && Math.abs(best.dot) > 0.01) rbMove(best.a, cb.p[best.a], best.dot > 0 ? 1 : -1);
+  });
+  const up = () => { down = null; };
+  stage.addEventListener("pointerup", up); stage.addEventListener("pointercancel", up);
+})();
+function rbRotDeg(a, deg) {
+  const r = deg * Math.PI / 180, c = Math.cos(r), s = Math.sin(r);
+  if (a === 0) return [[1, 0, 0], [0, c, -s], [0, s, c]];
+  if (a === 1) return [[c, 0, s], [0, 1, 0], [-s, 0, c]];
+  return [[c, -s, 0], [s, c, 0], [0, 0, 1]];
+}
+SOLO_EXTRA.rubik = startRubikGame;
+SOLO_GAMES.push({ id: "rubik", kind: "rubik", icon: "🧊", label: "Rubik's Cube", desc: "Un vrai cube 3D à mélanger puis résoudre : glisse sur les faces pour les tourner." });
+GAME_INFO["solo:rubik"] = { icon: "🧊", name: "Rubik's Cube", what: "Le célèbre casse-tête en 3D, avec un cube de 3×3×3 qui se manipule au doigt.", goal: "Remettre chaque face d'une seule couleur, avec le moins de coups et le plus vite possible.", how: "Le cube est mélangé au départ. Glisse le doigt sur une face pour tourner la rangée dans le sens du glissement. Glisse à côté du cube pour le faire pivoter et voir les autres faces. Les boutons Haut/Bas/Gauche/Droite/Avant/Arrière tournent une face entière, et Annuler revient en arrière." };
