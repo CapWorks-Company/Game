@@ -885,9 +885,9 @@ html, body {
   position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
   font-size: 9px; white-space: nowrap; color: var(--text);
   background: rgba(16,19,26,.85); padding: 1px 4px; border-radius: 3px; margin-bottom: 2px;
-  pointer-events: auto; cursor: pointer;
+  pointer-events: none;
 }
-.player-token.me { box-shadow: 0 0 0 2px #fff inset; }
+.player-token.me { box-shadow: 0 0 0 2px #fff inset; pointer-events: auto; }
 .player-token.dead { opacity: .25; }
 .player-token.hidden-in-bush { opacity: 0; pointer-events: none; }
 .player-token.me.hidden-in-bush { opacity: .35; pointer-events: auto; } /* toi, tu te vois toujours un peu */

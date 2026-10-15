@@ -4898,6 +4898,7 @@ async function refreshPublicRooms(manual) {
         const pseudo = document.getElementById("input-pseudo").value.trim();
         if (!pseudo) { setHomeError("Entre un pseudo avant de rejoindre."); return; }
         saveLastPseudo(pseudo);
+        document.getElementById("multi-choice-modal").style.display = "none";
         connect(r.code, pseudo);
       });
       list.appendChild(li);
@@ -5137,11 +5138,22 @@ function connect(code, pseudo) {
   myCode = code; myPseudo = pseudo;
   const avatar = loadAvatar();
   const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?code=${code}&pseudo=${encodeURIComponent(pseudo)}&clientId=${myClientId}&color=${encodeURIComponent(avatar.color)}`;
-  ws = new WebSocket(wsUrl);
+  intentionalDisconnect = false;
+  if (ws && ws.readyState <= 1) { ws.stale = true; try { ws.close(); } catch (e) { /* ignore */ } }
+  const sock = new WebSocket(wsUrl);
+  ws = sock;
+  lastRxAt = Date.now();
 
-  ws.addEventListener("open", () => { setHomeError(""); hideConnectionBanner(); reconnectAttempts = 0; });
-  ws.addEventListener("message", (evt) => onMessage(JSON.parse(evt.data)));
-  ws.addEventListener("close", () => {
+  sock.addEventListener("open", () => { if (sock !== ws) return; setHomeError(""); hideConnectionBanner(); reconnectAttempts = 0; lastRxAt = Date.now(); startFightHeartbeat(); });
+  sock.addEventListener("message", (evt) => {
+    if (sock !== ws) return;
+    lastRxAt = Date.now();
+    let m; try { m = JSON.parse(evt.data); } catch (e) { return; }
+    if (m.type === "pong") return;
+    onMessage(m);
+  });
+  sock.addEventListener("close", () => {
+    if (sock !== ws || sock.stale) return; // ancien socket remplacé : on l'ignore
     if (intentionalDisconnect) return;
     if (myId) {
       showConnectionBanner("Connexion perdue — reconnexion en cours…");
@@ -5150,15 +5162,45 @@ function connect(code, pseudo) {
       setHomeError("Connexion perdue.");
     }
   });
-  ws.addEventListener("error", () => {});
+  sock.addEventListener("error", () => {});
 }
 
-function scheduleReconnect() {
+function scheduleReconnect(fast) {
   if (reconnectTimer) return;
   reconnectAttempts++;
   if (reconnectAttempts > 40) { showConnectionBanner("Impossible de se reconnecter. Recharge la page."); return; }
-  reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(myCode, myPseudo); }, 2000);
+  reconnectTimer = setTimeout(() => { reconnectTimer = null; connect(myCode, myPseudo); }, fast && reconnectAttempts <= 1 ? 300 : 2000);
 }
+
+// ---------- Heartbeat Fight : détecte les connexions "zombies" (réseau changé, onglet réveillé…) ----------
+// Sans ça, le navigateur peut croire le socket ouvert pendant des minutes alors qu'il est mort :
+// la partie "freeze" et les autres joueurs nous voient déconnectés.
+let lastRxAt = 0, fightHbTimer = null;
+function fightConnectionDead() {
+  if (intentionalDisconnect || !myId || !myCode) return;
+  if (ws) { ws.stale = true; try { ws.close(); } catch (e) { /* ignore */ } }
+  showConnectionBanner("Connexion perdue — reconnexion en cours…");
+  scheduleReconnect(true);
+}
+function startFightHeartbeat() {
+  if (fightHbTimer) clearInterval(fightHbTimer);
+  fightHbTimer = setInterval(() => {
+    if (intentionalDisconnect || !myId || !ws) { if (!myId) { clearInterval(fightHbTimer); fightHbTimer = null; } return; }
+    if (ws.readyState !== 1) return;
+    if (Date.now() - lastRxAt > 16000) { fightConnectionDead(); return; }
+    try { ws.send('{"type":"ping"}'); } catch (e) { /* ignore */ }
+  }, 5000);
+}
+function fightCheckNow() {
+  if (intentionalDisconnect || !myId || !myCode) return;
+  if (!ws || ws.readyState > 1) { scheduleReconnect(true); return; }
+  if (ws.readyState !== 1) return;
+  const before = lastRxAt;
+  try { ws.send('{"type":"ping"}'); } catch (e) { fightConnectionDead(); return; }
+  setTimeout(() => { if (lastRxAt === before && !intentionalDisconnect && myId) fightConnectionDead(); }, 4000);
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") fightCheckNow(); });
+window.addEventListener("online", fightCheckNow);
 
 // ---------- Quitter une partie ----------
 function doLeave() {
@@ -5188,6 +5230,7 @@ document.getElementById("btn-end-match").addEventListener("click", () => {
 
 function onMessage(msg) {
   if (msg.type === "welcome") {
+    document.getElementById("multi-choice-modal").style.display = "none";
     myId = msg.playerId;
     myCode = msg.code;
     MODES_META = msg.modes || {};
@@ -6219,9 +6262,12 @@ function updatePlayerTokens() {
       layer.appendChild(el);
       playerTokenEls.set(p.id, el);
       const pid = p.id;
-      el.querySelector(".pseudo-label").addEventListener("click", (e) => {
+      // Le déverrouillage des codes secrets se fait en tapant 3 fois sur SON JETON (pas sur le pseudo).
+      el.addEventListener("click", (e) => {
         if (pid !== myId) return;
         e.stopPropagation();
+        if (dragMoved) { dragMoved = false; return; } // c'était un glissement
+        if (targetingAttackId) { const me = lastState && lastState.players.find(q => q.id === myId); if (me) onTargetClick(me.x, me.y); return; }
         handleOwnPseudoClick();
       });
     }
@@ -6819,8 +6865,7 @@ function castingGlow(playerId, attackId, resolveAt) {
 // Le déplacement reste possible même quand on doit viser une attaque : un tap
 // bref sert à choisir la cible, un glissement plus large déplace le joueur.
 // ---------- Geste de déverrouillage des codes secrets ----------
-// Avant tout code, il faut taper 3 fois sur son propre pseudo (au-dessus de
-// son jeton) — sinon les glissements suivants ne comptent pour aucun code.
+// Avant tout code, il faut taper 3 fois sur son propre jeton (le carré de son joueur) — sinon les glissements suivants ne comptent pour aucun code.
 let cheatUnlockStage = 0; // 0 = verrouillé, 2 = déverrouillé
 let pseudoClickCount = 0;
 let pseudoClickTimer = null;
