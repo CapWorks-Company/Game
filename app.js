@@ -2951,23 +2951,23 @@ document.getElementById("btn-duo-join").addEventListener("click", () => {
   connectDuo(code, pseudo);
 });
 document.getElementById("btn-duo-wait-cancel").addEventListener("click", () => {
-  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  closeDuo();
   showScreen("screen-home");
 });
 document.getElementById("btn-duo-quit").addEventListener("click", () => {
-  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  closeDuo();
   showScreen("screen-home");
 });
 document.getElementById("btn-duo-c4-quit").addEventListener("click", () => {
-  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  closeDuo();
   showScreen("screen-home");
 });
 document.getElementById("btn-duo-rps-quit").addEventListener("click", () => {
-  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  closeDuo();
   showScreen("screen-home");
 });
 document.getElementById("btn-duo-ck-quit").addEventListener("click", () => {
-  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  closeDuo();
   showScreen("screen-home");
 });
 document.querySelectorAll(".rps-choice").forEach(btn => {
@@ -2979,8 +2979,55 @@ document.querySelectorAll(".rps-choice").forEach(btn => {
   });
 });
 
+const DUO_SCREENS = ["screen-duo-battle", "screen-duo-place", "screen-duo-connect4", "screen-duo-rps", "screen-duo-checkers", "screen-duo-memory", "screen-duo-tug", "screen-duo-gomoku", "screen-duo-pigeons", "screen-duo-mines", "screen-duo-pm"];
+const netSid = () => Math.random().toString(36).slice(2, 12) + Date.now().toString(36).slice(-4);
+const duoSid = netSid();
+let duoLeaving = false, duoReconTimer = null, duoReconAttempts = 0, duoLastRx = 0, duoHb = null, duoPseudo = "", duoEverWelcomed = false;
+function closeDuo() {
+  duoLeaving = true; clearTimeout(duoReconTimer); clearInterval(duoHb); hideConnectionBanner();
+  if (duoWs) { try { if (duoWs.readyState === 1) duoWs.send('{"type":"leave"}'); duoWs.close(); } catch (e) { /* ignore */ } }
+}
+function duoInGame() { const active = document.querySelector(".screen.active"); return !!active && (DUO_SCREENS.includes(active.id) || active.classList.contains("net-duo")); }
+function duoGiveUp() {
+  duoLeaving = true; clearInterval(duoHb); hideConnectionBanner();
+  if (duoInGame()) { showSoloEnd("neutral", "Connexion perdue", "La connexion avec ton adversaire a été coupée."); soloRetryHandler = null; }
+}
+function duoLostConnection(sock) {
+  if (duoLeaving || sock !== duoWs) return;
+  sock.stale = true; try { sock.close(); } catch (e) { /* ignore */ }
+  if (!duoEverWelcomed) { document.getElementById("duo-wait-status").textContent = "Erreur de connexion au serveur."; return; }
+  showConnectionBanner("Connexion perdue — reconnexion…");
+  duoReconAttempts++;
+  if (duoReconAttempts > (duo ? 14 : 30)) { duoGiveUp(); return; }
+  clearTimeout(duoReconTimer);
+  duoReconTimer = setTimeout(openDuoSocket, duoReconAttempts === 1 ? 400 : 2000);
+}
+function duoCheckNow() {
+  if (duoLeaving || !duoWs || !duoEverWelcomed) return;
+  if (duoWs.readyState !== 1 || Date.now() - duoLastRx > 16000) duoLostConnection(duoWs);
+}
+function openDuoSocket() {
+  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?duo=1&code=${duoCode}&pseudo=${encodeURIComponent(duoPseudo)}&game=${duoGame}&sid=${duoSid}`;
+  let sock;
+  try { sock = new WebSocket(wsUrl); } catch (e) { duoWs = { readyState: 3, close() {} }; duoLostConnection(duoWs); return; }
+  duoWs = sock; duoLastRx = Date.now();
+  sock.onopen = () => {
+    duoLastRx = Date.now();
+    if (!duoEverWelcomed) document.getElementById("duo-wait-status").textContent = "En attente qu'il/elle rejoigne...";
+  };
+  sock.onmessage = (ev) => {
+    if (sock !== duoWs) return;
+    duoLastRx = Date.now();
+    let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    if (msg.type === "pong") return;
+    if (msg.type === "duoWelcome") { duoEverWelcomed = true; duoReconAttempts = 0; if (!duoLeaving) hideConnectionBanner(); }
+    onDuoMessage(msg);
+  };
+  sock.onerror = () => { if (!duoEverWelcomed && sock === duoWs) document.getElementById("duo-wait-status").textContent = "Erreur de connexion au serveur."; };
+  sock.onclose = () => { if (sock.stale || sock !== duoWs) return; duoLostConnection(sock); };
+}
 function connectDuo(code, pseudo, game) {
-  duoCode = code;
+  duoCode = code; duoPseudo = pseudo;
   document.getElementById("duo-wait-code").textContent = code;
   document.getElementById("duo-qr-wrap").style.display = "none";
   renderShareQR("duo-qr", duoShareLink());
@@ -2990,22 +3037,14 @@ function connectDuo(code, pseudo, game) {
   duo = null;
   bsPlace = null;
   duoGame = game || "battleship";
-  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?duo=1&code=${code}&pseudo=${encodeURIComponent(pseudo)}&game=${duoGame}`;
-  try { duoWs = new WebSocket(wsUrl); } catch (e) { document.getElementById("duo-wait-status").textContent = "Connexion impossible."; return; }
-  duoWs.onopen = () => { document.getElementById("duo-wait-status").textContent = "En attente qu'il/elle rejoigne..."; };
-  duoWs.onmessage = (ev) => {
-    let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
-    onDuoMessage(msg);
-  };
-  duoWs.onerror = () => { document.getElementById("duo-wait-status").textContent = "Erreur de connexion au serveur."; };
-  duoWs.onclose = () => {
-    const active = document.querySelector(".screen.active").id;
-    if (["screen-duo-battle", "screen-duo-place", "screen-duo-connect4", "screen-duo-rps", "screen-duo-checkers", "screen-duo-memory", "screen-duo-tug", "screen-duo-gomoku", "screen-duo-pigeons", "screen-duo-mines", "screen-duo-pm"].includes(active) || document.getElementById(active).classList.contains("net-duo")) {
-      showSoloEnd("neutral", "Connexion perdue", "La connexion avec ton adversaire a été coupée.");
-      soloRetryHandler = null;
-    }
-  };
+  duoLeaving = false; duoEverWelcomed = false; duoReconAttempts = 0; clearTimeout(duoReconTimer);
+  if (duoWs) { duoWs.stale = true; try { duoWs.close(); } catch (e) { /* ignore */ } }
+  openDuoSocket();
+  clearInterval(duoHb);
+  duoHb = setInterval(() => { if (duoLeaving) return; sendDuo({ type: "ping" }); duoCheckNow(); }, 5000);
 }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) duoCheckNow(); });
+window.addEventListener("online", () => duoCheckNow());
 function onDuoMessage(msg) {
   if (msg.type === "error") { alert(msg.message); showScreen("screen-home"); return; }
   if (msg.type === "duoWelcome") { myDuoNum = msg.num; duoGame = msg.game || "battleship"; return; }
@@ -3013,6 +3052,8 @@ function onDuoMessage(msg) {
   if (msg.type === "duoState") {
     const prevStatus = duo && duo.status;
     duo = msg;
+    if (msg.opponent && msg.opponent.connected === false && msg.status === "playing") showConnectionBanner("Adversaire déconnecté… il peut se reconnecter");
+    else if (duoWs && duoWs.readyState === 1) hideConnectionBanner();
     if (msg.game) duoGame = msg.game;
     if (msg.status === "waiting") { showScreen("screen-duo-wait"); return; }
     const newRender = DUO_NEW_RENDERERS[duoGame];
@@ -3297,7 +3338,7 @@ document.getElementById("btn-duo-place-ready").addEventListener("click", () => {
   sendDuo({ type: "duoPlace", ships: bsPlace.ships.map(s => ({ r: s.r, c: s.c, size: s.size, dir: s.dir })) });
 });
 document.getElementById("btn-duo-place-quit").addEventListener("click", () => {
-  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  closeDuo();
   showScreen("screen-home");
 });
 
@@ -3695,7 +3736,7 @@ function scheduleDuoGenericEnd() {
   duoEndTimer = setTimeout(() => { if (duo && duo.status === "ended") renderDuoGenericEnd(); }, 1400);
 }
 document.querySelectorAll(".duo-quit-btn").forEach(btn => btn.addEventListener("click", () => {
-  if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+  closeDuo();
   clearTimeout(duoEndTimer);
   showScreen("screen-home");
 }));
@@ -3986,41 +4027,70 @@ const PARTY_GAME_LABELS = { simon: "Simon", potato: "Patate chaude", stop10: "St
 function partyShareLink() { return partyCode ? `${GAME_SHARE_URL}/?party=${partyCode}` : null; }
 function sendParty(payload) { if (partyWs && partyWs.readyState === 1) partyWs.send(JSON.stringify(payload)); }
 function partyAct(act, extra) { sendParty(Object.assign({ type: "partyAct", act }, extra || {})); }
+const partySid = netSid();
+let partyReconTimer = null, partyReconAttempts = 0, partyLastRx = 0, partyHb = null, partyPseudo = "", partyEverWelcomed = false;
 function leaveParty() {
-  partyLeaving = true;
-  if (partyWs) { try { partyWs.close(); } catch (e) { /* ignore */ } }
+  partyLeaving = true; clearTimeout(partyReconTimer); clearInterval(partyHb); hideConnectionBanner();
+  if (partyWs) { try { if (partyWs.readyState === 1) partyWs.send('{"type":"leave"}'); partyWs.close(); } catch (e) { /* ignore */ } }
   clearTimeout(partyEndTimer);
   party = null; partyCode = null;
   showScreen("screen-home");
 }
+function partyGiveUp() {
+  partyLeaving = true; clearInterval(partyHb); hideConnectionBanner();
+  const active = document.querySelector(".screen.active").id;
+  if (["screen-party-lobby", "screen-party-simon", "screen-party-potato", "screen-party-stop", "screen-party-memory", "screen-party-taps", "screen-party-vote"].includes(active) || document.getElementById(active).classList.contains("net-party")) {
+    showSoloEnd("neutral", "Connexion perdue", "La connexion avec le salon a été coupée.");
+    soloRetryHandler = null;
+    document.getElementById("btn-solo-retry").style.display = "none";
+  }
+}
+function partyLostConnection(sock) {
+  if (partyLeaving || sock !== partyWs) return;
+  sock.stale = true; try { sock.close(); } catch (e) { /* ignore */ }
+  if (!partyEverWelcomed) { document.getElementById("party-status").textContent = "Erreur de connexion au serveur."; return; }
+  showConnectionBanner("Connexion perdue — reconnexion…");
+  partyReconAttempts++;
+  if (partyReconAttempts > 14) { partyGiveUp(); return; }
+  clearTimeout(partyReconTimer);
+  partyReconTimer = setTimeout(openPartySocket, partyReconAttempts === 1 ? 400 : 2000);
+}
+function partyCheckNow() {
+  if (partyLeaving || !partyWs || !partyEverWelcomed) return;
+  if (partyWs.readyState !== 1 || Date.now() - partyLastRx > 16000) partyLostConnection(partyWs);
+}
+function openPartySocket() {
+  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?party=1&code=${partyCode}&pseudo=${encodeURIComponent(partyPseudo)}&sid=${partySid}`;
+  let ws;
+  try { ws = new WebSocket(wsUrl); } catch (e) { document.getElementById("party-status").textContent = "Connexion impossible."; return; }
+  partyWs = ws; partyLastRx = Date.now();
+  ws.onopen = () => { partyLastRx = Date.now(); if (!partyEverWelcomed) document.getElementById("party-status").textContent = ""; };
+  ws.onmessage = (ev) => {
+    if (ws !== partyWs) return;
+    partyLastRx = Date.now();
+    let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    if (msg.type === "pong") return;
+    if (msg.type === "partyState") { partyEverWelcomed = true; if (partyReconAttempts) { partyReconAttempts = 0; hideConnectionBanner(); } }
+    onPartyMessage(msg);
+  };
+  ws.onerror = () => { if (!partyEverWelcomed && ws === partyWs) document.getElementById("party-status").textContent = "Erreur de connexion au serveur."; };
+  ws.onclose = () => { if (ws.stale || ws !== partyWs) return; partyLostConnection(ws); };
+}
 function connectParty(code, pseudo) {
-  partyLeaving = false;
-  partyCode = code; party = null;
+  partyLeaving = false; partyEverWelcomed = false; partyReconAttempts = 0; clearTimeout(partyReconTimer);
+  partyCode = code; partyPseudo = pseudo; party = null;
   document.getElementById("party-code").textContent = code;
   document.getElementById("party-qr-wrap").style.display = "none";
   document.getElementById("party-status").textContent = "Connexion au serveur...";
   renderShareQR("party-qr", partyShareLink());
   showScreen("screen-party-lobby");
-  const wsUrl = BACKEND_URL.replace(/^http/, "ws") + `/ws?party=1&code=${code}&pseudo=${encodeURIComponent(pseudo)}`;
-  let ws;
-  try { ws = new WebSocket(wsUrl); } catch (e) { document.getElementById("party-status").textContent = "Connexion impossible."; return; }
-  partyWs = ws;
-  ws.onopen = () => { document.getElementById("party-status").textContent = ""; };
-  ws.onmessage = (ev) => {
-    let msg; try { msg = JSON.parse(ev.data); } catch (e) { return; }
-    onPartyMessage(msg);
-  };
-  ws.onerror = () => { document.getElementById("party-status").textContent = "Erreur de connexion au serveur."; };
-  ws.onclose = () => {
-    if (partyLeaving || ws !== partyWs) return;
-    const active = document.querySelector(".screen.active").id;
-    if (["screen-party-lobby", "screen-party-simon", "screen-party-potato", "screen-party-stop", "screen-party-memory", "screen-party-taps", "screen-party-vote"].includes(active) || document.getElementById(active).classList.contains("net-party")) {
-      showSoloEnd("neutral", "Connexion perdue", "La connexion avec le salon a été coupée.");
-      soloRetryHandler = null;
-      document.getElementById("btn-solo-retry").style.display = "none";
-    }
-  };
+  if (partyWs) { partyWs.stale = true; try { partyWs.close(); } catch (e) { /* ignore */ } }
+  openPartySocket();
+  clearInterval(partyHb);
+  partyHb = setInterval(() => { if (partyLeaving) return; sendParty({ type: "ping" }); partyCheckNow(); }, 5000);
 }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) partyCheckNow(); });
+window.addEventListener("online", () => partyCheckNow());
 function onPartyMessage(msg) {
   if (msg.type === "error") { partyLeaving = true; alert(msg.message); showScreen("screen-home"); return; }
   if (msg.type === "partyError") { document.getElementById("party-status").textContent = "⚠️ " + msg.message; return; }

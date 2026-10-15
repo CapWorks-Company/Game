@@ -5,7 +5,7 @@
 //
 // IMPORTANT : à chaque déploiement qui doit déclencher le bouton "Mettre à jour"
 // côté client, change la valeur de CACHE_NAME (ex: v3 -> v4).
-const CACHE_NAME = "capnaval-shell-v6";
+const CACHE_NAME = "capnaval-shell-v7";
 const SHELL_FILES = [
   "./", "./index.html", "./style.css", "./app.js", "./games2.js", "./manifest.json",
   "./icons/icon-180.png", "./icons/icon-192.png", "./icons/icon-512.png", "./icons/icon-512-maskable.png",

@@ -17,7 +17,7 @@ function g2Bar(barId, endAt, totalMs) {
 function g2Inject(html) { document.querySelector("script[src='app.js']").insertAdjacentHTML("beforebegin", html); }
 function g2BindQuit(root) {
   root.querySelectorAll(".duo-quit-btn").forEach(btn => btn.addEventListener("click", () => {
-    if (duoWs) { try { duoWs.close(); } catch (e) { /* ignore */ } }
+    closeDuo();
     clearTimeout(duoEndTimer); showScreen("screen-home");
   }));
   root.querySelectorAll(".party-quit-btn").forEach(b => b.addEventListener("click", leaveParty));
@@ -822,7 +822,18 @@ function rbBuild() {
   }
   return cubies;
 }
-function rbViewTf() { return `rotateX(${rb.rx}deg) rotateY(${rb.ry}deg)`; }
+function rbViewTf() {
+  const R = rb.V;
+  return `matrix3d(${R[0][0]},${R[1][0]},${R[2][0]},0,${R[0][1]},${R[1][1]},${R[2][1]},0,${R[0][2]},${R[1][2]},${R[2][2]},0,0,0,0,1)`;
+}
+function rbOrtho(M) { // garde la matrice de vue orthonormée malgré les petites erreurs d'arrondi
+  const cols = [0, 1, 2].map(j => [M[0][j], M[1][j], M[2][j]]);
+  const norm = v => { const l = Math.hypot(v[0], v[1], v[2]) || 1; return v.map(x => x / l); };
+  const c0 = norm(cols[0]);
+  let c1 = cols[1].map((x, i) => x - (cols[1][0] * c0[0] + cols[1][1] * c0[1] + cols[1][2] * c0[2]) * c0[i]); c1 = norm(c1);
+  const c2 = [c0[1] * c1[2] - c0[2] * c1[1], c0[2] * c1[0] - c0[0] * c1[2], c0[0] * c1[1] - c0[1] * c1[0]];
+  return [[c0[0], c1[0], c2[0]], [c0[1], c1[1], c2[1]], [c0[2], c1[2], c2[2]]];
+}
 function rbMove(a, l, d, opts) {
   rb.queue.push({ a, l, d, user: !(opts && opts.silent), undo: !!(opts && opts.undo), ms: (opts && opts.ms) || 220 });
   if (!rb.busy) rbNext();
@@ -871,8 +882,9 @@ function rbScramble() {
 }
 function startRubikGame() {
   soloRetryHandler = startRubikGame;
-  rb = { cubies: null, queue: [], busy: false, moves: 0, history: [], rx: -26, ry: -34, t0: 0, cw: true, scrambled: false };
+  rb = { cubies: null, queue: [], busy: false, moves: 0, history: [], V: null, t0: 0, cw: true, scrambled: false };
   rb.cubies = rbBuild();
+  rb.V = rbMul(rbRotDeg(0, -26), rbRotDeg(1, -34));
   $g("rb-scene").style.transform = rbViewTf();
   $g("rb-moves").textContent = 0; $g("rb-time").textContent = "0:00";
   showScreen("screen-solo-rubik");
@@ -895,17 +907,21 @@ G2_TICKS.push(() => { if (rb && rb.t0 && g2Active("screen-solo-rubik")) { const 
   stage.addEventListener("pointerdown", (e) => {
     if (!rb) return; stage.setPointerCapture(e.pointerId);
     const t = e.target.closest && e.target.closest(".rb-face.st");
-    down = { x: e.clientX, y: e.clientY, st: t ? { i: Number(t.dataset.i), n: t.dataset.n } : null, rx: rb.rx, ry: rb.ry, done: false };
+    down = { x: e.clientX, y: e.clientY, lx: e.clientX, ly: e.clientY, st: t ? { i: Number(t.dataset.i), n: t.dataset.n } : null, done: false };
   });
   stage.addEventListener("pointermove", (e) => {
     if (!down || !rb || down.done) return;
     const dx = e.clientX - down.x, dy = e.clientY - down.y;
-    if (!down.st) { rb.ry = down.ry + dx * 0.5; rb.rx = Math.max(-80, Math.min(80, down.rx - dy * 0.5)); $g("rb-scene").style.transform = rbViewTf(); return; }
+    if (!down.st) { // rotation libre (trackball), sans limite : le cube peut faire tous les tours
+      const ddx = e.clientX - down.lx, ddy = e.clientY - down.ly; down.lx = e.clientX; down.ly = e.clientY;
+      rb.V = rbOrtho(rbMul(rbMul(rbRotDeg(0, -ddy * 0.5), rbRotDeg(1, ddx * 0.5)), rb.V));
+      $g("rb-scene").style.transform = rbViewTf(); return;
+    }
     if (Math.hypot(dx, dy) < 22) return;
     down.done = true;
     const cb = rb.cubies[down.st.i], ln = down.st.n.split(",").map(Number), wn = rbApply(cb.R, ln).map(Math.round);
     const q = cb.p.map((v, i) => v + 0.5 * wn[i]);
-    const V = rbMul(rbRotDeg(0, rb.rx), rbRotDeg(1, rb.ry));
+    const V = rb.V;
     let best = null;
     [0, 1, 2].filter(a => wn[a] === 0).forEach(a => {
       const e = [0, 0, 0]; e[a] = 1;
